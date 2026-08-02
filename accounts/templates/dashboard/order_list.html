@@ -1,0 +1,48 @@
+{% extends 'dashboard/base.html' %}
+{% load humanize %}
+
+{% block dashboard_content %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <h2 class="text-xl font-bold text-gray-800 mb-6">سفارش‌های من</h2>
+    
+    <!-- Status Filters -->
+    <div class="flex gap-2 mb-6 border-b pb-4">
+        {% for status_key, status_label in status_choices %}
+            <a href="?status={{ status_key }}" 
+               class="px-4 py-2 rounded-full text-sm {% if request.GET.status == status_key or not request.GET.status and status_key == 'current' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                {{ status_label }}
+            </a>
+        {% endfor %}
+    </div>
+
+    <!-- Orders Table -->
+    <div class="overflow-x-auto">
+        <table class="w-full text-right">
+            <thead class="text-gray-500 text-sm">
+                <tr class="border-b">
+                    <th class="pb-4">شماره سفارش</th>
+                    <th class="pb-4">تاریخ ثبت</th>
+                    <th class="pb-4">مبلغ کل</th>
+                    <th class="pb-4">عملیات</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for order in orders %}
+                <tr class="hover:bg-gray-50">
+                    <td class="py-4 font-medium num-latin">{{ order.order_number }}</td>
+                    <td class="py-4 text-gray-600">{{ order.jalali_created }}</td>
+                    <td class="py-4 font-bold">{{ order.final_amount|intcomma }} <span class="text-xs text-gray-400">تومان</span></td>
+                    <td class="py-4">
+                        <a href="{% url 'accounts:dashboard_order_detail' order.order_number %}" class="text-indigo-600 hover:text-indigo-800 font-bold">مشاهده</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="py-10 text-center text-gray-400">سفارشی یافت نشد.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

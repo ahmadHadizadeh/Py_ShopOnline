@@ -1,0 +1,38 @@
+{% extends 'catalog/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- Sidebar -->
+    <aside class="lg:col-span-1 space-y-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">
+                    {{ user.first_name|first }}{{ user.last_name|first }}
+                </div>
+                <div>
+                    <h2 class="font-bold text-gray-800">{{ user.get_full_name }}</h2>
+                    <span class="text-xs text-gray-500 num-latin">{{ user.phone_number }}</span>
+                </div>
+            </div>
+            
+            <nav class="space-y-1">
+                <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-gray-50">
+                    <i class="fa-solid fa-house w-5"></i> خلاصه فعالیت‌ها
+                </a>
+                <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-3 p-3 rounded-lg bg-gray-100 text-gray-800 font-bold border-r-4 border-indigo-500">
+                    <i class="fa-solid fa-bag-shopping w-5"></i> سفارش‌ها
+                </a>
+                <a href="#" class="flex items-center gap-3 p-3 rounded-lg text-red-600 hover:bg-red-50 mt-6">
+                    <i class="fa-solid fa-right-from-bracket w-5"></i> خروج از حساب کاربری
+                </a>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="lg:col-span-3">
+        {% block dashboard_content %}{% endblock %}
+    </main>
+</div>
+{% endblock %}

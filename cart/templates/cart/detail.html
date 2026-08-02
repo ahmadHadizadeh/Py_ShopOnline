@@ -1,0 +1,54 @@
+{% extends 'catalog/base.html' %}
+{% block title %}سبد خرید{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4">
+    <h1 class="text-2xl font-extrabold text-gray-900 mb-6 flex items-center gap-2">
+        <i class="fa-solid fa-basket-shopping text-indigo-600"></i>
+        سبد خرید
+    </h1>
+
+    {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for message in messages %}
+                <div class="p-4 rounded-xl {% if message.tags == 'error' %}bg-rose-50 text-rose-700 border-rose-100{% else %}bg-indigo-50 text-indigo-700 border-indigo-100{% endif %} border text-sm font-bold">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {% if active_items or saved_items %}
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 space-y-6">
+                {% if active_items %}
+                    <section class="space-y-4">
+                        <h2 class="text-lg font-extrabold text-gray-900">کالاهای سبد خرید</h2>
+                        {% for item in active_items %}
+                            {% include 'cart/partials/_cart_item.html' with item=item is_saved=False %}
+                        {% endfor %}
+                    </section>
+                {% endif %}
+
+                {% if saved_items %}
+                    <section class="space-y-4">
+                        <h2 class="text-lg font-extrabold text-gray-900">ذخیره شده برای بعد</h2>
+                        {% for item in saved_items %}
+                            {% include 'cart/partials/_cart_item.html' with item=item is_saved=True %}
+                        {% endfor %}
+                    </section>
+                {% endif %}
+            </div>
+
+            <aside class="lg:col-span-4">
+                {% include 'cart/partials/_summary_sidebar.html' with cart=cart %}
+            </aside>
+        </div>
+    {% else %}
+        <div class="bg-white border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center">
+            <i class="fa-solid fa-basket-shopping text-5xl text-gray-300 mb-4"></i>
+            <p class="font-bold text-gray-600 mb-6">سبد خرید شما خالی است.</p>
+            <a href="{% url 'catalog:product_list' %}" class="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700">مشاهده محصولات</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

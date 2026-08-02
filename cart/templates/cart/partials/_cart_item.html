@@ -1,0 +1,52 @@
+<div class="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row gap-4 {% if is_saved %}opacity-95{% endif %}">
+    <div class="w-full sm:w-28 h-28 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden">
+        {% if item.product.images.first %}
+            <img src="{{ item.product.images.first.image.url }}" alt="{{ item.product.name }}" class="w-full h-full object-cover">
+        {% else %}
+            <i class="fa-regular fa-image text-3xl text-gray-300"></i>
+        {% endif %}
+    </div>
+
+    <div class="flex-grow flex flex-col justify-between">
+        <a href="{{ item.product.get_absolute_url }}" class="font-bold text-gray-900 hover:text-indigo-600">
+            {{ item.product.name }}
+        </a>
+
+        <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm mt-2">
+            <span class="text-gray-500">
+                قیمت واحد:
+                <span class="font-bold text-indigo-700">{{ item.unit_price_snapshot|floatformat:0 }}</span>
+            </span>
+            {% if not is_saved %}
+                <span class="text-gray-500">
+                    جمع:
+                    <span class="font-bold text-gray-900">{{ item.subtotal|floatformat:0 }}</span>
+                </span>
+            {% endif %}
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 mt-4">
+            {% if not is_saved %}
+                <form method="post" action="{% url 'cart:update_item' item.id %}" class="flex items-center gap-2">
+                    {% csrf_token %}
+                    <input type="number" name="quantity" min="1" max="{{ item.product.stock }}" value="{{ item.quantity }}" class="w-20 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <button type="submit" class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100">بروزرسانی</button>
+                </form>
+                <form method="post" action="{% url 'cart:save_for_later' item.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="text-amber-600 hover:bg-amber-50 px-3 py-2 rounded-lg text-sm font-bold">ذخیره برای بعد</button>
+                </form>
+            {% else %}
+                <form method="post" action="{% url 'cart:move_to_cart' item.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100">بازگرداندن به سبد</button>
+                </form>
+            {% endif %}
+
+            <form method="post" action="{% url 'cart:remove_item' item.id %}">
+                {% csrf_token %}
+                <button type="submit" class="text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg text-sm font-bold">حذف</button>
+            </form>
+        </div>
+    </div>
+</div>

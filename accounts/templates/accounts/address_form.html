@@ -1,0 +1,175 @@
+{% extends 'catalog/base.html' %}
+{% load static %}
+
+{% block title %}{% if form.instance.pk %}ویرایش آدرس{% else %}ثبت آدرس جدید{% endif %}{% endblock %}
+
+{% block extra_head %}
+    <!-- CDN های اختصاصی این صفحه -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="{% static 'css/forms.css' %}" rel="stylesheet" />
+{% endblock %}
+
+
+{% block content %}
+<div class="min-h-screen py-8 px-4" dir="rtl">
+    <div class="max-w-xl mx-auto">
+        
+        <!-- هدر فرم با افکت‌های بصری مدرن -->
+        <div class="text-center mb-10">
+            <h1 class="text-2xl font-black text-gray-800 flex items-center justify-center gap-3">
+                <i class="fa-solid fa-map-location-dot text-indigo-600"></i>
+                ثبت آدرس تحویل کالا
+            </h1>
+            <p class="text-gray-500 text-sm mt-2 font-medium">لطفاً جزئیات دقیق آدرس را در کارت‌های زیر وارد کنید</p>
+        </div>
+
+        <!-- فرم ثبت آدرس -->
+        <form method="post" id="addressForm" class="space-y-6" novalidate>
+            {% csrf_token %}
+
+            {% for field in form %}
+                {# فیلد is_default را جداگانه پردازش می‌کنیم #}
+                {% if field.name != 'is_default' %}
+                <!-- باکس کارتی ورودی‌ها -->
+                <div class="bg-white border border-gray-100 rounded-[1.5rem] p-5 shadow-sm hover:shadow-md transition-shadow group">
+                    <div class="flex justify-between items-center mb-3">
+                        {# لیبل فیلد با استفاده از field.auto_id برای ارتباط صحیح با input #}
+                        <label for="{{ field.auto_id }}" class="text-sm font-extrabold text-gray-700 flex items-center gap-2">
+                            {{ field.label }} 
+                            {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                        </label>
+                        
+                        <!-- آیکون متناسب با نوع فیلد -->
+                        <div class="w-9 h-9 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-sm group-focus-within:bg-indigo-600 group-focus-within:text-white transition-all duration-200">
+                            {% if "نام" in field.label %}<i class="fa-solid fa-user"></i>
+                            {% elif "تلفن" in field.label or "تماس" in field.label or field.name == "phone_number" %}<i class="fa-solid fa-phone-flip"></i>
+                            {% elif "پست" in field.label %}<i class="fa-solid fa-mail-bulk"></i>
+                            {% elif "استان" in field.label %}<i class="fa-solid fa-earth-asia"></i>
+                            {% elif "شهر" in field.label %}<i class="fa-solid fa-city"></i>
+                            {% elif "آدرس" in field.label %}<i class="fa-solid fa-location-arrow"></i>
+                            {% else %}<i class="fa-solid fa-info-circle"></i> {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- فیلد رندر شده با استفاده از as_widget برای اطمینان از صحت آیدی و کلاس‌ها -->
+                    <div class="relative">
+                        {{ field.as_widget }}
+                    </div>
+
+                    <!-- نمایش خطاها در صورت وجود -->
+                    {% if field.errors %}
+                        <div class="text-red-500 text-xs mt-2.5 font-bold flex items-center gap-1.5 bg-red-50/50 p-2.5 rounded-lg border border-red-100">
+                            <i class="fa-solid fa-circle-exclamation"></i>
+                            <span>{{ field.errors|striptags }}</span>
+                        </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            <!-- چک باکس آدرس پیش‌فرض -->
+            <div class="bg-white border border-gray-100 rounded-2xl p-4 flex items-center justify-between group cursor-pointer hover:border-indigo-100 transition-colors">
+                <label for="id_is_default" class="flex items-center gap-3 cursor-pointer select-none w-full">
+                    <div class="relative flex items-center">
+                        {# استفاده از field.auto_id برای چک باکس #}
+                        <input type="checkbox" name="{{ form.is_default.name }}" id="{{ form.is_default.auto_id }}" {% if form.is_default.value %}checked{% endif %}
+                               class="peer h-6 w-6 cursor-pointer appearance-none rounded-md border border-gray-300 checked:border-indigo-600 checked:bg-indigo-600 transition-all">
+                        <i class="fa-solid fa-check absolute opacity-0 peer-checked:opacity-100 text-white text-xs right-1.5 pointer-events-none"></i>
+                    </div>
+                    <span class="text-sm font-bold text-gray-600 group-hover:text-indigo-600 transition-colors">{{ form.is_default.label }}</span>
+                </label>
+                <i class="fa-solid fa-thumbtack text-gray-300 group-hover:text-indigo-400 transition-colors"></i>
+            </div>
+
+            <!-- دکمه ثبت نهایی -->
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-indigo-100 transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-3">
+                <span>ثبت و تایید نهایی آدرس</span>
+                <i class="fa-solid fa-arrow-left-long"></i>
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+
+
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    $(function () {
+        const $provinceSelect = $('#id_province');
+        const $citySelect = $('#id_city');
+        const citiesUrl = "{% url 'accounts:cities_by_province' %}";
+        const initialCityValue = "{{ form.city.value|default:''|escapejs }}";
+
+        function resetCitySelect(placeholderText = 'ابتدا استان را انتخاب کنید') {
+            $citySelect.prop('disabled', true);
+            $citySelect.empty().append(new Option(placeholderText, '', true, true)).trigger('change');
+        }
+
+        function populateCities(cities, selectedCity = '') {
+            $citySelect.empty();
+            $citySelect.append(new Option('انتخاب شهر', '', !selectedCity, !selectedCity));
+
+            $.each(cities, function (index, item) {
+                const isSelected = selectedCity && selectedCity === item.id;
+                const option = new Option(item.text, item.id, false, isSelected);
+                $citySelect.append(option);
+            });
+
+            $citySelect.prop('disabled', false).trigger('change');
+        }
+
+        function fetchCities(provinceName, selectedCity = '') {
+            if (!provinceName) {
+                resetCitySelect();
+                return;
+            }
+
+            $citySelect.prop('disabled', true);
+            $citySelect.empty().append(new Option('در حال بارگذاری شهرها...', '', true, true)).trigger('change');
+
+            $.ajax({
+                url: citiesUrl,
+                type: 'GET',
+                data: { province: provinceName },
+                dataType: 'json',
+                success: function (data) {
+                    populateCities(data.cities || [], selectedCity);
+                },
+                error: function () {
+                    resetCitySelect('خطا در دریافت شهرها');
+                    console.error('AJAX Error: Could not fetch cities.');
+                }
+            });
+        }
+
+        $provinceSelect.select2({
+            width: '100%',
+            dir: 'rtl',
+            placeholder: 'انتخاب استان'
+        });
+
+        $citySelect.select2({
+            width: '100%',
+            dir: 'rtl',
+            placeholder: 'انتخاب شهر'
+        });
+
+        $provinceSelect.on('change', function () {
+            fetchCities($(this).val(), '');
+        });
+
+        const initialProvinceValue = $provinceSelect.val();
+        if (initialProvinceValue) {
+            fetchCities(initialProvinceValue, initialCityValue);
+        } else {
+            resetCitySelect();
+        }
+    });
+</script>
+{% endblock %}
+

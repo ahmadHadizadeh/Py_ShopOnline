@@ -1,0 +1,37 @@
+<!-- partial review_list.html-->
+{% if product.approved_reviews %}
+    <div class="space-y-5">
+        {% for review in product.approved_reviews %}
+            <article class="rounded-2xl border border-gray-100 bg-gray-50/60 p-5">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 font-extrabold text-indigo-700">
+                            {{ review.user.username|first|upper }}
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-bold text-gray-800">{{ review.user.username }}</h3>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1 text-yellow-400">
+                        {% for i in "12345" %}
+                            {% if forloop.counter <= review.rating %}
+                                <i class="fa-solid fa-star text-xs"></i>
+                            {% else %}
+                                <i class="fa-regular fa-star text-xs text-gray-300"></i>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <p class="text-sm leading-7 text-gray-600">{{ review.comment|linebreaksbr }}</p>
+            </article>
+        {% endfor %}
+    </div>
+{% else %}
+    <div id="no-reviews" class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 py-12 text-center">
+        <i class="fa-regular fa-comments mb-4 text-4xl text-gray-300"></i>
+        <h3 class="mb-2 font-bold text-gray-700">هنوز نظری ثبت نشده است</h3>
+        <p class="text-sm text-gray-500">اولین نفری باشید که برای این محصول نظر می‌نویسد.</p>
+    </div>
+{% endif %}

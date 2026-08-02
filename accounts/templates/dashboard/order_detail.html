@@ -1,0 +1,128 @@
+{% extends 'dashboard/base.html' %}
+{% load humanize %}
+
+{% block dashboard_content %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <!-- Header -->
+    <div class="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+        <div>
+            <h2 class="text-xl font-bold text-gray-800">جزئیات سفارش</h2>
+            <p class="text-xs text-gray-500 mt-1 num-latin">شماره پیگیری: {{ order.order_number }}</p>
+        </div>
+        <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-2 text-sm text-indigo-600 font-bold">
+            <span>بازگشت به لیست</span>
+            <i class="fa-solid fa-chevron-left text-xs"></i>
+        </a>
+    </div>
+
+    <div class="p-6">
+        <!-- Info Grid: وضعیت، تاریخ و تحویل‌گیرنده -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div class="space-y-1">
+                <span class="text-gray-400 text-xs block">تاریخ ثبت سفارش</span>
+                <span class="font-bold text-gray-700 num-latin">{{ order.jalali_created }}</span>
+            </div>
+            <div class="space-y-1">
+                <span class="text-gray-400 text-xs block">وضعیت سفارش</span>
+                <span class="inline-flex px-3 py-1 rounded-full text-xs font-bold {% if order.status == 'paid' or order.status == 'completed' %}bg-green-50 text-green-700{% elif order.status == 'cancelled' %}bg-red-50 text-red-700{% else %}bg-indigo-50 text-indigo-700{% endif %}">
+                    {{ order.get_status_display }}
+                </span>
+            </div>
+            <div class="space-y-1 text-left">
+                <span class="text-gray-400 text-xs block">تحویل‌گیرنده</span>
+                <span class="font-bold text-gray-700">{{ recipient_name }}</span> {# استفاده از context variable #}
+            </div>
+        </div>
+
+        <!-- Items Table -->
+        <div class="mb-10">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-box-open text-indigo-500"></i>
+                اقلام سفارش
+            </h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-right border-collapse">
+                    <thead>
+                        <tr class="text-gray-400 text-xs border-b border-gray-100">
+                            <th class="pb-3 pr-2 text-right">محصول</th>
+                            <th class="pb-3 text-center">تعداد</th>
+                            <th class="pb-3 text-center">قیمت واحد</th>
+                            <th class="pb-3 pl-2 text-left">قیمت کل سطر</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-50">
+                        {% for item in order.items.all %}
+                        <tr class="group hover:bg-gray-50/50 transition-colors">
+                            <td class="py-4 pr-2">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-16 h-16 bg-gray-100 rounded-lg flex-shrink-0 overflow-hidden">
+                                        {# فرض می‌کنیم محصول دارای فیلد image باشد #}
+                                        {% if item.product.image %} 
+                                            <img src="{{ item.product.image.url }}" alt="{{ item.product_name }}" class="w-full h-full object-cover rounded-lg">
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <span class="font-medium text-gray-800 block">{{ item.product_name }}</span>
+                                        {% if item.variant_name %}
+                                        <span class="text-xs text-gray-500 block">{{ item.variant_name }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-4 text-center num-latin text-gray-600">{{ item.quantity }}</td>
+                            <td class="py-4 text-center num-latin text-gray-600">{{ item.unit_price|intcomma }}</td>
+                            <td class="py-4 pl-2 text-left font-bold text-gray-800 num-latin">{{ item.subtotal_price|intcomma }}</td> {# فیلد صحیح #}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Summary & Totals & Address -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-6 border-t border-gray-100">
+            <div class="bg-blue-50/30 p-5 rounded-2xl border border-blue-100/50">
+                <h4 class="text-sm font-bold text-blue-800 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-location-dot"></i> نشانی ارسال
+                </h4>
+                {% with snapshot=order.address_snapshot %}
+                <p class="text-gray-600 text-sm leading-relaxed">
+                    {% if snapshot %}
+                        <span class="font-bold block">{{ snapshot.province }}، {{ snapshot.city }}</span>
+                        {{ snapshot.address_line }}
+                        <br>
+                        <span class="text-xs text-gray-500 mt-2 block num-latin">
+                            <i class="fa-solid fa-phone-volume ml-1"></i> {{ snapshot.recipient_mobile }} | 
+                            <i class="fa-solid fa-mailbox ml-1"></i> کد پستی: {{ snapshot.postal_code }}
+                        </span>
+                    {% else %}
+                        <span class="text-red-400">اطلاعات آدرس در زمان سفارش ثبت نشده است.</span>
+                    {% endif %}
+                </p>
+                {% endwith %}
+            </div>
+            
+            <div class="space-y-3">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500">مجموع قیمت کالاها:</span>
+                    <span class="font-bold text-gray-800 num-latin">{{ order.subtotal_amount|intcomma }} <small class="text-gray-400">تومان</small></span> {# فیلد صحیح #}
+                </div>
+                {% if order.discount_amount and order.discount_amount > 0 %}
+                <div class="flex justify-between text-sm">
+                    <span class="text-red-500">مبلغ تخفیف اعمال شده:</span>
+                    <span class="font-bold text-red-500 num-latin">{{ order.discount_amount|intcomma }} <small>تومان</small></span>
+                </div>
+                {% endif %}
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500">هزینه ارسال:</span>
+                    <span class="font-bold text-gray-800 num-latin">{{ order.shipping_amount|intcomma }} <small class="text-gray-400">تومان</small></span>
+                </div>
+                <div class="flex justify-between items-center pt-3 border-t border-dashed">
+                    <span class="font-bold text-gray-800">مبلغ نهایی پرداخت شده:</span>
+                    <span class="text-2xl font-black text-indigo-600 num-latin">{{ order.final_amount|intcomma }} <small class="text-sm font-normal">تومان</small></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

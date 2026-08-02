@@ -1,0 +1,221 @@
+{% load static %}
+<!DOCTYPE html>
+<html dir="rtl" lang="fa" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %} | آنلاین شاپ</title>
+    
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    
+ {% block extra_head %}{% endblock %}
+</head>
+
+<body class="flex flex-col h-full text-gray-800">
+
+    <!-- Global Loader (Final High-End Version) -->
+    <div id="global-loader"
+         class="fixed inset-0 z-[9999] hidden items-center justify-center bg-slate-950/45 backdrop-blur-xl opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="relative flex flex-col items-center justify-center">
+            <!-- ambient glow -->
+            <div class="absolute inset-0 scale-150 rounded-full bg-indigo-500/20 blur-3xl animate-pulse"></div>
+            <!-- rotating ring -->
+            <div class="absolute h-32 w-32 rounded-full border border-white/10"></div>
+            <div class="absolute h-28 w-28 rounded-full border-[3px] border-t-indigo-400 border-r-cyan-300 border-b-transparent border-l-transparent animate-spin"></div>
+            <!-- center glass card -->
+            <div class="relative flex h-28 w-28 items-center justify-center rounded-[2rem] border border-white/15 bg-white/10 shadow-2xl shadow-indigo-500/20 backdrop-blur-md">
+                <svg viewBox="0 0 24 24" class="h-14 w-14 drop-shadow-[0_0_18px_rgba(99,102,241,0.9)]">
+                    <defs>
+                        <linearGradient id="hourglassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#c7d2fe"/><stop offset="45%" stop-color="#ffffff"/><stop offset="100%" stop-color="#67e8f9"/>
+                        </linearGradient>
+                    </defs>
+                    <path fill="url(#hourglassGrad)" d="M6 2h12v2h-1v2.2c0 1.3-.6 2.5-1.6 3.3L13 12l2.4 2.5c1 .8 1.6 2 1.6 3.3V20h1v2H6v-2h1v-2.2c0-1.3.6-2.5 1.6-3.3L11 12 8.6 9.5C7.6 8.7 7 7.5 7 6.2V4H6V2zm3 2v2.2c0 .7.3 1.4.8 1.8L12 11l2.2-2.2c.5-.4.8-1.1.8-1.8V4H9zm0 16h6v-2.2c0-.7-.3-1.4-.8-1.8L12 13l-2.2 2.2c-.5.4-.8 1.1-.8 1.8V20z"/>
+                    <path fill="#ffffff" opacity="0.9" d="M10.2 6.9h3.6L12 8.8 10.2 6.9zm0 10.2L12 15.2l1.8 1.9h-3.6z"/>
+                </svg>
+            </div>
+            <!-- bottom dots -->
+            <div class="mt-7 flex items-center gap-2">
+                <span class="h-2.5 w-2.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:-0.2s]"></span>
+                <span class="h-2.5 w-2.5 rounded-full bg-cyan-300 animate-bounce [animation-delay:-0.1s]"></span>
+                <span class="h-2.5 w-2.5 rounded-full bg-white animate-bounce"></span>
+            </div>
+            <p class="mt-4 text-sm font-medium tracking-[0.18em] text-white/90 italic">در حال بارگذاری...</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white shadow-md sticky top-0 z-50">
+        <nav class="container mx-auto px-4 lg:px-8 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-10">
+                <a href="{% url 'catalog:product_list' %}" class="flex items-center gap-2 text-2xl font-extrabold text-indigo-700 hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    <span class="tracking-tight italic">آنلاین شاپ</span>
+                </a>
+                
+                <ul class="hidden md:flex items-center gap-8 font-medium">
+                    <li><a href="{% url 'catalog:product_list' %}" class="text-gray-600 hover:text-indigo-600 transition">خانه</a></li>
+                    <!-- Category Dropdown with Hover Logic -->
+                    <div class="relative group/cat">
+                        <button class="flex items-center gap-1 text-gray-600 hover:text-indigo-600 transition">
+                            دسته‌بندی‌ها <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                        </button>
+                        <div class="invisible group-hover/cat:visible group-hover/cat:opacity-100 group-hover/cat:translate-y-0 absolute right-0 mt-2 w-56 bg-white border border-gray-100 rounded-xl shadow-2xl py-3 opacity-0 translate-y-2 transition-all duration-200 z-50">
+                            <a href="{% url 'catalog:product_list' %}" class="block px-5 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 border-r-4 border-transparent hover:border-indigo-600 transition">همه محصولات</a>
+                            <div class="border-t border-gray-100 my-2"></div>
+                            {% for cat in categories %}<a href="{{ cat.get_absolute_url }}" class="block px-5 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 border-r-4 border-transparent hover:border-indigo-600 transition">{{ cat.name }}</a>{% empty %}<span class="block px-5 py-2 text-xs text-gray-400 italic">دسته بندی یافت نشد</span>{% endfor %}
+                        </div>
+                    </div>
+                </ul>
+            </div>
+
+            <div class="flex items-center gap-5">
+                <div class="relative group hidden sm:block">
+                    <input type="text" placeholder="جستجو..." class="bg-gray-100 border-none rounded-full py-2 px-5 pr-10 text-sm focus:ring-2 focus:ring-indigo-500 w-48 lg:w-64 transition-all">
+                    <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                </div>
+
+                <a href="{% url 'cart:detail' %}" class="relative text-gray-600 hover:text-indigo-600 transition">
+                    <i class="fa-solid fa-basket-shopping text-xl"></i>
+                    <span class="absolute -top-2 -left-2 bg-red-500 text-white text-[10px] rounded-full min-w-4 h-4 px-1 flex items-center justify-center font-bold">{{ cart_total_items|default:0 }}</span>
+                </a>
+            
+                {% if user.is_authenticated %}
+                    <!-- User Dropdown (Final Fix) -->
+                    <div class="relative inline-block" id="accountDropdown">
+                        <button type="button" class="flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition-all duration-300 hover:bg-indigo-700 hover:shadow-indigo-700/30">
+                            <i class="fa-solid fa-user"></i>
+                            <span>حساب کاربری</span>
+                            <i class="fa-solid fa-chevron-down text-[11px] transition-transform duration-300" id="accountChevron"></i>
+                        </button>
+
+                        <div id="accountMenu" class="invisible absolute left-0 top-full z-50 mt-3 w-56 rounded-2xl border border-gray-100 bg-white/95 p-2 text-right opacity-0 translate-y-2 pointer-events-none shadow-2xl shadow-black/10 backdrop-blur-md transition-all duration-200">
+                            <a href="#" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition"><i class="fa-solid fa-id-card text-indigo-500"></i><span>پروفایل من</span></a>
+                            <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition"><i class="fa-solid fa-list-check text-indigo-500"></i><span>سفارشات من</span></a>
+
+                            <a href="{% url 'accounts:address_list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-cyan-50 hover:text-cyan-700 transition"><i class="fa-solid fa-location-dot text-cyan-500"></i><span>آدرس‌های من</span></a>
+                            <div class="my-2 border-t border-gray-100"></div>
+                            <a href="#" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition"><i class="fa-solid fa-right-from-bracket text-red-500"></i><span>خروج</span></a>
+                        </div>
+                    </div>
+                {% else %}
+                    <a href="{% url 'accounts:login' %}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg transition">ورود / ثبت‌نام</a>
+                {% endif %}
+            </div>
+        </nav>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 lg:px-8 py-8">
+        {% block content %} {% endblock %}
+    </main>
+
+    <footer class="bg-gray-900 text-gray-400 pt-12 pb-6 border-t border-gray-800 mt-auto">
+        <div class="container mx-auto px-4 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-8 mb-8 text-center md:text-right">
+                <div>
+                    <h2 class="text-white text-xl font-bold mb-2 italic">آنلاین شاپ هوش برتر</h2>
+                    <p class="max-w-xs text-sm leading-relaxed">مرجع تخصصی تکنولوژی با مدیریت احمد هادی‌زاده.</p>
+                </div>
+                <div class="flex gap-6 text-2xl">
+                    <a href="#" class="hover:text-pink-500 transition"><i class="fa-brands fa-instagram"></i></a>
+                    <a href="#" class="hover:text-blue-400 transition"><i class="fa-brands fa-telegram"></i></a>
+                    <a href="#" class="hover:text-gray-100 transition"><i class="fa-brands fa-github"></i></a>
+                </div>
+            </div>
+            <div class="border-t border-gray-800 pt-6 text-center text-xs">
+                <p>© ۲۰۲۶ - طراحی و توسعه: <span class="text-indigo-400 font-bold italic text-sm underline decoration-wavy">احمد</span></p>
+            </div>
+        </div>
+    </footer>
+
+<!-- Scripts: Combined Loader & Dropdown Logic -->
+<script>
+(() => {
+    try {
+        // --- 1. Loader Logic ---
+        const loader = document.getElementById('global-loader');
+        if (loader) {
+            let hideTimer = null;
+
+            // توابع به صورت عمومی روی window تعریف می‌شوند تا از کدهای لوکال هم قابل دسترسی باشند
+            window.hideLoader = (imm = false) => {
+                clearTimeout(hideTimer);
+                if (imm) {
+                    loader.classList.add('hidden', 'opacity-0', 'pointer-events-none');
+                    loader.classList.remove('flex', 'opacity-100');
+                    return;
+                }
+                loader.classList.remove('opacity-100');
+                hideTimer = setTimeout(() => {
+                    loader.classList.add('hidden');
+                    loader.classList.remove('flex');
+                }, 200);
+            };
+
+            window.showLoader = () => {
+                clearTimeout(hideTimer);
+                loader.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+                requestAnimationFrame(() => loader.classList.add('flex', 'opacity-100'));
+            };
+
+            window.addEventListener('pageshow', () => window.hideLoader(true));
+            window.addEventListener('load', () => window.hideLoader(true));
+
+            document.addEventListener('click', (e) => {
+                const link = e.target.closest('a');
+                if (!link || link.target === '_blank' || link.getAttribute('href')?.startsWith('#')) return;
+                window.showLoader();
+            });
+
+            // این ایونت کلیک روی فرم‌ها را مانیتور کرده و لودر را باز می‌کند
+            document.addEventListener('submit', (e) => {
+                // اگر فرم به صورت ایجکس (برنامه ریزی دستی) ارسال می‌شود، این مدیریت در فایل خودش صورت می‌گیرد
+                // اما به طور پیش‌فرض برای سابمیت‌های معمولی لودر را نشان می‌دهیم
+                window.showLoader();
+            });
+        }
+
+        // --- 2. Account Dropdown Logic ---
+        const wrapper = document.getElementById('accountDropdown');
+        const menu = document.getElementById('accountMenu');
+        const chevron = document.getElementById('accountChevron');
+
+        if (wrapper && menu) {
+            let menuTimer = null;
+            const openM = () => {
+                clearTimeout(menuTimer);
+                menu.classList.remove('invisible', 'opacity-0', 'translate-y-2', 'pointer-events-none');
+                menu.classList.add('visible', 'opacity-100', 'translate-y-0', 'pointer-events-auto');
+                if (chevron) chevron.classList.add('rotate-180');
+            };
+            const closeM = () => {
+                menuTimer = setTimeout(() => {
+                    menu.classList.add('invisible', 'opacity-0', 'translate-y-2', 'pointer-events-none');
+                    menu.classList.remove('visible', 'opacity-100', 'translate-y-0', 'pointer-events-auto');
+                    if (chevron) chevron.classList.remove('rotate-180');
+                }, 200);
+            };
+
+            wrapper.addEventListener('mouseenter', openM);
+            wrapper.addEventListener('mouseleave', closeM);
+            menu.addEventListener('mouseenter', openM);
+            menu.addEventListener('mouseleave', closeM);
+        }
+    } catch (err) {
+        console.warn("Base script initialization failed, but site remains operational.", err);
+        const loader = document.getElementById('global-loader');
+        if (loader) loader.classList.add('hidden');
+    }
+})();
+</script>
+
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

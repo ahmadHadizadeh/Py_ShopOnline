@@ -1,0 +1,733 @@
+{% extends "catalog/base.html" %}
+{% load static %}
+
+{% block title %}{{ product.name }} | جزئیات محصول{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    {% if messages %}
+        <div class="space-y-3 mb-6">
+            {% for message in messages %}
+                <div class="rounded-xl border px-4 py-3 text-sm font-bold
+                    {% if message.tags == 'success' %}
+                        bg-emerald-50 border-emerald-200 text-emerald-700
+                    {% elif message.tags == 'error' %}
+                        bg-rose-50 border-rose-200 text-rose-700
+                    {% else %}
+                        bg-indigo-50 border-indigo-200 text-indigo-700
+                    {% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <nav class="flex flex-wrap text-sm text-gray-500 mb-8 gap-2 items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <a href="{% url 'catalog:product_list' %}" class="hover:text-indigo-600 transition">خانه</a>
+        <i class="fa-solid fa-chevron-left text-[10px] text-gray-400"></i>
+        {% if product.category %}
+            <a href="{% url 'catalog:product_list_by_category' product.category.slug %}" class="hover:text-indigo-600 transition">
+                {{ product.category.name }}
+            </a>
+            <i class="fa-solid fa-chevron-left text-[10px] text-gray-400"></i>
+        {% endif %}
+        <span class="text-gray-800 font-bold">{{ product.name }}</span>
+    </nav>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div class="lg:col-span-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:sticky lg:top-24">
+            <div id="image-zoom-stage" class="relative bg-gray-50 rounded-xl p-4 flex items-center justify-center border border-gray-100 aspect-square mb-4 overflow-hidden cursor-zoom-in group">
+                {% if product.image %}
+                    <img
+                        id="main-product-image"
+                        src="{{ product.image.url }}"
+                        data-original-src="{{ product.image.url }}"
+                        alt="{{ product.name }}"
+                        class="max-h-80 max-w-full object-contain rounded-lg transition-transform duration-200 ease-out select-none"
+                    >
+                {% else %}
+                    <img
+                        id="main-product-image"
+                        src="{% static 'images/placeholder.png' %}"
+                        data-original-src="{% static 'images/placeholder.png' %}"
+                        alt="{{ product.name }}"
+                        class="max-h-80 max-w-full object-contain rounded-lg transition-transform duration-200 ease-out select-none"
+                    >
+                {% endif %}
+
+                <button
+                    type="button"
+                    id="open-image-modal"
+                    class="absolute left-3 bottom-3 w-10 h-10 rounded-full bg-white/95 border border-gray-200 shadow-md text-gray-700 hover:text-indigo-600 hover:border-indigo-200 transition flex items-center justify-center"
+                    aria-label="نمایش بزرگ تصویر"
+                >
+                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                </button>
+
+                <div class="absolute top-3 right-3 bg-gray-900/70 text-white text-[11px] px-3 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                    برای بزرگ نمایی حرکت دهید
+                </div>
+            </div>
+
+            {% if product.image or product.images.all %}
+                <div class="grid grid-cols-4 gap-2">
+                    {% if product.image %}
+                        <button
+                            type="button"
+                            class="thumbnail-button border-2 border-indigo-600 rounded-lg p-1 bg-white aspect-square flex items-center justify-center overflow-hidden"
+                            data-image="{{ product.image.url }}"
+                        >
+                            <img src="{{ product.image.url }}" class="max-h-14 max-w-full object-contain" alt="{{ product.name }}">
+                        </button>
+                    {% endif %}
+
+                    {% for img in product.images.all %}
+                        <button
+                            type="button"
+                            class="thumbnail-button border border-gray-200 hover:border-indigo-600 rounded-lg p-1 bg-white aspect-square flex items-center justify-center overflow-hidden transition"
+                            data-image="{{ img.image.url }}"
+                        >
+                            <img src="{{ img.image.url }}" class="max-h-14 max-w-full object-contain" alt="تصویر {{ forloop.counter }} محصول {{ product.name }}">
+                        </button>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 md:p-8">
+                {% if product.category %}
+                    <span class="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-lg w-max mb-4 inline-block">
+                        {{ product.category.name }}
+                    </span>
+                {% endif %}
+
+                <h1 class="text-2xl md:text-3xl font-extrabold text-gray-900 mb-3">{{ product.name }}</h1>
+
+                <div class="flex flex-wrap items-center gap-3 mb-5">
+                    <div class="flex items-center gap-1 text-yellow-400" aria-label="امتیاز محصول">
+                        {% for i in "12345" %}
+                            {% if product.avg_rating and forloop.counter <= product.avg_rating %}
+                                <i class="fa-solid fa-star"></i>
+                            {% else %}
+                                <i class="fa-regular fa-star text-gray-300"></i>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <span class="text-sm font-bold text-gray-700">{{ product.avg_rating|default:0|floatformat:1 }}</span>
+                    <span class="text-xs text-gray-500">از مجموع {{ product.review_count|default:0 }} نظر</span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-4 text-xs text-gray-500 border-b border-gray-100 pb-4 mb-4">
+                    <span>برند: <strong class="text-gray-800 font-bold">{{ product.brand|default:"متفرقه" }}</strong></span>
+                    <span>•</span>
+                    <span>
+                        وضعیت:
+                        {% if product.stock > 0 %}
+                            <span class="text-emerald-600 font-bold">موجود در انبار ({{ product.stock }})</span>
+                        {% else %}
+                            <span class="text-rose-500 font-bold">ناموجود</span>
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div class="mb-6">
+                    <div class="flex items-center gap-3 mb-2">
+                        {% if product.old_price %}
+                            <span class="text-base text-gray-400 line-through">{{ product.old_price|floatformat:0 }}</span>
+                            <span class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">تخفیف</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-3xl font-extrabold text-indigo-700">{{ product.price|floatformat:0 }}</span>
+                        <span class="text-sm text-indigo-600 font-bold mr-1">تومان</span>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="font-bold text-gray-800 mb-2">توضیحات محصول:</h3>
+                    <div class="text-gray-600 leading-7 text-sm">
+                        {{ product.description|default:"توضیحی ثبت نشده است."|linebreaksbr }}
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-stretch gap-4 mt-4">
+                    {% if product.stock > 0 %}
+                        <form method="post" action="{% url 'cart:add' product.id %}" class="flex-grow flex gap-2 w-full">
+                            {% csrf_token %}
+                            <input
+                                type="number"
+                                name="quantity"
+                                value="1"
+                                min="1"
+                                max="{{ product.stock }}"
+                                class="w-20 rounded-xl border border-indigo-100 px-3 py-3 text-center text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                            >
+                            <button type="submit" class="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-8 rounded-xl transition-all flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-cart-shopping"></i>
+                                افزودن به سبد
+                            </button>
+                        </form>
+                    {% else %}
+                        <button type="button" disabled class="flex-grow bg-gray-200 text-gray-500 font-bold py-3.5 px-8 rounded-xl cursor-not-allowed">
+                            محصول ناموجود است
+                        </button>
+                    {% endif %}
+
+                    <button
+                        id="wishlist-btn"
+                        type="button"
+                        data-slug="{{ product.slug }}"
+                        class="p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition"
+                        aria-label="علاقه مندی"
+                    >
+                        <i class="fa-heart {% if is_wishlisted %}fa-solid text-rose-500{% else %}fa-regular text-gray-400{% endif %} text-xl"></i>
+                    </button>
+                </div>
+
+                <p id="wishlist-message" class="hidden text-xs font-bold mt-3"></p>
+            </div>
+
+            {% if product.specs.all %}
+                <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                    <h3 class="font-extrabold text-gray-900 mb-4 border-r-4 border-indigo-600 pr-3 text-lg">مشخصات فنی</h3>
+                    <div class="overflow-hidden rounded-xl border border-gray-100">
+                        <table class="min-w-full divide-y divide-gray-100 text-sm">
+                            <tbody>
+                                {% for spec in product.specs.all %}
+                                    <tr class="{% cycle 'bg-gray-50' 'bg-white' %}">
+                                        <td class="px-6 py-4 font-bold text-gray-700 w-1/3">{{ spec.title }}</td>
+                                        <td class="px-6 py-4 text-gray-600">{{ spec.value }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 md:p-8 mt-8">
+        <div class="text-center mb-8">
+            <h2 class="font-extrabold text-gray-900 text-xl mb-2">مراحل ارسال سفارش</h2>
+            <p class="text-sm text-gray-500">سفارش شما با دقت آماده و در سریع ترین زمان ارسال می شود.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div class="relative text-center rounded-2xl bg-indigo-50 border border-indigo-100 p-6">
+                <div class="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-100">
+                    <i class="fa-solid fa-cart-check text-xl"></i>
+                </div>
+                <span class="absolute top-3 right-3 text-xs font-extrabold text-indigo-300">01</span>
+                <h3 class="font-extrabold text-gray-800 mb-2">ثبت سفارش</h3>
+                <p class="text-xs leading-6 text-gray-500">کالا را به سبد خرید اضافه و سفارش را تکمیل کنید.</p>
+            </div>
+
+            <div class="relative text-center rounded-2xl bg-amber-50 border border-amber-100 p-6">
+                <div class="w-14 h-14 rounded-full bg-amber-500 text-white flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-100">
+                    <i class="fa-solid fa-credit-card text-xl"></i>
+                </div>
+                <span class="absolute top-3 right-3 text-xs font-extrabold text-amber-300">02</span>
+                <h3 class="font-extrabold text-gray-800 mb-2">تایید پرداخت</h3>
+                <p class="text-xs leading-6 text-gray-500">پرداخت بررسی و وضعیت سفارش تایید می شود.</p>
+            </div>
+
+            <div class="relative text-center rounded-2xl bg-emerald-50 border border-emerald-100 p-6">
+                <div class="w-14 h-14 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-100">
+                    <i class="fa-solid fa-box-open text-xl"></i>
+                </div>
+                <span class="absolute top-3 right-3 text-xs font-extrabold text-emerald-300">03</span>
+                <h3 class="font-extrabold text-gray-800 mb-2">بسته بندی</h3>
+                <p class="text-xs leading-6 text-gray-500">محصول با بسته بندی ایمن آماده ارسال می شود.</p>
+            </div>
+
+            <div class="relative text-center rounded-2xl bg-sky-50 border border-sky-100 p-6">
+                <div class="w-14 h-14 rounded-full bg-sky-600 text-white flex items-center justify-center mx-auto mb-4 shadow-lg shadow-sky-100">
+                    <i class="fa-solid fa-truck-fast text-xl"></i>
+                </div>
+                <span class="absolute top-3 right-3 text-xs font-extrabold text-sky-300">04</span>
+                <h3 class="font-extrabold text-gray-800 mb-2">تحویل سفارش</h3>
+                <p class="text-xs leading-6 text-gray-500">مرسوله ارسال و کد رهگیری در اختیار شما قرار می گیرد.</p>
+            </div>
+        </div>
+    </section>
+
+    
+    <section id="reviews" class="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8">
+    <!-- بخش فرم ثبت نظر -->
+    <div class="lg:col-span-4">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:sticky lg:top-24">
+            <h2 class="font-extrabold text-gray-900 mb-2 border-r-4 border-indigo-600 pr-3 text-lg">ثبت نظر شما</h2>
+            <p class="text-xs text-gray-500 leading-6 mb-6">تجربه خود از این محصول را با دیگران به اشتراک بگذارید.</p>
+
+            {% if request.user.is_authenticated %}
+                <form method="post" action="{% url 'catalog:product_detail' product.slug %}" id="review-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="rating" id="rating-input" value="5">
+
+                    <div class="mb-5">
+                        <label class="block text-sm font-bold text-gray-700 mb-3">امتیاز شما</label>
+                        <div id="rating-buttons" class="flex gap-2" dir="ltr">
+                            {% for i in "12345" %}
+                                <button type="button" class="rating-button text-3xl text-yellow-400 transition hover:scale-110" data-rating="{{ forloop.counter }}">
+                                    <i class="fa-solid fa-star"></i>
+                                </button>
+                            {% endfor %}
+                        </div>
+                        <p id="rating-label" class="text-xs text-gray-500 mt-2">امتیاز انتخابی: 5 از 5</p>
+                    </div>
+
+                    <div class="mb-5">
+                        <label for="review-comment" class="block text-sm font-bold text-gray-700 mb-2">متن نظر</label>
+                        <textarea id="review-comment" name="comment" rows="5"  minlength="3" maxlength="1000" required  spellcheck="true"   placeholder="نظر خود را بنویسید..." class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"></textarea>
+                    </div>
+
+                    <!-- باکس پیام  -->
+                    <div id="review-message" class="hidden mb-4 rounded-xl border px-4 py-3 text-sm font-bold"></div>
+
+
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-paper-plane"></i> ثبت یا ویرایش نظر
+                    </button>
+                </form>
+            {% else %}
+                <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-5 text-center">
+                    <i class="fa-solid fa-user-lock text-2xl text-indigo-600 mb-3"></i>
+                    <p class="text-sm text-gray-700 mb-4">برای ثبت نظر ابتدا وارد شوید.</p>
+                    <a href="{{ login_url }}?next={{ request.path|urlencode }}" class="inline-flex items-center gap-2 bg-indigo-600 text-white text-sm font-bold px-5 py-3 rounded-xl">ورود به حساب</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- بخش لیست نظرات (پارشیال) -->
+    <div class="lg:col-span-8">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                <h2 class="font-extrabold text-gray-900 border-r-4 border-indigo-600 pr-3 text-lg">نظرات کاربران</h2>
+                <span id="review-count-badge" class="bg-gray-100 text-gray-600 text-xs font-bold px-3 py-2 rounded-lg">
+                    {{ product.review_count|default:0 }} نظر
+                </span>
+            </div>
+
+            <div id="reviews-container">
+                {% include 'catalog/partials/review_list.html' %}
+            </div>
+        </div>
+    </div>
+
+
+</section>
+
+
+
+     
+
+
+
+
+    {% if related_products %}
+        <section class="mt-8">
+            <div class="flex items-center justify-between gap-4 mb-5">
+                <div>
+                    <h2 class="font-extrabold text-gray-900 text-xl mb-1">محصولات مشابه</h2>
+                    <p class="text-sm text-gray-500">محصولاتی که ممکن است برای شما مناسب باشند.</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                
+                {% for related_product in related_products %}                
+                    <article class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:-translate-y-1 hover:shadow-lg transition duration-300">
+                        <a href="{% url 'catalog:product_detail' related_product.slug %}" class="block">
+                            <div class="aspect-square bg-gray-50 flex items-center justify-center p-5 overflow-hidden">
+                                {% if related_product.image %}
+                                    <img src="{{ related_product.image.url }}" alt="{{ related_product.name }}" loading="lazy" class="max-h-48 max-w-full object-contain hover:scale-105 transition duration-300">
+                                {% else %}
+                                    <img src="{% static 'images/placeholder.png' %}" alt="{{ related_product.name }}" loading="lazy" class="max-h-48 max-w-full object-contain">
+                                {% endif %}
+                            </div>
+
+                            <div class="p-5">
+                                {% if related_product.category %}
+                                    <span class="text-[11px] font-bold text-indigo-600">{{ related_product.category.name }}</span>
+                                {% endif %}
+
+                                <h3 class="font-extrabold text-gray-800 text-sm leading-6 mt-2 mb-4 line-clamp-2 min-h-12">
+                                    {{ related_product.name }}
+                                </h3>
+
+                                <div class="flex items-center justify-between gap-2">
+                                    <div>
+                                        <span class="font-extrabold text-indigo-700">{{ related_product.price|floatformat:0 }}</span>
+                                        <span class="text-xs text-gray-500">تومان</span>
+                                    </div>
+                                    <span class="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                        <i class="fa-solid fa-arrow-left text-xs"></i>
+                                    </span>
+                                </div>
+                            </div>
+                        </a>
+                    </article>
+                {% endfor %}
+
+            </div>
+
+
+        </section>
+    {% endif %}
+</div>
+
+<div id="image-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-gray-950/90 p-4" role="dialog" aria-modal="true">
+    <button type="button" id="close-image-modal" class="absolute top-5 left-5 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white transition flex items-center justify-center" aria-label="بستن تصویر">
+        <i class="fa-solid fa-xmark text-xl"></i>
+    </button>
+
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-gray-900/80 border border-white/10 rounded-xl p-2">
+        <button type="button" id="zoom-out" class="w-10 h-10 rounded-lg text-white hover:bg-white/10 transition" aria-label="کوچک نمایی">
+            <i class="fa-solid fa-minus"></i>
+        </button>
+        <button type="button" id="zoom-reset" class="px-4 h-10 rounded-lg text-white text-xs font-bold hover:bg-white/10 transition">
+            اندازه اصلی
+        </button>
+        <button type="button" id="zoom-in" class="w-10 h-10 rounded-lg text-white hover:bg-white/10 transition" aria-label="بزرگ نمایی">
+            <i class="fa-solid fa-plus"></i>
+        </button>
+    </div>
+
+    <div class="w-full h-full flex items-center justify-center overflow-auto">
+        <img id="modal-product-image" src="" alt="{{ product.name }}" class="max-w-[90vw] max-h-[80vh] object-contain transition-transform duration-200 select-none">
+    </div>
+</div>
+
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function () {
+    const mainImage = document.getElementById("main-product-image");
+    const zoomStage = document.getElementById("image-zoom-stage");
+    const thumbnailButtons = document.querySelectorAll(".thumbnail-button");
+
+    const imageModal = document.getElementById("image-modal");
+    const modalImage = document.getElementById("modal-product-image");
+    const openModalButton = document.getElementById("open-image-modal");
+    const closeModalButton = document.getElementById("close-image-modal");
+    const zoomInButton = document.getElementById("zoom-in");
+    const zoomOutButton = document.getElementById("zoom-out");
+    const zoomResetButton = document.getElementById("zoom-reset");
+
+    const ratingInput = document.getElementById("rating-input");
+    const ratingButtons = document.querySelectorAll(".rating-button");
+    const ratingLabel = document.getElementById("rating-label");
+
+    const wishlistButton = document.getElementById("wishlist-btn");
+    const wishlistMessage = document.getElementById("wishlist-message");
+
+    
+
+    const reviewMessage = document.getElementById("review-message");
+    const reviewForm = document.getElementById("review-form");
+    const reviewsContainer = document.getElementById("reviews-container");
+    const reviewCountBadge = document.getElementById("review-count-badge");
+
+
+
+     if (!reviewForm || !reviewsContainer) {
+        return;
+    }
+
+    function showReviewMessage(message, isError) {
+        if (!reviewMessage) return;
+
+        reviewMessage.textContent = message;
+        reviewMessage.classList.remove(
+            "hidden",
+            "bg-emerald-50",
+            "border-emerald-200",
+            "text-emerald-700",
+            "bg-rose-50",
+            "border-rose-200",
+            "text-rose-700"
+        );
+
+        if (isError) {
+            reviewMessage.classList.add("bg-rose-50", "border-rose-200", "text-rose-700");
+        } else {
+            reviewMessage.classList.add("bg-emerald-50", "border-emerald-200", "text-emerald-700");
+        }
+    }
+
+    reviewForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        if (typeof window.showLoader === "function") {
+            window.showLoader();
+        }
+
+        const formData = new FormData(reviewForm);
+
+        fetch("{% url 'catalog:product_detail' product.slug %}", {
+            method: "POST",
+            body: formData,
+            headers: {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRFToken": "{{ csrf_token }}"
+            }
+        })
+        .then(async (response) => {
+            const isJson = response.headers.get('content-type')?.includes('application/json');
+            const data = isJson ? await response.json() : null;
+
+            if (!response.ok) {
+                throw new Error((data && data.message) ? data.message : "خطایی در پردازش درخواست رخ داد.");
+            }
+
+            return data;
+        })
+        .then((data) => {
+            if (!data.success) {
+                showReviewMessage(data.message || "خطایی رخ داد.", true);
+                return;
+            }
+
+            reviewsContainer.innerHTML = data.reviews_html;
+
+            if (reviewCountBadge) {
+                reviewCountBadge.textContent = data.review_count + " نظر";
+            }
+
+            reviewForm.reset();
+            // ست کردن مجدد امتیاز پیش‌فرض روی ۵ بعد از ریست کردن فرم
+            if (typeof setRating === "function") {
+                setRating(5);
+            }
+
+            showReviewMessage(data.message || "نظر شما با موفقیت ثبت شد.", false);
+        })
+        .catch((error) => {
+            showReviewMessage(error.message || "در ثبت نظر مشکلی پیش آمد.", true);
+        })
+        .finally(() => {
+            // این بلاک کلیدی است؛ تحت هر شرایطی لوودر را غیرفعال می‌کند
+            if (typeof window.hideLoader === "function") {
+                window.hideLoader();
+            } });
+    });
+
+
+
+
+
+    let modalZoom = 1;
+
+    function changeImage(imageUrl, selectedButton) {
+        if (!mainImage || !imageUrl) return;
+
+        mainImage.src = imageUrl;
+        mainImage.dataset.originalSrc = imageUrl;
+        mainImage.style.transform = "scale(1)";
+        mainImage.style.transformOrigin = "center";
+
+        thumbnailButtons.forEach(function (button) {
+            button.classList.remove("border-indigo-600", "border-2");
+            button.classList.add("border-gray-200", "border");
+        });
+
+        selectedButton.classList.remove("border-gray-200", "border");
+        selectedButton.classList.add("border-indigo-600", "border-2");
+    }
+
+    thumbnailButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            changeImage(this.dataset.image, this);
+        });
+    });
+
+    if (zoomStage && mainImage) {
+        zoomStage.addEventListener("mousemove", function (event) {
+            if (window.innerWidth < 1024) return;
+
+            const rect = zoomStage.getBoundingClientRect();
+            const x = ((event.clientX - rect.left) / rect.width) * 100;
+            const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+            mainImage.style.transformOrigin = `${x}% ${y}%`;
+            mainImage.style.transform = "scale(1.8)";
+        });
+
+        zoomStage.addEventListener("mouseleave", function () {
+            mainImage.style.transform = "scale(1)";
+            mainImage.style.transformOrigin = "center";
+        });
+    }
+
+    function updateModalZoom() {
+        if (!modalImage) return;
+        modalImage.style.transform = `scale(${modalZoom})`;
+    }
+
+    function openImageModal() {
+        if (!imageModal || !modalImage || !mainImage) return;
+
+        modalImage.src = mainImage.src;
+        modalZoom = 1;
+        updateModalZoom();
+        imageModal.classList.remove("hidden");
+        imageModal.classList.add("flex");
+        document.body.classList.add("overflow-hidden");
+    }
+
+    function closeImageModal() {
+        if (!imageModal) return;
+
+        imageModal.classList.add("hidden");
+        imageModal.classList.remove("flex");
+        document.body.classList.remove("overflow-hidden");
+        modalZoom = 1;
+        updateModalZoom();
+    }
+
+    if (openModalButton) {
+        openModalButton.addEventListener("click", openImageModal);
+    }
+
+    if (zoomStage) {
+        zoomStage.addEventListener("click", function (event) {
+            if (event.target.closest("#open-image-modal")) return;
+            openImageModal();
+        });
+    }
+
+    if (closeModalButton) {
+        closeModalButton.addEventListener("click", closeImageModal);
+    }
+
+    if (zoomInButton) {
+        zoomInButton.addEventListener("click", function () {
+            modalZoom = Math.min(modalZoom + 0.25, 3);
+            updateModalZoom();
+        });
+    }
+
+    if (zoomOutButton) {
+        zoomOutButton.addEventListener("click", function () {
+            modalZoom = Math.max(modalZoom - 0.25, 0.5);
+            updateModalZoom();
+        });
+    }
+
+    if (zoomResetButton) {
+        zoomResetButton.addEventListener("click", function () {
+            modalZoom = 1;
+            updateModalZoom();
+        });
+    }
+
+    if (imageModal) {
+        imageModal.addEventListener("click", function (event) {
+            if (event.target === imageModal) {
+                closeImageModal();
+            }
+        });
+    }
+
+    document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+            closeImageModal();
+        }
+    });
+
+    function setRating(selectedRating) {
+        if (!ratingInput) return;
+
+        ratingInput.value = selectedRating;
+
+        ratingButtons.forEach(function (button) {
+            const buttonRating = Number(button.dataset.rating);
+            const icon = button.querySelector("i");
+
+            if (buttonRating <= selectedRating) {
+                icon.classList.add("fa-solid", "text-yellow-400");
+                icon.classList.remove("fa-regular", "text-gray-300");
+            } else {
+                icon.classList.add("fa-regular", "text-gray-300");
+                icon.classList.remove("fa-solid", "text-yellow-400");
+            }
+        });
+
+        if (ratingLabel) {
+            ratingLabel.textContent = `امتیاز انتخابی: ${selectedRating} از 5`;
+        }
+    }
+
+    ratingButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            setRating(Number(this.dataset.rating));
+        });
+    });
+
+    if (ratingButtons.length) {
+        setRating(5);
+    }
+
+    function getCookie(name) {
+        const cookies = document.cookie ? document.cookie.split(";") : [];
+
+        for (const cookieItem of cookies) {
+            const cookie = cookieItem.trim();
+            if (cookie.startsWith(`${name}=`)) {
+                return decodeURIComponent(cookie.substring(name.length + 1));
+            }
+        }
+
+        return null;
+    }
+
+    function showWishlistMessage(message, isError) {
+        if (!wishlistMessage) return;
+
+        wishlistMessage.textContent = message;
+        wishlistMessage.classList.remove("hidden", "text-emerald-600", "text-rose-600");
+        wishlistMessage.classList.add(isError ? "text-rose-600" : "text-emerald-600");
+    }
+
+    if (wishlistButton) {
+        wishlistButton.addEventListener("click", async function () {
+            wishlistButton.disabled = true;
+
+            try {
+                const response = await fetch("{% url 'catalog:wishlist_toggle' product.slug %}", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: {
+                        "X-CSRFToken": getCookie("csrftoken"),
+                        "X-Requested-With": "XMLHttpRequest"
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    showWishlistMessage(data.message || "خطا در تغییر علاقه مندی.", true);
+                    return;
+                }
+
+                const icon = wishlistButton.querySelector("i");
+                icon.classList.toggle("fa-solid", data.is_wishlisted);
+                icon.classList.toggle("fa-regular", !data.is_wishlisted);
+                icon.classList.toggle("text-rose-500", data.is_wishlisted);
+                icon.classList.toggle("text-gray-400", !data.is_wishlisted);
+
+                showWishlistMessage(data.message, false);
+            } catch (error) {
+                showWishlistMessage("ارتباط با سرور برقرار نشد.", true);
+            } finally {
+                wishlistButton.disabled = false;
+            }
+        });
+    }
+});
+
+</script>
+{% endblock %}

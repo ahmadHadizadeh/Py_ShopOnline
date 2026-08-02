@@ -1,0 +1,45 @@
+   /* استایل‌های سفارشی Select2 برای هماهنگی با Tailwind UI */
+        .select2-container--default .select2-selection--single {
+            border: 1px solid #e5e7eb !important; /* Tailwind Gray-200 */
+            height: 54px !important; /* ارتفاع مشابه ورودی‌های دیگر */
+            border-radius: 0.75rem !important; /* Rounded-xl */
+            display: flex !important;
+            align-items: center !important;
+            background-color: #f9fafb !important; /* Tailwind Gray-50 */
+            transition: all 0.2s ease-in-out;
+        }
+        .select2-container--default .select2-selection--single:focus-within {
+            border-color: #6366f1 !important; /* Tailwind Indigo-500 */
+            background-color: #ffffff !important; /* White */
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important; /* Ring Indigo-100 */
+        }
+        .select2-selection__rendered { 
+            padding-right: 1.25rem !important; /* Padding-start */
+            text-align: right !important; 
+            color: #1f2937 !important; /* Tailwind Gray-800 */
+            font-weight: 700 !important; /* Font-bold */
+        }
+        .select2-selection__arrow { 
+            height: 52px !important; 
+            left: 12px !important; /* فاصله از سمت چپ */
+            right: auto !important; 
+        }
+        .select2-dropdown {
+            border: 1px solid #e5e7eb !important; /* Tailwind Gray-200 */
+            border-radius: 0.75rem !important; /* Rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05) !important; /* Shadow */
+            overflow: hidden; /* اطمینان از رعایت گوشه‌های گرد */
+        }
+        .select2-search__field {
+            border: 1px solid #e5e7eb !important; /* Tailwind Gray-200 */
+            border-radius: 0.5rem !important; /* Rounded-lg */
+            padding: 0.5rem !important;
+            outline: none !important;
+        }
+        /* استایل برای placeholders Select2 */
+        .select2-container--default .select2-selection--single .select2-placeholder {
+            color: #9ca3af !important; /* Tailwind Gray-400 */
+            font-weight: 500 !important; /* Font-medium */
+        }
+ 
+    

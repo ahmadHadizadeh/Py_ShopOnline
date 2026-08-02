@@ -1,0 +1,22 @@
+<div class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm sticky top-24">
+    <h2 class="font-extrabold text-gray-900 mb-4">خلاصه سفارش</h2>
+    <div class="space-y-3 mb-6">
+        <div class="flex justify-between text-sm text-gray-600">
+            <span>تعداد کالا</span>
+            <span class="font-bold">{{ cart.total_items }}</span>
+        </div>
+        {% if cart.discount_amount %}
+            <div class="flex justify-between text-sm text-gray-600">
+                <span>سود شما</span>
+                <span class="font-bold text-emerald-600">{{ cart.discount_amount|floatformat:0 }} تومان</span>
+            </div>
+        {% endif %}
+        <div class="flex justify-between text-lg text-gray-900">
+            <span class="font-bold">مبلغ کل</span>
+            <span class="font-extrabold text-indigo-700">{{ cart.total_price|floatformat:0 }} تومان</span>
+        </div>
+    </div>
+    <a href="{% url 'cart:checkout' %}" class="block w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition text-center">
+        ادامه فرایند خرید
+    </a>
+</div>

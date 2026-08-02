@@ -1,0 +1,51 @@
+{% extends "catalog/base.html" %} 
+{% load static humanize %}
+
+{% block title %}پرداخت ناموفق | هوش برتر{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 pt-8">
+    <nav class="flex text-sm text-gray-500" aria-label="Breadcrumb">
+        <ol class="inline-flex items-center space-x-2 md:space-x-3">
+            <li><a href="/" class="hover:text-blue-700">خانه</a></li>
+            <li class="text-gray-300">/</li>
+            <li><a href="{% url 'orders:order_list' %}" class="hover:text-blue-700">سفارشات من</a></li>
+            <li class="text-gray-300">/</li>
+            <li class="text-red-700 font-bold">خطای پرداخت</li>
+        </ol>
+    </nav>
+</div>
+
+<div class="container mx-auto px-4 py-8 flex items-center justify-center min-h-[60vh]">
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-lg border border-red-100 p-8 text-center">
+        <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-red-50/50">
+            <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </div>
+
+        <h1 class="text-2xl font-bold text-gray-800 mb-3">خطا در پرداخت سفارش</h1>
+        <p class="text-gray-500 text-sm mb-8">عملیات پرداخت ناموفق بود یا توسط کاربر لغو گردید. مبلغ کسر شده (در صورت کسر) طی ۷۲ ساعت آینده باز خواهد گشت.</p>
+
+        <div class="bg-gray-50 rounded-xl p-5 mb-8 text-right space-y-4 border border-gray-100">
+            <div class="flex justify-between items-center text-sm">
+                <span class="text-gray-500">شماره سفارش:</span>
+                <span class="font-semibold text-gray-800 num-latin">{{ order.order_number }}</span>
+            </div>
+            <div class="flex justify-between items-center text-sm border-t border-gray-100 pt-3">
+                <span class="text-gray-500">مبلغ قابل پرداخت:</span>
+                <span class="font-semibold text-gray-800 num-latin">{{ order.final_amount|intcomma }} تومان</span>
+            </div>
+            {% if payment.failure_reason %} {# هماهنگ‌سازی با فیلد failure_reason در مدل پرداخت #}
+            <div class="flex justify-between items-center text-sm border-t border-gray-100 pt-3">
+                <span class="text-gray-500">علت خطا:</span>
+                <span class="font-semibold text-red-600 text-xs">{{ payment.failure_reason }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+            <a href="{% url 'orders:initiate_payment' order.order_number %}" class="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl text-sm transition text-center shadow-lg">تلاش مجدد</a>
+            <a href="{% url 'orders:order_detail' order.id %}" class="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition text-center">مشاهده سفارش</a> {# تصحیح به order.id برای انطباق با ساختار URL جزئیات سفارش #}
+        </div>
+    </div>
+</div>
+{% endblock %}

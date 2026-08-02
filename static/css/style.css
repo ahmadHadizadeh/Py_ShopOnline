@@ -1,0 +1,106 @@
+/* 1. Font Definitions for IRANSans */
+
+@font-face {
+    font-family: 'IRANSans';
+    src: url('/static/fonts/iransans/woff2/IRANSansWeb.woff2') format('woff2'),
+         url('/static/fonts/iransans/woff/IRANSansWeb.woff') format('woff'),
+         url('/static/fonts/iransans/ttf/IRANSansWeb.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'IRANSans';
+    src: url('/static/fonts/iransans/woff2/IRANSansWeb_Bold.woff2') format('woff2'),
+         url('/static/fonts/iransans/woff/IRANSansWeb_Bold.woff') format('woff'),
+         url('/static/fonts/iransans/ttf/IRANSansWeb_Bold.ttf') format('truetype');
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'IRANSans';
+    src: url('/static/fonts/iransans/woff2/IRANSansWeb_Medium.woff2') format('woff2'),
+         url('/static/fonts/iransans/woff/IRANSansWeb_Medium.woff') format('woff'),
+         url('/static/fonts/iransans/ttf/IRANSansWeb_Medium.ttf') format('truetype');
+    font-weight: 500;
+}
+
+@font-face {
+    font-family: 'IRANSans';
+    src: url('/static/fonts/iransans/woff2/IRANSansWeb_Black.woff2') format('woff2'),
+         url('/static/fonts/iransans/woff/IRANSansWeb_Black.woff') format('woff'),
+         url('/static/fonts/iransans/ttf/IRANSansWeb_Black.ttf') format('truetype');
+    font-weight: 900;
+}
+
+
+
+
+/* 2. Applying the font to the entire site */
+body {
+    font-family: 'IRANSans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Added more fallbacks */
+    font-weight: normal; /* Default to normal weight for body text */
+    line-height: 1.7; /* Slightly increased for better readability */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: antialiased; /* For Firefox */
+    font-smoothing: antialiased; /* Standard syntax */
+}
+
+/* 3. Ensuring only headings and essential elements are bold */
+h1, h2, h3, h4, h5, h6,
+b, strong,
+.font-bold,
+label, /* Often labels should be bold or semi-bold */
+.iransans-bold { /* Added a class for explicit bold if needed */
+    font-weight: bold;
+}
+
+/* Using Medium weight for specific elements if needed */
+.iransans-medium {
+    font-weight: 500;
+}
+
+/* Using Light weight for specific elements if needed */
+.iransans-light {
+    font-weight: 300;
+}
+
+/* 4. Handling Numbers and Latin digits with 'num-latin' class */
+.num-latin,
+.price,
+.amount,
+.phone,
+.postal,
+input[type="tel"],
+input[type="number"],
+input[type="email"],
+input[type="text"].numeric,
+input[type="password"],
+input[type="search"] {
+
+    /* For now, let's keep it simpler and assume IRANSans handles both, or use Inter as a fallback */
+    font-family: 'IRANSans', 'Inter', 'Segoe UI', 'Roboto', 'Arial', sans-serif !important; /* Prioritize IRANSans, fallback to Inter */
+    font-weight: 500; /* Often numbers look better in medium or bold */
+    font-variant-numeric: tabular-nums; /* Ensures numbers take up same width */
+    direction: ltr; /* Ensures numbers align left-to-right */
+    unicode-bidi: plaintext; /* Helps with directionality */
+    letter-spacing: 0.2px; /* Minor adjustment for spacing */
+}
+
+/* Additional suggested classes for fine-grained control */
+.font-light { font-weight: 300; }
+.font-medium { font-weight: 500; }
+.font-black { font-weight: 900; }
+
+/* Example: Apply IRANSans Bold specifically to some element */
+.page-title {
+    font-family: 'IRANSans';
+    font-weight: bold;
+}
+
+/* Example: Apply IRANSans Medium to another element */
+.product-name {
+    font-family: 'IRANSans';
+    font-weight: 500;
+}

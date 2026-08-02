@@ -1,0 +1,7 @@
+{
+    "plugins": ["prettier-plugin-django"],
+    "tabWidth": 4,
+    "useTabs": false,
+    "printWidth": 80,
+    "trailingComma": "es5"
+  }

@@ -1,0 +1,83 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+
+# Folder -------------------------
+ai_extracted_data/
+# Folder -------------------------
+
+
+# -------------------------
+# Virtual environments
+# -------------------------
+venv/
+.venv/
+env/
+ENV/
+
+# -------------------------
+# Django local files
+# -------------------------
+db.sqlite3
+db.sqlite3-journal
+
+# -------------------------
+# Environment and secrets
+# -------------------------
+.env
+.env.*
+!.env.example
+
+# -------------------------
+# User-uploaded media
+# -------------------------
+media/
+
+# -------------------------
+# Generated data
+# -------------------------
+ai_extracted_data/
+
+# -------------------------
+# Django collected static files
+# -------------------------
+staticfiles/
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+logs/
+
+# -------------------------
+# IDE settings
+# -------------------------
+.vscode/
+.idea/
+
+# -------------------------
+# Operating system files
+# -------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -------------------------
+# Frontend/build artifacts
+# -------------------------
+node_modules/
+build/
+dist/
+
+# -------------------------
+# Temporary files
+# -------------------------
+*.tmp
+*.temp
+*.swp
+*.swo

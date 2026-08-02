@@ -1,0 +1,40 @@
+{% extends 'accounts/base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block dashboard_content %}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 min-h-[500px]">
+    <!-- Tabs Header -->
+    <div class="border-b border-gray-100 px-6 pt-6">
+        <h1 class="text-xl font-bold mb-4">تاریخچه سفارشات</h1>
+        <div class="flex gap-6">
+            <a href="?status=current" class="pb-4 border-b-2 {% if request.GET.status == 'current' or not request.GET.status %}border-red-500 text-red-600{% else %}border-transparent{% endif %} font-bold">جاری</a>
+            <a href="?status=delivered" class="pb-4 border-b-2 {% if request.GET.status == 'delivered' %}border-red-500 text-red-600{% else %}border-transparent{% endif %} hover:border-gray-300">تحویل شده</a>
+            <a href="?status=returned" class="pb-4 border-b-2 {% if request.GET.status == 'returned' %}border-red-500 text-red-600{% else %}border-transparent{% endif %} hover:border-gray-300">مرجوع شده</a>
+            <a href="?status=cancelled" class="pb-4 border-b-2 {% if request.GET.status == 'cancelled' %}border-red-500 text-red-600{% else %}border-transparent{% endif %} hover:border-gray-300">لغو شده</a>
+        </div>
+    </div>
+
+    <!-- Orders List -->
+    {% if orders %}
+        <div class="p-6">
+            {% for order in orders %}
+                <div class="border border-gray-100 rounded-xl p-4 mb-4 hover:border-blue-200 transition">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-500">سفارش #{{ order.order_number }}</span>
+                        <span class="text-xs bg-gray-100 px-2 py-1 rounded">{{ order.get_status_display }}</span>
+                    </div>
+                    <div class="font-bold text-gray-800">{{ order.final_amount|floatformat:0|intcomma }} تومان</div>
+                    <a href="{% url 'orders:order_detail' order.id %}" class="text-blue-600 text-sm mt-2 block">مشاهده جزئیات</a>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- Empty State -->
+        <div class="flex flex-col items-center justify-center py-20">
+            <img src="{% static 'images/empty-orders.svg' %}" alt="سفارشی نیست" class="w-48 mb-4 opacity-50">
+            <p class="text-gray-500">هنوز هیچ سفارشی ندارید</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

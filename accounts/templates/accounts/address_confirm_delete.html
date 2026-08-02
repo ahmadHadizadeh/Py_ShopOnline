@@ -1,0 +1,41 @@
+{% extends 'catalog/base.html' %}
+{% load static %}
+
+{% block title %}تأیید حذف آدرس{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center p-4">
+    <div class="max-w-md w-full bg-white/80 backdrop-blur-xl border border-white/50 shadow-2xl shadow-red-100/50 rounded-3xl p-8 transition-all duration-500">
+        
+        <div class="flex justify-center mb-6">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center animate-bounce">
+                <i class="fa-solid fa-trash-can text-red-500 text-2xl"></i>
+            </div>
+        </div>
+
+        <h1 class="text-2xl font-black text-gray-900 text-center mb-2">تأیید حذف آدرس</h1>
+        <p class="text-gray-500 text-center font-medium mb-8">
+            آیا از حذف آدرس <span class="text-gray-900 font-bold">"{{ object.recipient_name }}"</span> در <span class="text-gray-900 font-bold">{{ object.city }}</span> اطمینان دارید؟ 
+            این اقدام غیرقابل بازگشت است.
+        </p>
+
+        <form method="post" id="deleteForm" class="space-y-4">
+            {% csrf_token %}
+            <button type="submit" id="submitBtn" 
+                class="w-full bg-red-600 hover:bg-red-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-red-200 transform transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3">
+                <span id="btnText">تأیید و حذف نهایی</span>
+                <i id="btnIcon" class="fa-solid fa-trash"></i>
+            </button>
+            <a href="{% url 'accounts:address_list' %}" 
+                class="block text-center text-gray-500 hover:text-gray-900 font-bold py-3 transition-colors">
+                انصراف و بازگشت
+            </a>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block extra_js %}
+    <script src="{% static 'js/delete_confirm.js' %}"></script>
+{% endblock %}
