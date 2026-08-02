@@ -79,19 +79,31 @@ class ProcessPaymentView(LoginRequiredMixin, View):
 
 
 class PaymentCallbackView(View):
-    def get(self, request):
-        trxid = request.GET.get("trxid")
-        status = request.GET.get("status")
+    def post(self, request):
+        # هندل کردن درخواست POST از درگاه پرداخت
+        return self.handle_callback(request)
 
+    def get(self, request):
+        # هندل کردن درخواست GET (در صورت فراخوانی مستقیم یا برای تست)
+        return self.handle_callback(request)
+
+    def handle_callback(self, request):
+        # بررسی داده‌ها در هر دو حالت POST و GET جهت سازگاری کامل با قالب و درگاه
+        trxid = request.POST.get("trxid") or request.GET.get("trxid")
+        status = request.POST.get("status") or request.GET.get("status")
+
+        # اعتبارسنجی اولیه trxid
         if not trxid:
+            logger.error("Payment callback received without trxid.")
             return HttpResponseBadRequest("خطا: شناسه تراکنش نامعتبر است.")
 
         try:
+            # بازیابی Payment با بهینه‌سازی کوئری
             payment = Payment.objects.select_related("order").get(
                 transaction_code=trxid
             )
 
-            # Idempotency check: if status is already FINAL (Success/Failed), just redirect
+            # Idempotency check: جلوگیری از پردازش مجدد تراکنش‌های نهایی شده
             if payment.status in [Payment.Status.SUCCESS, Payment.Status.FAILED]:
                 url_name = (
                     "orders:payment_success"
@@ -104,22 +116,37 @@ class PaymentCallbackView(View):
                     )
                 )
 
+            # تعیین وضعیت جدید
             is_verified = status == "success"
             new_status = (
                 Payment.Status.SUCCESS if is_verified else Payment.Status.FAILED
             )
-            ref_id = (
-                f"REF-{payment.id}-{int(timezone.now().timestamp())}"
-                if is_verified
-                else None
+
+            # تجمیع اطلاعات پاسخ دریافتی بر اساس متد درخواست
+            gateway_data = (
+                request.POST.dict() if request.method == "POST" else request.GET.dict()
             )
 
-            payment.update_status_and_order(
-                new_status=new_status,
-                reference_id=ref_id,
-                gateway_response=str(request.GET.dict()),
-            )
+            # استفاده از تراکنش اتمیک برای تضمین سازگاری تغییرات دیتابیس
+            with transaction.atomic():
+                if is_verified:
+                    # تولید کد رهگیری پیش از فراخوانی متد برای انطباق کامل با مدل
+                    ref_id = f"REF-{payment.id}-{int(timezone.now().timestamp())}"
 
+                    # متد مدل، مقدار reference_id دریافتی را در فیلد واقعی reference_code ذخیره می‌کند
+                    payment.update_status_and_order(
+                        new_status=new_status,
+                        reference_id=ref_id,
+                        gateway_response=str(gateway_data),
+                    )
+                else:
+                    payment.update_status_and_order(
+                        new_status=new_status,
+                        reference_id=None,
+                        gateway_response=str(gateway_data),
+                    )
+
+            # هدایت به صفحه نهایی
             url_name = (
                 "orders:payment_success" if is_verified else "orders:payment_failed"
             )
@@ -128,9 +155,13 @@ class PaymentCallbackView(View):
             )
 
         except Payment.DoesNotExist:
+            logger.error(f"Payment with transaction code {trxid} not found.")
             return HttpResponseBadRequest("خطا: تراکنش یافت نشد.")
-        except Exception:
-            return HttpResponseBadRequest("خطای سیستمی در پردازش.")
+        except Exception as e:
+            logger.exception(
+                f"System error during payment callback processing for trxid {trxid}: {e}"
+            )
+            return HttpResponseBadRequest("خطای سیستمی در پردازش پرداخت.")
 
 
 def mock_payment_gateway_view(request):
@@ -176,7 +207,6 @@ class PaymentSuccessView(LoginRequiredMixin, TemplateView):
         context["order"] = order
         context["payment"] = payment_record
         return context
-
 
 
 class PaymentFailedView(LoginRequiredMixin, TemplateView):

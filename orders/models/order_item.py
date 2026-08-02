@@ -66,6 +66,24 @@ class OrderItem(models.Model):
 
         super().save(*args, **kwargs)
 
+    @property
+    def discount_amount(self):
+        product = self.product
+        if not product:
+            return Decimal("0")
+
+        old_price = getattr(product, "old_price", None)
+        if old_price is None:
+            return Decimal("0")
+
+        unit_price = self.unit_price or Decimal("0")
+        qty = Decimal(str(self.quantity or 0))
+
+        if old_price <= unit_price:
+            return Decimal("0")
+
+        return (old_price - unit_price) * qty
+
     def set_product(self, product_instance):
         if product_instance:
             self.product = product_instance

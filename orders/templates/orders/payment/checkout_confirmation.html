@@ -124,18 +124,31 @@
                                 <td class="p-4 text-gray-400">{{ forloop.counter }}</td>
                                 <td class="p-4 font-medium text-gray-900">{{ item.product_name }}</td>
                                 <td class="p-4 text-center">{{ item.quantity }}</td>
-                                <td class="p-4 text-center">{{ item.unit_price|intcomma }}</td>
+                                <td class="p-4 text-center">{{ item.unit_price|floatformat:"0"|intcomma }}</td>
+
                                 <td class="p-4 text-center text-rose-600 font-medium">
-                                    {% if item.product and item.product.old_price and item.product.old_price > item.unit_price %}
-                                        {{ item.product.old_price|add:"-"|add:item.unit_price|intcomma }}
-                                    {% else %}
-                                        0
-                                    {% endif %}
+                                    {{ item.discount_amount|floatformat:"0"|intcomma }}
                                 </td>
-                                <td class="p-4 text-center font-bold text-gray-900">{{ item.subtotal_price|intcomma }}</td>
-                            </tr>
+                                
+                                
+                                <td class="p-4 text-center font-bold text-gray-900">{{ item.subtotal_price|floatformat:"0"|intcomma }}</td>
                             {% endfor %}
                         </tbody>
+
+                        <tfoot class="bg-gray-50 border-t-2 border-gray-100">
+                            <tr>
+                                <td colspan="5" class="p-4 text-right font-bold text-gray-700">جمع مبلغ کالاها:</td>
+                                <td class="p-4 text-center font-bold text-gray-900">{{ order.subtotal_amount|floatformat:"0"|intcomma }} تومان</td>
+                            </tr>
+                            <tr>
+                                <td colspan="5" class="p-4 text-right font-bold text-gray-700">هزینه ارسال:</td>
+                                <td class="p-4 text-center font-bold text-gray-900">{{ order.shipping_amount|floatformat:"0"|intcomma }} تومان</td>
+                            </tr>
+                            <tr>
+                                <td colspan="5" class="p-4 text-right font-bold text-gray-900 text-lg">مبلغ نهایی قابل پرداخت:</td>
+                                <td class="p-4 text-center font-bold text-emerald-600 text-lg">{{ order.final_amount|floatformat:"0"|intcomma }} تومان</td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </div>
