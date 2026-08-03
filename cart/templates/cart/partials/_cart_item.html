@@ -1,3 +1,5 @@
+<!-- cart/partials/_cart_item.html -->
+
 <div class="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row gap-4 {% if is_saved %}opacity-95{% endif %}">
     <div class="w-full sm:w-28 h-28 bg-gray-50 rounded-xl flex items-center justify-center overflow-hidden">
         {% if item.product.images.first %}
@@ -27,9 +29,47 @@
 
         <div class="flex flex-wrap items-center gap-3 mt-4">
             {% if not is_saved %}
-                <form method="post" action="{% url 'cart:update_item' item.id %}" class="flex items-center gap-2">
+                 
+
+                <form method="post" action="{% url 'cart:update_item' item.id %}" class="flex items-center overflow-hidden rounded-lg border border-gray-200 bg-white">   
                     {% csrf_token %}
-                    <input type="number" name="quantity" min="1" max="{{ item.product.stock }}" value="{{ item.quantity }}" class="w-20 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+
+
+                    <button
+                    type="button"
+                    aria-label="کاهش تعداد"
+                    class="px-4 py-2.5 text-lg font-bold text-gray-600 transition hover:bg-rose-50 hover:text-rose-600"
+                    onclick="const input=this.parentElement.querySelector('input[name=quantity]'); if (+input.value > +input.min) { input.stepDown(); this.form.requestSubmit(); }"
+                >
+                    −
+                </button>
+
+   
+
+                <input
+                type="number"
+                name="quantity"
+                min="1"
+                max="{{ item.product.stock }}"
+                value="{{ item.quantity }}"
+                onchange="this.form.requestSubmit()"
+                class="h-11 w-14 appearance-none border-x border-gray-200 bg-transparent px-2 text-center text-sm font-bold text-gray-900 outline-none focus:ring-0 [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:m-0"
+            >
+            
+            
+
+
+                    <button
+                    type="button"
+                    aria-label="افزایش تعداد"
+                    class="px-4 py-2.5 text-lg font-bold text-gray-600 transition hover:bg-emerald-50 hover:text-emerald-600"
+                    onclick="const input=this.parentElement.querySelector('input[name=quantity]'); if (+input.value < +input.max) { input.stepUp(); this.form.requestSubmit(); }"
+                >
+                    +
+                </button>
+
+
+
                     <button type="submit" class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-100">بروزرسانی</button>
                 </form>
                 <form method="post" action="{% url 'cart:save_for_later' item.id %}">

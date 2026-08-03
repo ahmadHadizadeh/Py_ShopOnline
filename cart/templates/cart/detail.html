@@ -1,13 +1,33 @@
+<!-- detail.html -->
 {% extends 'catalog/base.html' %}
 {% block title %}سبد خرید{% endblock %}
 
 {% block content %}
 <div class="max-w-5xl mx-auto px-4">
-    <h1 class="text-2xl font-extrabold text-gray-900 mb-6 flex items-center gap-2">
-        <i class="fa-solid fa-basket-shopping text-indigo-600"></i>
-        سبد خرید
-    </h1>
+   
+    
 
+    <nav class="flex flex-wrap text-sm text-gray-500 mb-8 gap-2 items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <a href="{% url 'catalog:product_list' %}" class="hover:text-indigo-600 transition">
+            خانه
+        </a>
+    
+        <i class="fa-solid fa-chevron-left text-[13px] text-gray-400"></i>
+    
+        <a href="{% url 'catalog:product_list' %}" class="hover:text-indigo-600 transition">
+            محصولات
+        </a>
+    
+        <i class="fa-solid fa-chevron-left text-[10px] text-gray-400"></i>
+    
+        <span class="text-gray-800 font-bold">
+            سبد خرید
+        </span>
+    </nav>
+    
+
+
+ 
     {% if messages %}
         <div class="mb-6 space-y-2">
             {% for message in messages %}
