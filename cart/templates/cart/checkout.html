@@ -130,6 +130,193 @@
     opacity: 0.7;
   }
 </style>
+
+
+
+<style>
+/* =========================================================
+   TIMELINE CHECKOUT STEPS - SCOPED STYLES
+   ========================================================= */
+
+/* کانتینر اصلی - محور مبنا برای position: relative */
+#checkout-steps {
+  position: relative !important;
+  z-index: 1;
+  padding-top: 1.75rem !important;
+  padding-bottom: 1.5rem !important;
+}
+
+/* نوار گرادیانی افقی پیوسته پشت آیکون‌ها */
+#checkout-steps::before {
+  content: '';
+  position: absolute;
+  top: 48px; /* تنظیم مرکز عمودی دقیقاً روی دایره آیکون‌ها */
+  right: 15%;
+  left: 12%;
+  height: 8px;
+  background: linear-gradient(to left, #facc15 0%, #f97316 50%, #dc2626 100%);
+  border-radius: 4px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* فلش جهت‌دار انتهای نوار (سمت چپ در چیدمان RTL) */
+#checkout-steps::after {
+  content: '';
+  position: absolute;
+  top: 44px; /* هم‌ترازی عمودی با نوار */
+  left: 9%;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 14px solid #dc2626; /* نوک فلش قرمز به سمت چپ */
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* هر آیتم مرحله */
+#checkout-steps .step {
+  position: relative;
+  z-index: 2; /* قرارگیری بالای نوار گرادیانی */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  transition: transform 0.25s ease;
+}
+
+#checkout-steps .step:hover {
+  transform: translateY(-2px);
+}
+
+/* دایره آیکون اصلی */
+#checkout-steps .icon-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 0.75rem;
+}
+
+/* فونت آیکون داخل دایره */
+#checkout-steps .icon-container i {
+  font-size: 1.65rem;
+  transition: transform 0.3s ease;
+}
+
+/* نشانگر دایره‌ای کوچک شماره مرحله */
+#checkout-steps .step-num {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.12);
+  z-index: 3;
+}
+
+/* عنوان مرحله */
+#checkout-steps .step-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4b5563;
+  transition: color 0.3s ease, font-weight 0.3s ease;
+}
+
+/* ---------------------------------------------------------
+ پالت رنگی اختصاصی مراحل
+ --------------------------------------------------------- */
+
+/* مرحله ۱: آدرس‌ها (کرمی گرم / قهوه‌ای سوخته) */
+#checkout-steps .step-1-bg { background-color: #f5eeda; }
+#checkout-steps .step-1-icon { color: #a0522d; }
+#checkout-steps .step-1-num { background-color: #a0522d; color: #ffffff; }
+
+/* مرحله ۲: ارسال (خاکستری روشن گرم / سبز زیتونی) */
+#checkout-steps .step-2-bg { background-color: #e8e5e0; }
+#checkout-steps .step-2-icon { color: #556b2f; }
+#checkout-steps .step-2-num { background-color: #556b2f; color: #ffffff; }
+
+/* مرحله ۳: پرداخت (طلایی مات / زرشکی تیره) */
+#checkout-steps .step-3-bg { background-color: #f0e6d6; }
+#checkout-steps .step-3-icon { color: #8b0000; }
+#checkout-steps .step-3-num { background-color: #8b0000; color: #ffffff; }
+
+/* ---------------------------------------------------------
+ حالت فعال (Active State)
+ --------------------------------------------------------- */
+#checkout-steps .step.active .icon-container {
+  transform: scale(1.15);
+  border-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.3), 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+#checkout-steps .step.active .icon-container i {
+  transform: scale(1.1);
+}
+
+#checkout-steps .step.active .step-title {
+  color: #111827;
+  font-weight: 700;
+}
+
+/* responsive افقی بدون شکستن ردیف */
+@media (max-width: 640px) {
+  #checkout-steps {
+      padding-top: 1.25rem !important;
+      padding-bottom: 1rem !important;
+  }
+  #checkout-steps::before {
+      top: 40px;
+      right: 12%;
+      left: 10%;
+      height: 6px;
+  }
+  #checkout-steps::after {
+      top: 37px;
+      left: 6%;
+      border-top-width: 6px;
+      border-bottom-width: 6px;
+      border-right-width: 10px;
+  }
+  #checkout-steps .icon-container {
+      width: 50px;
+      height: 50px;
+  }
+  #checkout-steps .icon-container i {
+      font-size: 1.25rem;
+  }
+  #checkout-steps .step-num {
+      width: 18px;
+      height: 18px;
+      font-size: 0.65rem;
+      bottom: -5px;
+  }
+  #checkout-steps .step-title {
+      font-size: 0.75rem;
+  }
+}
+
+
+</style>
+
+
 {% endblock %}
 
 
@@ -162,37 +349,36 @@
 
 <div class="min-h-screen py-4 md:py-12 px-2 md:px-4 bg-gray-50/30" dir="rtl">
 
-
-
-        <!-- اینجا کد نشانگر مراحل (Step Indicator) اضافه خواهد شد -->
-        <div id="checkout-steps" class="mb-8 flex justify-around items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
-          <!-- آیکون‌ها و مراحل اینجا قرار می‌گیرند -->
-          <div class="step text-center cursor-pointer w-1/3 p-2" data-step="1">
-            <div class="icon-container w-16 h-16 mx-auto mb-2 rounded-full bg-indigo-100 flex items-center justify-center shadow-md">
-              <i class="fa-solid fa-map-location-dot text-indigo-600 text-3xl"></i>
-            </div>
-            <span class="text-sm font-bold text-gray-700">آدرس‌ها</span>
-          </div>
-          <div class="step text-center cursor-pointer w-1/3 p-2" data-step="2">
-            <div class="icon-container w-16 h-16 mx-auto mb-2 rounded-full bg-gray-200 flex items-center justify-center shadow-md">
-              <i class="fa-solid fa-truck-fast text-gray-600 text-3xl"></i>
-            </div>
-            <span class="text-sm font-bold text-gray-700">ارسال</span>
-          </div>
-          <div class="step text-center cursor-pointer w-1/3 p-2" data-step="3">
-            <div class="icon-container w-16 h-16 mx-auto mb-2 rounded-full bg-gray-200 flex items-center justify-center shadow-md">
-              <i class="fa-solid fa-credit-card text-gray-600 text-3xl"></i>
-            </div>
-            <span class="text-sm font-bold text-gray-700">پرداخت</span>
-          </div>
+  <div id="checkout-steps" class="mb-8 flex justify-around items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm" dir="rtl">
+    
+    <!-- مرحله ۱: آدرس‌ها -->
+    <div class="step w-1/3 text-center cursor-pointer active" data-step="1">
+        <div class="icon-container step-1-bg">
+            <i class="fa-solid fa-map-location-dot step-1-icon"></i>
+            <span class="step-num step-1-num">۱</span>
         </div>
-        <!-- پایان کد نشانگر مراحل -->
-  
+        <span class="step-title">آدرس‌ها</span>
+    </div>
 
+    <!-- مرحله ۲: ارسال -->
+    <div class="step w-1/3 text-center cursor-pointer" data-step="2">
+        <div class="icon-container step-2-bg">
+            <i class="fa-solid fa-truck-fast step-2-icon"></i>
+            <span class="step-num step-2-num">۲</span>
+        </div>
+        <span class="step-title">ارسال</span>
+    </div>
 
+    <!-- مرحله ۳: پرداخت -->
+    <div class="step w-1/3 text-center cursor-pointer" data-step="3">
+        <div class="icon-container step-3-bg">
+            <i class="fa-solid fa-credit-card step-3-icon"></i>
+            <span class="step-num step-3-num">۳</span>
+        </div>
+        <span class="step-title">پرداخت</span>
+    </div>
 
-
-
+</div>
 
 
 
@@ -668,127 +854,67 @@
 
 
 
-
-
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-      // تابع برای اسکرول به بخش مورد نظر
-      function scrollToSection(sectionId) {
-          const sectionElement = document.getElementById(sectionId);
-          if (sectionElement) {
-              sectionElement.scrollIntoView({
-                  behavior: 'smooth', // اسکرول نرم
-                  block: 'start'     // اسکرول به بالای بخش
-              });
-          }
-      }
-  
-      // اضافه کردن event listener به هر مرحله
-      const steps = document.querySelectorAll('.step');
-      steps.forEach(step => {
-          step.addEventListener('click', function() {
-              const stepNumber = this.getAttribute('data-step');
-              let targetSectionId = '';
-  
-              // تعیین targetSectionId بر اساس data-step
-              if (stepNumber === '1') {
-                  targetSectionId = 'address-section'; // آیدی مربوط به بخش آدرس
-              } else if (stepNumber === '2') {
-                  targetSectionId = 'shipping-section'; // آیدی مربوط به بخش ارسال
-              }
-              // اگر بخش سومی (پرداخت) هم بود، اینجا اضافه می‌شد:
-              // else if (stepNumber === '3') {
-              //     targetSectionId = 'payment-section';
-              // }
-  
-              // اجرای تابع اسکرول
-              if (targetSectionId) {
-                  scrollToSection(targetSectionId);
-              }
-  
-              // آپدیت کلاس‌ها برای نشان دادن مرحله فعال (اختیاری، اما توصیه می‌شود)
-              updateActiveStep(stepNumber);
-          });
-      });
-  
-      // تابع برای آپدیت استایل مرحله فعال
-      function updateActiveStep(activeStepNumber) {
-          steps.forEach(step => {
-              const currentStepNumber = step.getAttribute('data-step');
-              const iconContainer = step.querySelector('.icon-container');
-              const spanElement = step.querySelector('span');
-  
-              if (currentStepNumber === activeStepNumber) {
-                  iconContainer.classList.add('bg-indigo-100', 'shadow-md');
-                  iconContainer.classList.remove('bg-gray-200');
-                  iconContainer.querySelector('i').classList.add('text-indigo-600');
-                  iconContainer.querySelector('i').classList.remove('text-gray-600');
-                  spanElement.classList.add('font-bold', 'text-gray-700');
-                  spanElement.classList.remove('text-gray-500');
-              } else {
-                  iconContainer.classList.add('bg-gray-200');
-                  iconContainer.classList.remove('bg-indigo-100', 'shadow-md');
-                  iconContainer.querySelector('i').classList.add('text-gray-600');
-                  iconContainer.querySelector('i').classList.remove('text-indigo-600');
-                  spanElement.classList.add('font-bold', 'text-gray-700');
-                  spanElement.classList.remove('text-gray-500');
-              }
-          });
-      }
-  
-      // تنظیم مرحله فعال اولیه (مثلاً مرحله ۱)
-      // این بخش را اگر بخواهید مرحله اول را از اول فعال نشان دهید، اضافه کنید
-      // updateActiveStep('1');
-  });
+  document.addEventListener('DOMContentLoaded', function () {
+    // تابع اسکرول نرم به بخش مربوطه
+    function scrollToSection(sectionId) {
+        const el = document.getElementById(sectionId);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
 
+    // انتخاب تمام گام‌ها براساس شناسه و کلاس موجود
+    const stepElements = document.querySelectorAll('#checkout-steps .step');
 
+    // به‌روزرسانی استایل مرحله فعال
+    function updateActiveStep(stepNum) {
+        stepElements.forEach(step => {
+            const currentStep = step.getAttribute('data-step');
+            if (currentStep === String(stepNum)) {
+                step.classList.add('active');
+            } else {
+                step.classList.remove('active');
+            }
+        });
+    }
 
+    // اکشن کلیک روی هر مرحله
+    stepElements.forEach(step => {
+        step.addEventListener('click', function () {
+            const stepNum = this.getAttribute('data-step');
 
+            if (stepNum === '1') {
+                scrollToSection('address-section');
+            } else if (stepNum === '2') {
+                scrollToSection('shipping-section');
+            } else if (stepNum === '3') {
+                scrollToSection('payment-section');
+            }
 
-
-
-
-
-
-
-
-
-
-  const checkoutForm = document.getElementById('checkoutForm');
-  const shippingMethodIdInput = document.getElementById('selected_shipping_method_id');
-  const shippingSectionElement = document.getElementById('shipping-section');
-
-  if (checkoutForm) {
-    checkoutForm.addEventListener('submit', function(event) {
-      const selectedShippingMethodId = shippingMethodIdInput ? shippingMethodIdInput.value : '';
-
-      if (shippingSectionElement && !selectedShippingMethodId) {
-        // اگر روش ارسال انتخاب نشده باشد:
-        alert('لطفاً یک روش ارسال را انتخاب کنید.'); // نمایش پیام خطا
-        event.preventDefault(); // جلوگیری از ارسال فرم
-        scrollToSection('shipping-section'); // اسکرول به بالای بخش ارسال
-
-        // ---- اصلاح کلیدی: لودر را در این حالت فعال نکنید! ----
-        // listener عمومی submit در base.html به اشتباه لودر را فعال می کند.
-        // چون event.preventDefault() اجرا شده، ما باید این فراخوانی را متوقف کنیم.
-        // ساده ترین راه این است که این listener submit را در checkout،
-        // فقط زمانی submit واقعی را انجام دهد که همه چیز درست است.
-        // بنابراین، اینجا کاری انجام نمی دهیم و submit واقعی صورت نمی گیرد.
-
-      } else {
-        // اگر روش ارسال انتخاب شده باشد:
-        // در این حالت، event.preventDefault() اجرا نمی شود.
-        // بنابراین، listener عمومی submit در base.html به طور عادی
-        // window.showLoader() را فراخوانی خواهد کرد.
-        // و بعد از بارگذاری صفحه، لودر به طور خودکار خاموش می شود.
-        // نیازی به هیچ کد اضافی در اینجا نیست.
-      }
+            updateActiveStep(stepNum);
+        });
     });
-  }
+
+    // تنظیم حالت اولیه روی مرحله ۱
+    updateActiveStep('1');
+});
 
 
-  </script>
-  
+
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
