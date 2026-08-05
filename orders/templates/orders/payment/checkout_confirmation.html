@@ -106,8 +106,8 @@
             <!-- ۲. جدول جزئیات اقلام سفارش -->
             <div>
                 <h3 class="text-lg font-bold text-gray-800 mb-4">جزئیات اقلام سفارش</h3>
-                <div class="overflow-x-auto border border-gray-100 rounded-xl">
-                    <table class="w-full text-right text-sm border-collapse">
+                <div class="w-full overflow-x-auto sm:overflow-x-visible">
+                    <table class="w-max min-w-full sm:w-full text-right text-sm border-collapse">
                         <thead class="bg-gray-50 text-gray-500">
                             <tr>
                                 <th class="p-4 font-semibold">#</th>
@@ -138,15 +138,16 @@
                         <tfoot class="bg-gray-50 border-t-2 border-gray-100">
                             <tr>
                                 <td colspan="5" class="p-4 text-right font-bold text-gray-700">جمع مبلغ کالاها:</td>
-                                <td class="p-4 text-center font-bold text-gray-900">{{ order.subtotal_amount|floatformat:"0"|intcomma }} تومان</td>
+                                <td class="p-4 text-center font-bold text-gray-900 whitespace-nowrap">{{ order.subtotal_amount|floatformat:"0"|intcomma }} تومان</td>
                             </tr>
                             <tr>
                                 <td colspan="5" class="p-4 text-right font-bold text-gray-700">هزینه ارسال:</td>
-                                <td class="p-4 text-center font-bold text-gray-900">{{ order.shipping_amount|floatformat:"0"|intcomma }} تومان</td>
+                                <td class="p-4 text-center font-bold text-gray-900 whitespace-nowrap">{{ order.shipping_amount|floatformat:"0"|intcomma }} تومان</td>
+
                             </tr>
                             <tr>
                                 <td colspan="5" class="p-4 text-right font-bold text-gray-900 text-lg">مبلغ نهایی قابل پرداخت:</td>
-                                <td class="p-4 text-center font-bold text-emerald-600 text-lg">{{ order.final_amount|floatformat:"0"|intcomma }} تومان</td>
+                                <td class="p-4 text-center font-bold text-emerald-600 text-lg whitespace-nowrap">{{ order.final_amount|floatformat:"0"|intcomma }} تومان</td>
                             </tr>
                         </tfoot>
                     </table>
