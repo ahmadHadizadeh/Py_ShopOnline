@@ -364,7 +364,9 @@ class CheckoutView(LoginRequiredMixin, View):
             shipping_amount = shipping_method.calculate_shipping_cost(subtotal_amount)
             # اطمینان از اینکه هزینه ارسال عدد است
             if not isinstance(shipping_amount, (int, float, Decimal)):
-                logger.error(f"Shipping cost calculation returned non-numeric type: {type(shipping_amount)}")
+                logger.error(
+                    f"Shipping cost calculation returned non-numeric type: {type(shipping_amount)}"
+                )
                 shipping_amount = Decimal("0.00")  # مقدار پیش‌فرض در صورت خطا
         except Exception as e:
             logger.error(
