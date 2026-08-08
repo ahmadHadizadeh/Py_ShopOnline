@@ -5,7 +5,6 @@ from cart.models import Cart
 from accounts.models import Address
 
 
-
 def calculate_shipping_cost(address: Address) -> float:
     """
     Calculates shipping cost based on the provided address.

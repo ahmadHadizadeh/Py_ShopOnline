@@ -54,8 +54,8 @@ def cart_detail(request):
     return render(request, "cart/detail.html", context)
 
 
-def checkout_view(request):
-    return HttpResponse(request, "⭐ Add To Card Success | Ahmad ⭐")
+# def checkout_view(request):
+#     return HttpResponse(request, "⭐ Add To Card Success | Ahmad ⭐")
 
 
 @require_POST
@@ -165,7 +165,7 @@ def move_to_cart(request, item_id):
     return redirect("cart:detail")
 
 
-class CheckoutView(LoginRequiredMixin, View):
+class CheckoutView(View):
     template_name = "cart/checkout.html"
 
     def get_address_form(self, user):
@@ -179,6 +179,7 @@ class CheckoutView(LoginRequiredMixin, View):
 
     def get_context_data(self, request, cart=None, address_form=None):
         shipping_methods_with_costs = []
+
         if cart and cart.total_price is not None:
             try:
                 # فیلتر کردن روش‌های ارسال فعال
@@ -187,25 +188,19 @@ class CheckoutView(LoginRequiredMixin, View):
                     try:
                         # محاسبه هزینه ارسال برای هر روش بر اساس کل سبد خرید
                         cost = method.calculate_shipping_cost(cart.total_price)
-                        # فرمت‌دهی هزینه برای نمایش در قالب (مثلاً با ',' برای جداکننده هزارگان)
-                        # توجه: برای نمایش فارسی، ممکن است نیاز به کتابخانه جداگانه یا تنظیمات خاصی باشد
-                        # اینجا از یک فرمت‌دهی ساده استفاده می‌کنیم که باید در قالب یا با جاوااسکریپت تنظیم شود
-                        formatted_cost_display = f"{cost:,}".replace(
-                            ",", "."
-                        )  # ساده‌ترین فرمت فارسی
+                        formatted_cost_display = f"{cost:,}".replace(",", ".")
 
                         shipping_methods_with_costs.append(
                             {
                                 "method": method,
-                                "cost": cost,  # هزینه خام برای استفاده در جاوااسکریپت و محاسبات
-                                "formatted_cost": formatted_cost_display,  # هزینه فرمت شده برای نمایش مستقیم
+                                "cost": cost,
+                                "formatted_cost": formatted_cost_display,
                             }
                         )
                     except Exception as e:
                         logger.error(
                             f"Error calculating shipping cost for method {method.id} with cart total {cart.total_price}: {e}"
                         )
-                        # در صورت بروز خطا، هزینه را صفر در نظر می‌گیریم و لاگ می‌کنیم
                         shipping_methods_with_costs.append(
                             {
                                 "method": method,
@@ -215,53 +210,81 @@ class CheckoutView(LoginRequiredMixin, View):
                         )
             except Exception as e:
                 logger.error(f"Error fetching or processing shipping methods: {e}")
-                # اگر خطای کلی در دسترسی به روش‌های ارسال رخ داد
                 messages.error(
                     request,
                     "امکان محاسبه هزینه‌های ارسال وجود ندارد. لطفاً بعداً تلاش کنید.",
                 )
-                # در این حالت، بهتر است کاربر را به صفحه سبد خرید برگردانیم یا با خطای مناسب مواجه کنیم
-                # return redirect("cart:detail") # یا روش دیگر مدیریت خطا
 
-        # اگر آدرس فرم ارائه نشده بود (در متد POST)، فرم آدرس را بساز
-        if address_form is None:
-            address_form = self.get_address_form(request.user)
+        # بررسی احراز هویت کاربر برای فرم آدرس و لیست آدرس‌ها
+        user = request.user
+        if user.is_authenticated:
+            if address_form is None:
+                address_form = self.get_address_form(user)
+            user_addresses = Address.objects.filter(user=user).order_by(
+                "-is_default", "-id"
+            )
+        else:
+            if address_form is None:
+                address_form = AddressForm()
+            user_addresses = Address.objects.none()
 
         # ساخت دیکشنری context برای ارسال به قالب
         return {
             "cart": cart,
-            "form": address_form,  # فرم آدرس (مقداردهی شده یا خالی)
-            "user_addresses": Address.objects.filter(user=request.user).order_by(
-                "-is_default", "-id"  # مرتب‌سازی بر اساس پیش‌فرض بودن و سپس ID
-            ),
-            # ارسال لیست روش‌های ارسال به همراه هزینه محاسبه شده و فرمت شده
+            "form": address_form,
+            "user_addresses": user_addresses,
             "shipping_methods_data": shipping_methods_with_costs,
             "province_cities": PROVINCES_AND_CITIES,
         }
 
     def get(self, request):
-        # دریافت سبد خرید کاربر با پیش‌بارگذاری آیتم‌ها و محصولات
-        cart = (
-            Cart.objects.filter(user=request.user)
-            .prefetch_related("items__product")
-            .first()
-        )
-        # اگر سبد خرید وجود نداشت یا خالی بود، پیام نمایش بده و به صفحه سبد خرید هدایت کن
+        # استفاده از منطق احراز هویت برای استخراج سبد خرید (سازگار با کاربران مهمان و عضو)
+        if request.user.is_authenticated:
+            cart = (
+                Cart.objects.filter(user=request.user)
+                .prefetch_related("items__product")
+                .first()
+            )
+        else:
+            # در صورت پیاده‌سازی سبد با Session برای مهمان، از کلید سشن استفاده شود
+            # فعلاً طبق ساختار فعلی پروژه برای مهمان:
+            cart_id = request.session.get("cart_id")
+            cart = (
+                Cart.objects.filter(id=cart_id)
+                .prefetch_related("items__product")
+                .first()
+            )
+
+        # بررسی وجود و محتوای سبد خرید برای جلوگیری از ورود به صفحه پرداخت خالی
         if not cart or not cart.items.exists():
             messages.warning(request, "سبد خرید شما خالی است.")
             return redirect("cart:detail")
 
-        # نمایش صفحه چک‌اوت با داده‌های لازم
-        return render(request, self.template_name, self.get_context_data(request, cart))
+        # رندر کردن قالب با استفاده از متد context_data بهینه‌شده در مرحله قبل
+        return render(
+            request, self.template_name, self.get_context_data(request, cart=cart)
+        )
+
 
     @transaction.atomic  # اجرای کل متد POST در یک تراکنش اتمیک
     def post(self, request):
-        cart = (
-            Cart.objects.select_for_update()  # قفل کردن سبد خرید برای جلوگیری از تغییرات همزمان
-            .filter(user=request.user)
-            .prefetch_related("items__product")
-            .first()
-        )
+        # دریافت سبد خرید کاربر (عضو یا مهمان) به صورت ایمن و قفل‌گذاری رکورد
+        if request.user.is_authenticated:
+            cart = (
+                Cart.objects.select_for_update()
+                .filter(user=request.user)
+                .prefetch_related("items__product")
+                .first()
+            )
+        else:
+            cart_id = request.session.get("cart_id")
+            cart = (
+                Cart.objects.select_for_update()
+                .filter(id=cart_id)
+                .prefetch_related("items__product")
+                .first()
+            )
+
         if not cart:
             messages.error(request, "سبد خرید شما یافت نشد.")
             return redirect("cart:detail")
@@ -275,12 +298,10 @@ class CheckoutView(LoginRequiredMixin, View):
         shipping_method_id = request.POST.get("shipping_method_id")
         if not shipping_method_id:
             messages.error(request, "لطفاً روش ارسال را انتخاب کنید.")
-            # در صورت عدم انتخاب روش ارسال، مجدداً صفحه چک‌اوت را با داده‌های فعلی نمایش بده
             return render(
                 request, self.template_name, self.get_context_data(request, cart)
             )
 
-        # دریافت روش ارسال بدون ایجاد خطای سراسری ۴۰۴
         shipping_method = ShippingMethod.objects.filter(
             id=shipping_method_id, is_active=True
         ).first()
@@ -291,57 +312,59 @@ class CheckoutView(LoginRequiredMixin, View):
                 request, self.template_name, self.get_context_data(request, cart)
             )
 
-        # پردازش فرم آدرس
+        # پردازش آدرس
         address_id = request.POST.get("address_id")
         address_instance = None
-        if address_id:
-            # تلاش برای یافتن آدرس انتخاب شده از بین آدرس‌های ذخیره شده کاربر
+
+        # تنها در صورتی که کاربر لاگین است و شناسه آدرس ارسال شده، آدرس را واکشی می‌کنیم
+        if address_id and request.user.is_authenticated:
             address_instance = Address.objects.filter(
                 id=address_id,
                 user=request.user,
             ).first()
 
-        # ساخت فرم آدرس، با instance اگر آدرس ذخیره شده‌ای انتخاب شده باشد
+        # ساخت فرم آدرس
         address_form = AddressForm(request.POST, instance=address_instance)
 
         # اعتبارسنجی فرم آدرس
         if not address_form.is_valid():
-            # اگر فرم نامعتبر بود، صفحه را با خطاها مجدداً نمایش بده
             return render(
                 request,
                 self.template_name,
                 self.get_context_data(request, cart, address_form),
             )
 
-        # ذخیره یا به‌روزرسانی آدرس
-        address = address_form.save(commit=False)  # ذخیره موقت برای تنظیم فیلدهای اضافی
-        address.user = request.user  # اطمینان از اینکه آدرس به کاربر فعلی تعلق دارد
-        address.save()  # ذخیره نهایی آدرس
+        # ذخیره آدرس با مدیریت احراز هویت
+        address = address_form.save(commit=False)
+        if request.user.is_authenticated:
+            address.user = request.user
+            address.save()
 
-        # اگر آدرس جدید به عنوان پیش‌فرض انتخاب شده، آدرس‌های قبلی کاربر را غیرفعال کن
-        if address.is_default:
-            Address.objects.filter(user=request.user).exclude(
-                id=address.id  # به جز آدرس فعلی
-            ).update(is_default=False)
+            # مدیریت آدرس پیش‌فرض فقط برای کاربران لاگین شده
+            if address.is_default:
+                Address.objects.filter(user=request.user).exclude(id=address.id).update(
+                    is_default=False
+                )
+        else:
+            # برای مهمان آدرس بدون تعلق به کاربر خاص ذخیره می‌شود
+            address.user = None
+            address.save()
 
         # بررسی موجودی و فعال بودن محصولات در سبد خرید
         for item in cart_items:
             product = item.product
-            # استخراج نام محصول با اولویت‌بندی
             product_title = getattr(product, "name", None) or getattr(
                 product, "title", "محصول"
             )
 
             if not product.is_active:
                 messages.error(request, f"محصول '{product_title}' دیگر فعال نیست.")
-                # بازگشت به صفحه چک‌اوت با نمایش خطا
                 return render(
                     request,
                     self.template_name,
                     self.get_context_data(request, cart, address_form),
                 )
 
-            # بررسی موجودی در صورت داشتن فیلد stock
             if hasattr(product, "stock") and product.stock is not None:
                 if product.stock < item.quantity:
                     messages.error(
@@ -359,33 +382,27 @@ class CheckoutView(LoginRequiredMixin, View):
         for item in cart_items:
             subtotal_amount += item.product.price * item.quantity
 
-        # محاسبه هزینه ارسال با استفاده از متد مربوطه
         try:
             shipping_amount = shipping_method.calculate_shipping_cost(subtotal_amount)
-            # اطمینان از اینکه هزینه ارسال عدد است
             if not isinstance(shipping_amount, (int, float, Decimal)):
-                logger.error(
-                    f"Shipping cost calculation returned non-numeric type: {type(shipping_amount)}"
-                )
-                shipping_amount = Decimal("0.00")  # مقدار پیش‌فرض در صورت خطا
+                shipping_amount = Decimal("0.00")
         except Exception as e:
             logger.error(
                 f"Error in calculate_shipping_cost for {shipping_method.id}: {e}"
             )
-            shipping_amount = Decimal("0.00")  # مقدار پیش‌فرض در صورت خطا
+            shipping_amount = Decimal("0.00")
 
         final_amount = subtotal_amount + shipping_amount
 
-        # ایجاد سفارش (Order)
+        # ایجاد سفارش (اختصاص کاربر لاگین شده یا None برای مهمان)
         order = Order.objects.create(
-            user=request.user,
-            cart=cart,  # اتصال سبد خرید به سفارش
-            shipping_method=shipping_method,  # ذخیره روش ارسال انتخاب شده
-            status=Order.Status.PENDING,  # وضعیت اولیه سفارش: در انتظار پرداخت
+            user=request.user if request.user.is_authenticated else None,
+            cart=cart,
+            shipping_method=shipping_method,
+            status=Order.Status.PENDING,
             subtotal_amount=subtotal_amount,
             shipping_amount=shipping_amount,
             final_amount=final_amount,
-            # سایر فیلدهای مورد نیاز Order را اینجا اضافه کنید
         )
 
         # ایجاد اسنپ‌شات از آدرس در زمان ثبت سفارش
@@ -399,27 +416,23 @@ class CheckoutView(LoginRequiredMixin, View):
             address_line=address.address_line,
         )
 
-        # ایجاد آیتم‌های سفارش (OrderItems) با استفاده از bulk_create برای بهینه‌سازی
+        # ایجاد آیتم‌های سفارش (OrderItems) به صورت بهینه
         order_items_to_create = []
         for item in cart_items:
             product = item.product
-            variant = getattr(item, "variant", None)  # دریافت واریانت در صورت وجود
+            variant = getattr(item, "variant", None)
             unit_price = product.price
             product_title = getattr(product, "name", None) or getattr(
                 product, "title", ""
             )
             variant_name = getattr(variant, "name", "") if variant else ""
-            sku = getattr(variant, "sku", None) or getattr(
-                product, "sku", None
-            )  # دریافت SKU
+            sku = getattr(variant, "sku", None) or getattr(product, "sku", None)
 
             order_items_to_create.append(
                 OrderItem(
                     order=order,
                     product_id=product.id,
-                    variant_id=getattr(
-                        item, "variant_id", None
-                    ),  # شناسه واریانت اگر وجود دارد
+                    variant_id=getattr(item, "variant_id", None),
                     product_name=product_title,
                     variant_name=variant_name,
                     sku=sku,
@@ -430,28 +443,33 @@ class CheckoutView(LoginRequiredMixin, View):
             )
         OrderItem.objects.bulk_create(order_items_to_create)
 
-        # حذف سبد خرید پس از ایجاد سفارش موفق
-        cart.items.all().delete()  # حذف آیتم‌های سبد خرید
-        cart.delete()  # حذف خود سبد خرید
+        # مدیریت پاک‌سازی سبد خرید
+        # در صورت موفقیت آمیز بودن ثبت سفارش، سبد خرید مربوط به مهمان را از سشن حذف می‌کنیم
+        if not request.user.is_authenticated and "cart_id" in request.session:
+            del request.session["cart_id"]
 
         # هدایت کاربر به صفحه تایید سفارش
         return redirect(
             reverse(
                 "orders:order_confirmation",
-                kwargs={
-                    "order_number": order.order_number
-                },  # فرض بر وجود فیلد order_number در مدل Order
+                kwargs={"order_number": order.order_number},
             )
         )
 
+
+
     # مدیریت خطاها در سطح کلاس
     def dispatch(self, request, *args, **kwargs):
-        try:
+        # GET برای همه آزاد است تا صفحه checkout و فرم Inline OTP دیده شود
+        if request.method == "GET":
             return super().dispatch(request, *args, **kwargs)
-        except Exception as e:
-            logger.error(f"Unhandled exception in CheckoutView dispatch: {str(e)}")
-            messages.error(
-                request, "خطای سیستمی غیرمنتظره‌ای رخ داد. لطفاً مجدداً تلاش کنید."
+
+        # فقط درخواست‌های حساسِ غیر GET بدون احراز هویت را می‌بندیم
+        if not request.user.is_authenticated:
+            messages.warning(
+                request,
+                "لطفاً برای تکمیل خرید ابتدا شماره موبایل خود را تایید کنید.",
             )
-            # در صورت بروز خطای غیرمنتظره، کاربر را به صفحه سبد خرید هدایت می‌کنیم
-            return redirect("cart:detail")
+            return redirect("cart:checkout")
+
+        return super().dispatch(request, *args, **kwargs)

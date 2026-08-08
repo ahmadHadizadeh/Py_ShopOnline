@@ -11,11 +11,13 @@ from django.utils import timezone
 from django.views.generic import TemplateView, ListView, DetailView
 from orders.models.payment import Payment
 from orders.models.orders import Order
+from cart.models import Cart
 import jdatetime
 
 logger = logging.getLogger(__name__)
 
 
+# orders/views/payment
 class ProcessPaymentView(LoginRequiredMixin, View):
     login_url = "/accounts/login/"
 
@@ -118,35 +120,51 @@ class PaymentCallbackView(View):
 
             # تعیین وضعیت جدید
             is_verified = status == "success"
-            new_status = (
-                Payment.Status.SUCCESS if is_verified else Payment.Status.FAILED
-            )
 
             # تجمیع اطلاعات پاسخ دریافتی بر اساس متد درخواست
             gateway_data = (
                 request.POST.dict() if request.method == "POST" else request.GET.dict()
             )
 
-            # استفاده از تراکنش اتمیک برای تضمین سازگاری تغییرات دیتابیس
             with transaction.atomic():
                 if is_verified:
-                    # تولید کد رهگیری پیش از فراخوانی متد برای انطباق کامل با مدل
                     ref_id = f"REF-{payment.id}-{int(timezone.now().timestamp())}"
-
-                    # متد مدل، مقدار reference_id دریافتی را در فیلد واقعی reference_code ذخیره می‌کند
-                    payment.update_status_and_order(
-                        new_status=new_status,
+                    # فراخوانی متد اصلی برای به‌روزرسانی وضعیت به SUCCESS و کسر موجودی انبار
+                    final_status, _ = payment.update_status_and_order(
+                        new_status=Payment.Status.SUCCESS,
                         reference_id=ref_id,
                         gateway_response=str(gateway_data),
                     )
+
+                    # حذف سبد خرید پس از تأیید نهایی تراکنش
+                    if payment.order.cart_id is not None:
+                        try:
+                            # قفل کردن سبد خرید پیش از فرآیند حذف جهت حفظ اتمیسیته و ممانعت از race conditions
+                            cart = Cart.objects.select_for_update().get(
+                                id=payment.order.cart_id
+                            )
+                            cart.items.all().delete()
+                            cart.delete()
+                            logger.info(
+                                f"Cart {payment.order.cart_id} deleted successfully after payment success."
+                            )
+                        except Cart.DoesNotExist:
+                            logger.warning(
+                                f"Cart with id {payment.order.cart_id} not found during deletion after successful payment. Possibly already deleted."
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Error deleting cart {payment.order.cart_id} after successful payment: {e}"
+                            )
                 else:
-                    payment.update_status_and_order(
-                        new_status=new_status,
+                    # به‌روزرسانی وضعیت پرداخت به FAILED و لغو سفارش در صورت عدم موفقیت تراکنش
+                    final_status, _ = payment.update_status_and_order(
+                        new_status=Payment.Status.FAILED,
                         reference_id=None,
                         gateway_response=str(gateway_data),
                     )
 
-            # هدایت به صفحه نهایی
+            # هدایت به صفحه نهایی بر اساس موفقیت یا شکست تراکنش
             url_name = (
                 "orders:payment_success" if is_verified else "orders:payment_failed"
             )
