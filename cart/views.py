@@ -164,6 +164,7 @@ def move_to_cart(request, item_id):
     messages.success(request, "محصول دوباره به سبد خرید منتقل شد.")
     return redirect("cart:detail")
 
+# cart/views.py/class CheckoutView(View)
 
 class CheckoutView(View):
     template_name = "cart/checkout.html"

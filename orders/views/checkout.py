@@ -1,4 +1,4 @@
-# views.py (فایل مربوط به checkout_view)
+# order/views/checkout.py
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
@@ -27,7 +27,6 @@ def checkout_view(request):
         return redirect(reverse("address_list"))
 
     # --- دریافت روش‌های ارسال فعال ---
-    # فقط روش‌هایی که فعال هستن و هزینه‌شون محاسبه شده
     active_shipping_methods = ShippingMethod.objects.filter(is_active=True)
     shipping_methods_data = []
 
