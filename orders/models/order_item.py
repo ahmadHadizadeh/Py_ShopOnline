@@ -9,6 +9,9 @@ class OrderItem(models.Model):
         "orders.Order",
         on_delete=models.CASCADE,
         related_name="items",
+        related_query_name="order_item",
+        null=False,
+        blank=False,
         verbose_name="سفارش",
     )
     product = models.ForeignKey(

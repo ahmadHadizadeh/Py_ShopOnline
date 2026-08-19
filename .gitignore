@@ -5,7 +5,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyo
-
+*.sh
 
 # Folder -------------------------
 ai_extracted_data/

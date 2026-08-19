@@ -1,63 +1,113 @@
-from decimal import Decimal
+# order/service
+
+
 from django.db import transaction
-from django.shortcuts import get_object_or_404
-from orders.models import Order, OrderItem, OrderAddressSnapshot, Payment
+from django.core.exceptions import ValidationError
+
+from orders.models.orders import Order
+from orders.models.order_item import OrderItem
+from orders.models.order_address_snapshot import OrderAddressSnapshot
+from orders.models.payment import Payment
 from orders.utils import calculate_order_totals
 
 
 class OrderService:
     @staticmethod
     @transaction.atomic
-    def create_order(user, cart, shipping_address, customer_note=""):
-        """
-        ایجاد سفارش اتمیک شامل: Order, OrderItems, Snapshot, Payment
-        """
-        # ۱. محاسبه نهایی
-        totals = calculate_order_totals(cart, shipping_address)
+    def create_order(
+        *,
+        user,
+        cart,
+        shipping_method,
+        shipping_address,
+        customer_note="",
+    ):
+        if not cart:
+            raise ValidationError("سبد خرید معتبر نیست.")
 
-        # ۲. ایجاد سفارش
-        order = Order.objects.create(
-            user=user,
-            order_number=Order.generate_order_number(),
-            status=Order.Status.PENDING,
-            subtotal_amount=Decimal(str(totals["subtotal"])),
-            discount_amount=Decimal(str(totals["discount"])),
-            shipping_amount=Decimal(str(totals["shipping"])),
-            final_amount=Decimal(str(totals["final_amount"])),
-            customer_note=customer_note,
-        )
+        if not shipping_method or not getattr(shipping_method, "is_active", False):
+            raise ValidationError("روش ارسال معتبر نیست.")
 
-        # ۳. ایجاد آیتم‌های سفارش
+        cart_items = list(cart.items.select_related("product", "variant").all())
+
+        if not cart_items:
+            raise ValidationError("سبد خرید شما خالی است.")
+
         order_items = []
-        for item in cart.items.all():
-            unit_price = item.variant.price if item.variant else item.product.price
+        subtotal_amount = 0
+        discount_amount = 0
+
+        for cart_item in cart_items:
+            product = cart_item.product
+
+            if not product.is_active:
+                raise ValidationError(f"محصول «{product.title}» غیرفعال است.")
+
+            variant = getattr(cart_item, "variant", None)
+            if variant is not None:
+                if not getattr(variant, "is_active", True):
+                    raise ValidationError(
+                        f"تنوع انتخابی محصول «{product.title}» غیرفعال است."
+                    )
+                if variant.stock_quantity < cart_item.quantity:
+                    raise ValidationError(
+                        f"موجودی تنوع انتخابی محصول «{product.title}» کافی نیست."
+                    )
+                unit_price = variant.price
+            else:
+                if product.stock_quantity < cart_item.quantity:
+                    raise ValidationError(f"موجودی محصول «{product.title}» کافی نیست.")
+                unit_price = product.price
+
+            line_total = unit_price * cart_item.quantity
+            subtotal_amount += line_total
+
             order_items.append(
                 OrderItem(
-                    order=order,
-                    product_id=item.product.id,
-                    variant_id=item.variant.id if item.variant else None,
-                    product_name=item.product.name,
-                    variant_name=item.variant.name if item.variant else "",
-                    sku=item.variant.sku if item.variant else item.product.sku,
-                    quantity=item.quantity,
-                    unit_price=unit_price,
-                    subtotal_price=Decimal(str(item.quantity)) * unit_price,
+                    product=product,
+                    variant=variant,
+                    quantity=cart_item.quantity,
+                    price=unit_price,
+                    total_price=line_total,
                 )
             )
-        OrderItem.objects.bulk_create(order_items)
 
-        # ۴. ایجاد اسنپ‌شات آدرس
-        OrderAddressSnapshot.objects.create(
-            order=order,
-            recipient_name=shipping_address.recipient_name,
-            recipient_mobile=shipping_address.recipient_mobile,
-            postal_code=shipping_address.postal_code,
-            province=shipping_address.province,
-            city=shipping_address.city,
-            address_line=shipping_address.address_line,
+        shipping_amount = shipping_method.calculate_shipping_cost(subtotal_amount)
+        final_amount = subtotal_amount - discount_amount + shipping_amount
+
+        order = Order.objects.create(
+            user=user,
+            cart=cart,
+            shipping_method=shipping_method,
+            order_number=Order.generate_order_number(),
+            status=Order.OrderStatus.PENDING,
+            subtotal_amount=subtotal_amount,
+            discount_amount=discount_amount,
+            shipping_amount=shipping_amount,
+            final_amount=final_amount,
+            customer_note=customer_note or "",
         )
 
-        # ۵. ایجاد رکورد پرداخت اولیه
+        for item in order_items:
+            item.order = order
+
+        OrderItem.objects.bulk_create(order_items)
+
+        OrderAddressSnapshot.objects.create(
+            order=order,
+            full_name=getattr(shipping_address, "full_name", ""),
+            phone_number=getattr(
+                shipping_address,
+                "phone_number",
+                getattr(shipping_address, "recipient_mobile", ""),
+            ),
+            province=getattr(shipping_address, "province", ""),
+            city=getattr(shipping_address, "city", ""),
+            address_line=getattr(shipping_address, "address_line", ""),
+            postal_code=getattr(shipping_address, "postal_code", ""),
+            note=getattr(shipping_address, "note", ""),
+        )
+
         Payment.objects.create(
             order=order,
             user=user,
@@ -66,7 +116,6 @@ class OrderService:
             gateway_name="default_gateway",
         )
 
-        # ۶. تخلیه سبد خرید (بعد از اطمینان از صحت تمامی عملیات)
         cart.items.all().delete()
 
         return order

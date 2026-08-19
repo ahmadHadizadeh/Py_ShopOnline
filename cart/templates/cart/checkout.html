@@ -1,6 +1,6 @@
 {% extends 'catalog/base.html' %}
 {% load static %}
-{% load humanize %} 
+{% load humanize %}
 
 {% block title %}تکمیل اطلاعات سفارش | هوش برتر{% endblock %}
 
@@ -9,69 +9,62 @@
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
 <style>
-  /* استایل‌های موجود شما */
   .address-card.active-address {
-    border-color: #4f46e5 !important; /* Indigo-600 */
-    background-color: #f5f3ff !important; /* Indigo-50 */
+    border-color: #4f46e5 !important;
+    background-color: #f5f3ff !important;
     box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.1);
   }
 
   .shipping-method-card {
-    border: 2px solid #e5e7eb; /* Gray-200 */
+    border: 2px solid #e5e7eb;
     transition: all 0.3s ease;
     cursor: pointer;
-    border-radius: 1rem; /* 16px */
-    padding: 1rem; /* 16px */
+    border-radius: 1rem;
+    padding: 1rem;
     background-color: white;
-    min-height: 120px; /* حداقل ارتفاع برای یکسان سازی ظاهری */
+    min-height: 120px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
   }
   .shipping-method-card:hover {
-    border-color: #a5b4fc; /* Indigo-300 */
+    border-color: #a5b4fc;
     box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -2px rgba(79, 70, 229, 0.1);
   }
   .shipping-method-card.active-shipping {
-    border-color: #4f46e5 !important; /* Indigo-600 */
-    background-color: #f5f3ff !important; /* Indigo-50 */
+    border-color: #4f46e5 !important;
+    background-color: #f5f3ff !important;
     box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.1);
   }
   .shipping-method-card h4 {
-    font-weight: 700; /* Semibold */
-    color: #1f2937; /* Gray-800 */
-    margin-bottom: 0.75rem; /* 12px */
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 0.75rem;
   }
   .shipping-method-card p {
-    font-size: 0.75rem; /* 12px */
-    color: #6b7280; /* Gray-500 */
-    font-weight: 600; /* Semibold */
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-weight: 600;
     line-height: 1.5;
   }
   .shipping-method-card .price {
-    font-weight: 900; /* Black */
-    color: #4f46e5; /* Indigo-600 */
+    font-weight: 900;
+    color: #4f46e5;
   }
   .shipping-method-card .currency {
-    font-size: 0.75rem; /* 12px */
-    color: #9ca3af; /* Gray-400 */
+    font-size: 0.75rem;
+    color: #9ca3af;
     margin-right: 0.25rem;
   }
-  /* استایل برای نمایش اعداد فارسی */
   .num-latin {
       font-family: 'IRANSans', sans-serif;
   }
 
-  /* ==========================================
-     اصلاح استایل‌های Select2 برای هماهنگی با Tailwind
-     ========================================== */
-  
-  /* کانتینر اصلی و ارتفاع انتخابی */
   .select2-container--default .select2-selection--single {
-    background-color: #f9fafb !important; /* bg-gray-50 */
-    border: 1px solid #e5e7eb !important; /* border-gray-200 */
-    border-radius: 0.75rem !important; /* rounded-xl (12px) */
-    height: 52px !important; /* هماهنگ با پدینگ py-3.5 در بقیه فیلدها */
+    background-color: #f9fafb !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 0.75rem !important;
+    height: 52px !important;
     display: flex;
     align-items: center;
     transition: all 0.3s ease;
@@ -79,33 +72,29 @@
     padding-right: 1rem;
   }
 
-  /* استایل متن انتخاب شده در Select2 */
   .select2-container--default .select2-selection--single .select2-selection__rendered {
-    color: #1f2937 !important; /* text-gray-800 */
+    color: #1f2937 !important;
     font-weight: 600 !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
-    font-family: inherit; /* ارث‌بری از فونت بدنه اصلی */
+    font-family: inherit;
     width: 100%;
     text-align: right;
   }
 
-  /* تنظیم جایگاه فلش بازشوی Select2 */
   .select2-container--default .select2-selection--single .select2-selection__arrow {
     height: 50px !important;
-    left: 10px !important; /* جابجایی به چپ در حالت RTL */
+    left: 10px !important;
     right: auto !important;
   }
 
-  /* افکت Focus روی المان Select2 */
   .select2-container--default.select2-container--focus .select2-selection--single {
-    background-color: #ffffff !important; /* focus:bg-white */
-    border-color: #6366f1 !important; /* focus:border-indigo-500 */
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important; /* focus:ring-4 focus:ring-indigo-500/10 */
+    background-color: #ffffff !important;
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1) !important;
     outline: none !important;
   }
 
-  /* استایل‌دهی به باکس بازشوی گزینه‌ها (Dropdown) */
   .select2-dropdown {
     border-color: #e5e7eb !important;
     border-radius: 0.75rem !important;
@@ -114,7 +103,7 @@
   }
 
   .select2-container--default .select2-results__option--highlighted[aria-selected] {
-    background-color: #4f46e5 !important; /* Indigo-600 */
+    background-color: #4f46e5 !important;
     color: white !important;
   }
 
@@ -123,22 +112,14 @@
     font-weight: 600;
   }
 
-  /* غیرفعال بودن فیلد شهر پیش از انتخاب استان */
   .select2-container--default.select2-container--disabled .select2-selection--single {
-    background-color: #f3f4f6 !important; /* bg-gray-100 */
+    background-color: #f3f4f6 !important;
     cursor: not-allowed;
     opacity: 0.7;
   }
 </style>
 
-
-
 <style>
-/* =========================================================
-   TIMELINE CHECKOUT STEPS - SCOPED STYLES
-   ========================================================= */
-
-/* کانتینر اصلی - محور مبنا برای position: relative */
 #checkout-steps {
   position: relative !important;
   z-index: 1;
@@ -146,11 +127,10 @@
   padding-bottom: 1.5rem !important;
 }
 
-/* نوار گرادیانی افقی پیوسته پشت آیکون‌ها */
 #checkout-steps::before {
   content: '';
   position: absolute;
-  top: 48px; /* تنظیم مرکز عمودی دقیقاً روی دایره آیکون‌ها */
+  top: 48px;
   right: 15%;
   left: 12%;
   height: 8px;
@@ -160,25 +140,23 @@
   pointer-events: none;
 }
 
-/* فلش جهت‌دار انتهای نوار (سمت چپ در چیدمان RTL) */
 #checkout-steps::after {
   content: '';
   position: absolute;
-  top: 44px; /* هم‌ترازی عمودی با نوار */
+  top: 44px;
   left: 9%;
   width: 0;
   height: 0;
   border-top: 8px solid transparent;
   border-bottom: 8px solid transparent;
-  border-right: 14px solid #dc2626; /* نوک فلش قرمز به سمت چپ */
+  border-right: 14px solid #dc2626;
   z-index: 0;
   pointer-events: none;
 }
 
-/* هر آیتم مرحله */
 #checkout-steps .step {
   position: relative;
-  z-index: 2; /* قرارگیری بالای نوار گرادیانی */
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -191,7 +169,6 @@
   transform: translateY(-2px);
 }
 
-/* دایره آیکون اصلی */
 #checkout-steps .icon-container {
   position: relative;
   width: 64px;
@@ -206,13 +183,11 @@
   margin-bottom: 0.75rem;
 }
 
-/* فونت آیکون داخل دایره */
 #checkout-steps .icon-container i {
   font-size: 1.65rem;
   transition: transform 0.3s ease;
 }
 
-/* نشانگر دایره‌ای کوچک شماره مرحله */
 #checkout-steps .step-num {
   position: absolute;
   bottom: -6px;
@@ -231,7 +206,6 @@
   z-index: 3;
 }
 
-/* عنوان مرحله */
 #checkout-steps .step-title {
   font-size: 0.875rem;
   font-weight: 600;
@@ -239,28 +213,18 @@
   transition: color 0.3s ease, font-weight 0.3s ease;
 }
 
-/* ---------------------------------------------------------
- پالت رنگی اختصاصی مراحل
- --------------------------------------------------------- */
-
-/* مرحله ۱: آدرس‌ها (کرمی گرم / قهوه‌ای سوخته) */
 #checkout-steps .step-1-bg { background-color: #f5eeda; }
 #checkout-steps .step-1-icon { color: #a0522d; }
 #checkout-steps .step-1-num { background-color: #a0522d; color: #ffffff; }
 
-/* مرحله ۲: ارسال (خاکستری روشن گرم / سبز زیتونی) */
 #checkout-steps .step-2-bg { background-color: #e8e5e0; }
 #checkout-steps .step-2-icon { color: #556b2f; }
 #checkout-steps .step-2-num { background-color: #556b2f; color: #ffffff; }
 
-/* مرحله ۳: پرداخت (طلایی مات / زرشکی تیره) */
 #checkout-steps .step-3-bg { background-color: #f0e6d6; }
 #checkout-steps .step-3-icon { color: #8b0000; }
 #checkout-steps .step-3-num { background-color: #8b0000; color: #ffffff; }
 
-/* ---------------------------------------------------------
- حالت فعال (Active State)
- --------------------------------------------------------- */
 #checkout-steps .step.active .icon-container {
   transform: scale(1.15);
   border-color: #ffffff;
@@ -276,7 +240,6 @@
   font-weight: 700;
 }
 
-/* responsive افقی بدون شکستن ردیف */
 @media (max-width: 640px) {
   #checkout-steps {
       padding-top: 1.25rem !important;
@@ -312,17 +275,11 @@
       font-size: 0.75rem;
   }
 }
-
-
 </style>
-
 
 {% endblock %}
 
-
 {% block content %}
-
-
 
 <nav class="flex flex-wrap text-sm text-gray-500 mb-8 gap-2 items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
   <a href="{% url 'catalog:product_list' %}" class="hover:text-indigo-600 transition">
@@ -331,27 +288,20 @@
 
   <i class="fa-solid fa-chevron-left text-[13px] text-gray-400"></i>
 
-    <a href="{% url 'cart:detail' %}" class="hover:text-indigo-600 transition"> {# لینک درست سبد خرید #}
-      سبد خرید
-    </a>
+  <a href="{% url 'cart:detail' %}" class="hover:text-indigo-600 transition">
+    سبد خرید
+  </a>
 
   <i class="fa-solid fa-chevron-left text-[10px] text-gray-400"></i>
-
-
 
   <span class="text-gray-800 font-bold">
       تکمیل اطلاعات تحویل
   </span>
 </nav>
 
-
-
-
 <div class="min-h-screen py-4 md:py-12 px-2 md:px-4 bg-gray-50/30" dir="rtl">
 
   <div id="checkout-steps" class="mb-8 flex justify-around items-center p-4 bg-white rounded-xl border border-gray-100 shadow-sm" dir="rtl">
-    
-    <!-- مرحله ۱: آدرس‌ها -->
     <div class="step w-1/3 text-center cursor-pointer active" data-step="1">
         <div class="icon-container step-1-bg">
             <i class="fa-solid fa-map-location-dot step-1-icon"></i>
@@ -360,7 +310,6 @@
         <span class="step-title">آدرس‌ها</span>
     </div>
 
-    <!-- مرحله ۲: ارسال -->
     <div class="step w-1/3 text-center cursor-pointer" data-step="2">
         <div class="icon-container step-2-bg">
             <i class="fa-solid fa-truck-fast step-2-icon"></i>
@@ -369,22 +318,18 @@
         <span class="step-title">ارسال</span>
     </div>
 
-    <!-- مرحله ۳: پرداخت -->
-    <div  class="step w-1/3 text-center cursor-pointer" data-step="3">
+    <div class="step w-1/3 text-center cursor-pointer" data-step="3">
         <div class="icon-container step-3-bg">
             <i class="fa-solid fa-credit-card step-3-icon"></i>
             <span class="step-num step-3-num">۳</span>
         </div>
         <span class="step-title">پرداخت</span>
     </div>
-
-</div>
-
+  </div>
 
   <div class="max-w-5xl mx-auto flex flex-col-reverse lg:grid lg:grid-cols-3 gap-6 lg:gap-8">
 
     <div class="lg:col-span-2 space-y-6">
-      <!-- هدر صفحه -->
       <div class="flex items-center gap-3 md:gap-4 mb-6">
         <div class="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
           <i class="fa-solid fa-truck-fast text-white text-2xl"></i>
@@ -395,9 +340,8 @@
         </div>
       </div>
 
-      <!-- نمایش آدرس های ذخیره شده -->
       {% if user_addresses %}
-      <div  id="address-section"  class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
+      <div id="address-section" class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
         <label class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
           <i class="fa-solid fa-map-location-dot text-indigo-600"></i>
           انتخاب از آدرس‌های ذخیره شده
@@ -443,111 +387,110 @@
       </div>
       {% endif %}
 
-      <!-- فرم اصلی چک‌اوت -->
       <form method="post" id="checkoutForm" novalidate class="space-y-6">
         {% csrf_token %}
-        {# این فیلد برای نگهداری ID آدرس انتخاب شده از لیست آدرس های ذخیره شده است #}
-        <input type="hidden" name="address_id" id="selected_address_id" value="{% if form.instance.pk %}{{ form.instance.pk }}{% endif %}">
+        <input type="hidden" name="address_id" id="selected_address_id" value="{% if shipping_address %}{{ shipping_address.id }}{% endif %}">
 
-         <!-- بخش فرم آدرس -->
-<div    class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
-  <label class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
-    <i class="fa-solid fa-location-dot text-indigo-600"></i>
-    ویرایش یا ثبت آدرس تحویل
-  </label>
+        <div class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+          <label class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-location-dot text-indigo-600"></i>
+            ویرایش یا ثبت آدرس تحویل
+          </label>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    {# فیلدهای فرم آدرس #}
-    {% for field in form %}
-      {# فیلدهای استان و شهر را جداگانه مدیریت می‌کنیم #}
-      {% if field.name == 'province' %}
-      <div class="form-field-wrapper">
-        <label for="{{ field.auto_id }}" class="block text-sm font-black text-gray-600 mb-2">
-          {{ field.label }}
-          {% if field.field.required %} <span class="text-red-500">*</span> {% endif %}
-        </label>
-        {{ field }} {# این همان select استان است که کلاس‌هایش در forms.py تعریف شده #}
-        {% if field.errors %}
-        <div class="text-red-500 text-[10px] mt-1.5 font-bold flex items-center gap-1">
-          <i class="fa-solid fa-circle-exclamation"></i>
-          {{ field.errors|striptags }}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for field in form %}
+              {% if field.name == 'province' %}
+              <div class="form-field-wrapper">
+                <label for="{{ field.auto_id }}" class="block text-sm font-black text-gray-600 mb-2">
+                  {{ field.label }}
+                  {% if field.field.required %} <span class="text-red-500">*</span> {% endif %}
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                <div class="text-red-500 text-[10px] mt-1.5 font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-circle-exclamation"></i>
+                  {{ field.errors|striptags }}
+                </div>
+                {% endif %}
+              </div>
+              {% elif field.name == 'city' %}
+              <div class="form-field-wrapper">
+                <label for="{{ field.auto_id }}" class="block text-sm font-black text-gray-600 mb-2">
+                  {{ field.label }}
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                <div class="text-red-500 text-[10px] mt-1.5 font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-circle-exclamation"></i>
+                  {{ field.errors|striptags }}
+                </div>
+                {% endif %}
+              </div>
+              {% elif field.name != 'is_default' %}
+              <div class="form-field-wrapper">
+                <label for="{{ field.auto_id }}" class="block text-sm font-black text-gray-600 mb-2">
+                  {{ field.label }}
+                  {% if field.field.required %} <span class="text-red-500">*</span> {% endif %}
+                </label>
+                {{ field }}
+                {% if field.errors %}
+                <div class="text-red-500 text-[10px] mt-1.5 font-bold flex items-center gap-1">
+                  <i class="fa-solid fa-circle-exclamation"></i>
+                  {{ field.errors|striptags }}
+                </div>
+                {% endif %}
+              </div>
+              {% endif %}
+            {% endfor %}
+          </div>
         </div>
-        {% endif %}
-      </div>
-      {% elif field.name == 'city' %}
-      <div class="form-field-wrapper">
-        <label for="{{ field.auto_id }}" class="block text-sm font-black text-gray-600 mb-2">
-          {{ field.label }}
-          {# شهر اجباری نیست اما اگر استان انتخاب شود و شهر خالی بماند خطا دارد #}
-        </label>
-        {{ field }} {# این همان select شهر است که کلاس‌هایش در forms.py تعریف شده #}
-        {% if field.errors %}
-        <div class="text-red-500 text-[10px] mt-1.5 font-bold flex items-center gap-1">
-          <i class="fa-solid fa-circle-exclamation"></i>
-          {{ field.errors|striptags }}
-        </div>
-        {% endif %}
-      </div>
-      {# فیلد is_default را جداگانه مدیریت می‌کنیم #}
-      {% elif field.name != 'is_default' %}
-      <div class="form-field-wrapper">
-        <label for="{{ field.auto_id }}" class="block text-sm font-black text-gray-600 mb-2">
-          {{ field.label }}
-          {% if field.field.required %} <span class="text-red-500">*</span> {% endif %}
-        </label>
-        {{ field }}
-        {% if field.errors %}
-        <div class="text-red-500 text-[10px] mt-1.5 font-bold flex items-center gap-1">
-          <i class="fa-solid fa-circle-exclamation"></i>
-          {{ field.errors|striptags }}
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-    {% endfor %}
-  </div>
-</div>
 
+        <div class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+          <label for="id_customer_note" class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-note-sticky text-indigo-600"></i>
+            توضیحات سفارش
+          </label>
+          <textarea
+            name="customer_note"
+            id="id_customer_note"
+            rows="4"
+            class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-gray-700 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-500/10"
+            placeholder="اگر توضیحی برای سفارش دارید، اینجا بنویسید...">{{ customer_note }}</textarea>
+        </div>
 
-        <!-- بخش انتخاب روش ارسال -->
-        <div    id="shipping-section"    class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div id="shipping-section" class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
           <label class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
             <i class="fa-solid fa-boxes-stacked text-indigo-600"></i>
             انتخاب روش ارسال
           </label>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {# از shipping_methods_data که در ویو ارسال شده استفاده میکنیم #}
             {% if shipping_methods_data %}
               {% for item in shipping_methods_data %}
               <div
-                class="shipping-method-card"
+                class="shipping-method-card{% if item.selected %} active-shipping border-indigo-600 bg-indigo-50/30{% endif %}"
                 onclick="selectShippingMethod(this)"
                 data-id="{{ item.method.id }}"
-                data-cost="{{ item.cost }}" {# هزینه خام برای جاوااسکریپت #}
+                data-cost="{{ item.cost }}"
               >
                 <h4 class="text-lg font-bold">{{ item.method.name }}</h4>
                 <p>
                   هزینه ارسال:
-                  {# نمایش هزینه محاسبه شده و فرمت شده #}
                   <span class="price num-latin">{{ item.formatted_cost }}</span>
                   <span class="currency">تومان</span>
                 </p>
-                {# اگر توضیحات دیگری دارد، اینجا اضافه کن #}
               </div>
               {% endfor %}
             {% else %}
               <p class="col-span-2 text-center text-gray-500 font-semibold py-4">روش ارسال در حال حاضر در دسترس نیست.</p>
             {% endif %}
           </div>
-           {# این hidden input برای ارسال id روش ارسال انتخاب شده است #}
-          <input type="hidden" name="shipping_method_id" id="selected_shipping_method_id" value="">
+
+          <input type="hidden" name="shipping_method_id" id="selected_shipping_method_id" value="{{ selected_shipping_method_id|default_if_none:'' }}">
         </div>
 
-        <!-- چک باکس ذخیره آدرس -->
         <div class="bg-white border border-gray-100 rounded-2xl p-4 md:p-5 flex items-center justify-between transition-all hover:border-indigo-200">
           <label for="id_is_default" class="flex items-center gap-3 cursor-pointer w-full group">
-            {# نام فیلد باید دقیقا مطابق با نام در فرم باشد #}
             <input
               type="checkbox"
               name="is_default"
@@ -561,19 +504,14 @@
           </label>
         </div>
 
+        <button id="payment-section" type="submit" class="group w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-[1.5rem] shadow-xl transition-all flex items-center justify-center gap-3 transform hover:-translate-y-0.5">
+          <span class="text-lg">تایید و ادامه فرایند خرید</span>
+          <i class="fa-solid fa-arrow-left-long group-hover:-translate-x-2 transition-transform"></i>
+        </button>
 
-            <!-- دکمه نهایی -->
-    <button id="payment-section" type="submit" class="group w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-5 rounded-[1.5rem] shadow-xl transition-all flex items-center justify-center gap-3 transform hover:-translate-y-0.5">
-      <span class="text-lg">تایید و ادامه فرایند خرید</span>
-      <i class="fa-solid fa-arrow-left-long group-hover:-translate-x-2 transition-transform"></i>
-    </button>
-
-        
-          
       </form>
     </div>
 
-    <!-- بخش خلاصه سفارش -->
     <div class="lg:col-span-1">
       <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 lg:sticky lg:top-24">
         <h2 class="text-xl font-black text-gray-800 mb-5 flex items-center gap-2">
@@ -602,7 +540,6 @@
                     تعداد: <span class="num-latin font-black text-gray-700">{{ item.quantity }}</span>
                   </span>
                   <p class="text-indigo-600 font-black text-sm">
-                    {# استفاده از humanize برای فرمت دهی قیمت #}
                     <span class="num-latin">{{ item.product.price|floatformat:0|intcomma }}</span>
                     <span class="text-[9px] text-gray-400 mr-0.5">تومان</span>
                   </p>
@@ -618,13 +555,10 @@
           {% endif %}
         </div>
 
-        {# محاسبه و نمایش مبالغ نهایی #}
         <div class="mt-6 pt-5 border-t border-dashed border-gray-200">
           <div class="flex justify-between items-center text-gray-800">
             <span class="font-bold text-base">مبلغ کل سبد خرید:</span>
             <div class="text-left">
-              {# نمایش مبلغ کل سبد خرید با فرمت دهی #}
-              {# اگر بخواهیم این مقدار توسط جاوااسکریپت هم آپدیت شود، بهتر است این مقدار در یک span با id مشخص قرار گیرد #}
               <span class="num-latin text-xl font-black text-gray-700" id="cart-subtotal">
                 {{ cart.total_price|floatformat:0|intcomma }}
               </span>
@@ -634,7 +568,6 @@
           <div class="flex justify-between items-center text-gray-800 mt-3">
             <span class="font-bold text-base">هزینه ارسال:</span>
             <div class="text-left">
-              {# نمایش هزینه ارسال که از جاوااسکریپت آپدیت می‌شود #}
               <span class="num-latin text-xl font-black text-indigo-600" id="shipping-cost-display">0</span>
               <span class="text-[10px] font-bold text-gray-500 mr-0.5">تومان</span>
             </div>
@@ -642,7 +575,6 @@
           <div class="flex justify-between items-center text-gray-800 mt-3 font-bold text-lg border-t border-gray-300 pt-4">
             <span class="text-gray-800">قابل پرداخت:</span>
             <div class="text-left">
-              {# نمایش مبلغ نهایی قابل پرداخت #}
               <span class="num-latin text-2xl font-black text-indigo-600" id="final-total-display">{{ cart.total_price|floatformat:0|intcomma }}</span>
               <span class="text-[10px] font-bold text-gray-500 mr-0.5">تومان</span>
             </div>
@@ -654,8 +586,6 @@
   </div>
 </div>
 {% endblock %}
-
-
 
 {% block extra_js %}
 {{ province_cities|json_script:"province-cities-data" }}
@@ -741,8 +671,7 @@
     };
 
     Object.keys(fieldMap).forEach(function(name) {
-      const field = document.querySelector(`[name="${name}"]`);
-
+      const field = document.querySelector('[name="' + name + '"]');
       if (field) {
         field.value = fieldMap[name];
       }
@@ -754,19 +683,6 @@
 
     setSelectValue($provinceSelect, province);
     updateCityOptions(province, city);
-  }
-
-  function isElementInViewport(el) {
-    if (!el) return false;
-
-    const rect = el.getBoundingClientRect();
-
-    return (
-      rect.top >= 0 &&
-      rect.left >= 0 &&
-      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-      rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-    );
   }
 
   function selectShippingMethod(element) {
@@ -781,9 +697,7 @@
     const methodId = element.dataset.id;
     const shippingCost = element.dataset.cost;
 
-    const shippingMethodIdInput = document.getElementById(
-      'selected_shipping_method_id'
-    );
+    const shippingMethodIdInput = document.getElementById('selected_shipping_method_id');
 
     if (shippingMethodIdInput) {
       shippingMethodIdInput.value = methodId;
@@ -837,21 +751,28 @@
       selectSavedAddress(defaultAddressCard);
     }
 
-    updateOrderTotals(0);
+    const existingAddressId = document.getElementById('selected_address_id');
+    if (existingAddressId && !existingAddressId.value && defaultAddressCard) {
+      existingAddressId.value = defaultAddressCard.dataset.id || '';
+    }
+
+    const preSelectedShipping = document.querySelector('.shipping-method-card.active-shipping');
+    if (preSelectedShipping) {
+      const methodId = preSelectedShipping.dataset.id;
+      const shippingCost = preSelectedShipping.dataset.cost || 0;
+      const shippingMethodIdInput = document.getElementById('selected_shipping_method_id');
+      if (shippingMethodIdInput && !shippingMethodIdInput.value) {
+        shippingMethodIdInput.value = methodId;
+      }
+      updateOrderTotals(shippingCost);
+    } else {
+      updateOrderTotals(0);
+    }
   });
 </script>
 
-
-
-
-
-
-
-
-
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    // تابع اسکرول نرم به بخش مربوطه
     function scrollToSection(sectionId) {
         const el = document.getElementById(sectionId);
         if (el) {
@@ -859,10 +780,8 @@
         }
     }
 
-    // انتخاب تمام گام‌ها براساس شناسه و کلاس موجود
     const stepElements = document.querySelectorAll('#checkout-steps .step');
 
-    // به‌روزرسانی استایل مرحله فعال
     function updateActiveStep(stepNum) {
         stepElements.forEach(step => {
             const currentStep = step.getAttribute('data-step');
@@ -874,7 +793,6 @@
         });
     }
 
-    // اکشن کلیک روی هر مرحله
     stepElements.forEach(step => {
         step.addEventListener('click', function () {
             const stepNum = this.getAttribute('data-step');
@@ -891,28 +809,10 @@
         });
     });
 
-    // تنظیم حالت اولیه روی مرحله ۱
     updateActiveStep('1');
-});
-
-
-
+  });
 </script>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 {% endblock %}
+
+
