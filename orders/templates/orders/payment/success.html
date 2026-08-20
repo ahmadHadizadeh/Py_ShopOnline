@@ -55,7 +55,7 @@
             <a href="/" class="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition duration-200 text-center">
                 بازگشت به فروشگاه
             </a>
-            <a href="{% url 'orders:order_detail' order.id %}" class="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl text-sm transition duration-200 text-center shadow-md shadow-emerald-600/10">
+            <a href="{% url 'orders:order_detail' order.order_number %}" class="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl text-sm transition duration-200 text-center shadow-md shadow-emerald-600/10">
                 پیگیری سفارش
             </a>
         </div>

@@ -17,7 +17,6 @@ import jdatetime
 logger = logging.getLogger(__name__)
 
 
-# orders/views/payment
 class ProcessPaymentView(LoginRequiredMixin, View):
     login_url = "/accounts/login/"
 
@@ -32,154 +31,160 @@ class ProcessPaymentView(LoginRequiredMixin, View):
         return self._start_payment(request, order_number)
 
     def _start_payment(self, request, order_number):
-        try:
-            order = get_object_or_404(
-                Order,
-                order_number=order_number,
+        order = get_object_or_404(
+            Order,
+            order_number=order_number,
+            user=request.user,
+            status=Order.Status.PENDING,
+        )
+
+        payment = (
+            Payment.objects.filter(
+                order=order,
+                status=Payment.Status.PENDING,
+            )
+            .order_by("-created")
+            .first()
+        )
+
+        if payment is None:
+            payment = Payment.objects.create(
+                order=order,
                 user=request.user,
-                status=Order.Status.PENDING,
+                amount=order.final_amount,
+                status=Payment.Status.PENDING,
+                gateway_name="mock_gateway",
             )
 
-            payment = (
-                Payment.objects.filter(order=order, status=Payment.Status.PENDING)
-                .order_by("-created")
-                .first()
-            )
+        gateway_transaction_id = f"TRX-{payment.id}-{int(timezone.now().timestamp())}"
+        payment.transaction_code = gateway_transaction_id
+        payment.save(update_fields=["transaction_code"])
 
-            if payment is None:
-                payment = Payment.objects.create(
-                    order=order,
-                    user=request.user,
-                    amount=order.final_amount,
-                    status=Payment.Status.PENDING,
-                    gateway_name="mock_gateway",
-                )
+        payment_gateway_url = reverse("orders:mock_payment_gateway")
+        redirect_url = (
+            f"{payment_gateway_url}"
+            f"?trxid={gateway_transaction_id}"
+            f"&order={order.order_number}"
+            f"&amount={payment.amount}"
+        )
 
-            gateway_transaction_id = (
-                f"TRX-{payment.id}-{int(timezone.now().timestamp())}"
-            )
-            payment.transaction_code = gateway_transaction_id
-            payment.save(update_fields=["transaction_code"])
-
-            payment_gateway_url = reverse("orders:mock_payment_gateway")
-            redirect_url = (
-                f"{payment_gateway_url}"
-                f"?trxid={gateway_transaction_id}"
-                f"&order={order.order_number}"
-                f"&amount={payment.amount}"
-            )
-            return redirect(redirect_url)
-
-        except Exception:
-            logger.exception(
-                "Unexpected error in ProcessPaymentView for order %s", order_number
-            )
-            request.session["checkout_error"] = (
-                "خطای سیستمی در شروع فرآیند پرداخت رخ داد."
-            )
-            return redirect("cart:detail")
+        return redirect(redirect_url)
 
 
-class PaymentCallbackView(View):
-    def post(self, request):
-        # هندل کردن درخواست POST از درگاه پرداخت
+class PaymentCallbackView(LoginRequiredMixin, TemplateView):
+    login_url = "/accounts/login/"
+
+    @transaction.atomic
+    def dispatch(self, request, *args, **kwargs):
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
         return self.handle_callback(request)
 
-    def get(self, request):
-        # هندل کردن درخواست GET (در صورت فراخوانی مستقیم یا برای تست)
+    def post(self, request, *args, **kwargs):
         return self.handle_callback(request)
 
     def handle_callback(self, request):
-        # بررسی داده‌ها در هر دو حالت POST و GET جهت سازگاری کامل با قالب و درگاه
         trxid = request.POST.get("trxid") or request.GET.get("trxid")
         status = request.POST.get("status") or request.GET.get("status")
 
-        # اعتبارسنجی اولیه trxid
         if not trxid:
-            logger.error("Payment callback received without trxid.")
-            return HttpResponseBadRequest("خطا: شناسه تراکنش نامعتبر است.")
+            return HttpResponseBadRequest("شناسه تراکنش نامعتبر است.")
 
         try:
-            # بازیابی Payment با بهینه‌سازی کوئری
-            payment = Payment.objects.select_related("order").get(
-                transaction_code=trxid
-            )
-
-            # Idempotency check: جلوگیری از پردازش مجدد تراکنش‌های نهایی شده
-            if payment.status in [Payment.Status.SUCCESS, Payment.Status.FAILED]:
-                url_name = (
-                    "orders:payment_success"
-                    if payment.status == Payment.Status.SUCCESS
-                    else "orders:payment_failed"
-                )
-                return redirect(
-                    reverse(
-                        url_name, kwargs={"order_number": payment.order.order_number}
-                    )
-                )
-
-            # تعیین وضعیت جدید
-            is_verified = status == "success"
-
-            # تجمیع اطلاعات پاسخ دریافتی بر اساس متد درخواست
-            gateway_data = (
-                request.POST.dict() if request.method == "POST" else request.GET.dict()
-            )
-
             with transaction.atomic():
-                if is_verified:
-                    ref_id = f"REF-{payment.id}-{int(timezone.now().timestamp())}"
-                    # فراخوانی متد اصلی برای به‌روزرسانی وضعیت به SUCCESS و کسر موجودی انبار
-                    final_status, _ = payment.update_status_and_order(
-                        new_status=Payment.Status.SUCCESS,
-                        reference_id=ref_id,
-                        gateway_response=str(gateway_data),
+                payment = (
+                    Payment.objects.select_related("order")
+                    .select_for_update()
+                    .get(transaction_code=trxid)
+                )
+                order = Order.objects.select_for_update().get(pk=payment.order_id)
+
+                if payment.status == Payment.Status.SUCCESS:
+                    return redirect(
+                        reverse(
+                            "orders:payment_success",
+                            kwargs={"order_number": order.order_number},
+                        )
                     )
 
-                    # حذف سبد خرید پس از تأیید نهایی تراکنش
-                    if payment.order.cart_id is not None:
+                if payment.status == Payment.Status.FAILED:
+                    return redirect(
+                        reverse(
+                            "orders:payment_failed",
+                            kwargs={"order_number": order.order_number},
+                        )
+                    )
+
+                is_success = status == "success"
+                gateway_response = {
+                    "trxid": trxid,
+                    "status": status,
+                    **request.POST.dict(),
+                    **request.GET.dict(),
+                }
+
+                if is_success:
+                    ref_id = (
+                        f"REF-{payment.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                    )
+                    payment.update_status_and_order(
+                        new_status=Payment.Status.SUCCESS,
+                        transaction_id=trxid,
+                        reference_id=ref_id,
+                        gateway_response=str(gateway_response),
+                    )
+
+                    if order.cart_id:
                         try:
-                            # قفل کردن سبد خرید پیش از فرآیند حذف جهت حفظ اتمیسیته و ممانعت از race conditions
                             cart = Cart.objects.select_for_update().get(
-                                id=payment.order.cart_id
+                                pk=order.cart_id
                             )
                             cart.items.all().delete()
                             cart.delete()
-                            logger.info(
-                                f"Cart {payment.order.cart_id} deleted successfully after payment success."
-                            )
                         except Cart.DoesNotExist:
-                            logger.warning(
-                                f"Cart with id {payment.order.cart_id} not found during deletion after successful payment. Possibly already deleted."
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Error deleting cart {payment.order.cart_id} after successful payment: {e}"
-                            )
+                            pass
                 else:
-                    # به‌روزرسانی وضعیت پرداخت به FAILED و لغو سفارش در صورت عدم موفقیت تراکنش
-                    final_status, _ = payment.update_status_and_order(
+                    payment.update_status_and_order(
                         new_status=Payment.Status.FAILED,
+                        transaction_id=trxid,
                         reference_id=None,
-                        gateway_response=str(gateway_data),
+                        gateway_response=str(gateway_response),
                     )
 
-            # هدایت به صفحه نهایی بر اساس موفقیت یا شکست تراکنش
-            url_name = (
-                "orders:payment_success" if is_verified else "orders:payment_failed"
-            )
             return redirect(
-                reverse(url_name, kwargs={"order_number": payment.order.order_number})
+                reverse(
+                    "orders:payment_success" if is_success else "orders:payment_failed",
+                    kwargs={"order_number": order.order_number},
+                )
             )
 
         except Payment.DoesNotExist:
-            logger.error(f"Payment with transaction code {trxid} not found.")
-            return HttpResponseBadRequest("خطا: تراکنش یافت نشد.")
-        except Exception as e:
-            logger.exception(
-                f"System error during payment callback processing for trxid {trxid}: {e}"
-            )
-            return HttpResponseBadRequest("خطای سیستمی در پردازش پرداخت.")
+            return HttpResponseBadRequest("تراکنش پیدا نشد.")
+
+
+class PaymentFailedView(LoginRequiredMixin, TemplateView):
+    template_name = "orders/payment/failed.html"
+    login_url = "/accounts/login/"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        order_number = self.kwargs.get("order_number")
+
+        order = get_object_or_404(
+            Order.objects.select_related("user"),
+            order_number=order_number,
+            user=self.request.user,
+        )
+
+        payment = Payment.objects.filter(order=order).order_by("-id").first()
+
+        if payment is None:
+            raise Http404("پرداختی برای این سفارش پیدا نشد.")
+
+        context["order"] = order
+        context["payment"] = payment
+        return context
 
 
 def mock_payment_gateway_view(request):
@@ -224,34 +229,6 @@ class PaymentSuccessView(LoginRequiredMixin, TemplateView):
 
         context["order"] = order
         context["payment"] = payment_record
-        return context
-
-
-class PaymentFailedView(LoginRequiredMixin, TemplateView):
-    template_name = "orders/payment/checkout_confirmation.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        order_number = self.kwargs.get("order_number")
-
-        order = get_object_or_404(
-            Order.objects.select_related("user"),
-            order_number=order_number,
-            user=self.request.user,
-        )
-
-        payment_record = (
-            Payment.objects.filter(order=order, status=Payment.Status.FAILED)
-            .order_by("-updated")
-            .first()
-        )
-
-        if not payment_record:
-            raise Http404("هیچ تراکنش ناموفقی برای این سفارش ثبت نشده است.")
-
-        context["order"] = order
-        context["payment"] = payment_record
-        context["message"] = "پرداخت با خطا مواجه شد."
         return context
 
 

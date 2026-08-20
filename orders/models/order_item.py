@@ -1,3 +1,4 @@
+# orders/models/OrderItem
 from django.db import models
 from django.urls import reverse
 from catalog.models.product import Product
@@ -10,8 +11,6 @@ class OrderItem(models.Model):
         on_delete=models.CASCADE,
         related_name="items",
         related_query_name="order_item",
-        null=False,
-        blank=False,
         verbose_name="سفارش",
     )
     product = models.ForeignKey(
@@ -20,15 +19,25 @@ class OrderItem(models.Model):
         null=True,
         blank=True,
         related_name="order_items",
+        verbose_name="محصول",
     )
     variant_id = models.BigIntegerField(
-        null=True, blank=True, verbose_name="شناسه واریانت"
+        null=True,
+        blank=True,
+        verbose_name="شناسه واریانت",
     )
     product_name = models.CharField(max_length=255, verbose_name="نام محصول")
     variant_name = models.CharField(
-        max_length=255, blank=True, verbose_name="نام واریانت"
+        max_length=255,
+        blank=True,
+        verbose_name="نام واریانت",
     )
-    sku = models.CharField(max_length=100, blank=True, null=True, verbose_name="SKU")
+    sku = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="SKU",
+    )
     quantity = models.PositiveIntegerField(default=1, verbose_name="تعداد")
     unit_price = models.DecimalField(
         max_digits=12,
@@ -50,23 +59,16 @@ class OrderItem(models.Model):
         indexes = [
             models.Index(fields=["order"]),
             models.Index(fields=["variant_id"]),
-            # ایندکس های مربوط به product و product_id حذف شده اند،
-            # زیرا Django به طور خودکار ایندکس را برای ForeignKey ایجاد می کند.
         ]
 
     def __str__(self):
-        # برای نمایش بهتر، وضعیت order را چک می کنیم
-        order_num_display = self.order.order_number if self.order else "N/A"
-        return f"{self.quantity} of {self.product_name} (Order: {order_num_display})"
+        order_num = self.order.order_number if self.order_id and self.order else "N/A"
+        return f"{self.quantity} × {self.product_name} (Order: {order_num})"
 
     def save(self, *args, **kwargs):
-        if self.quantity is not None and self.unit_price is not None:
-            self.subtotal_price = Decimal(str(self.quantity)) * Decimal(
-                str(self.unit_price)
-            )
-        else:
-            self.subtotal_price = Decimal("0")
-
+        quantity = Decimal(str(self.quantity or 0))
+        unit_price = Decimal(str(self.unit_price or 0))
+        self.subtotal_price = quantity * unit_price
         super().save(*args, **kwargs)
 
     @property
@@ -79,25 +81,22 @@ class OrderItem(models.Model):
         if old_price is None:
             return Decimal("0")
 
-        unit_price = self.unit_price or Decimal("0")
-        qty = Decimal(str(self.quantity or 0))
-
-        if old_price <= unit_price:
+        current_unit_price = Decimal(str(self.unit_price or 0))
+        if old_price <= current_unit_price:
             return Decimal("0")
 
-        return (old_price - unit_price) * qty
+        quantity = Decimal(str(self.quantity or 0))
+        return (Decimal(str(old_price)) - current_unit_price) * quantity
 
     def set_product(self, product_instance):
-        if product_instance:
-            self.product = product_instance
-            self.product_name = product_instance.name
-            self.sku = getattr(
-                product_instance, "sku", None
-            )  # استفاده از getattr برای امنیت بیشتر
-            self.unit_price = product_instance.price
-        else:
-            # پاک کردن اطلاعات در صورت نبودن محصول
+        if not product_instance:
             self.product = None
             self.product_name = ""
             self.sku = None
-            self.unit_price = models.DecimalField(0, max_digits=12, decimal_places=2)
+            self.unit_price = Decimal("0")
+            return
+
+        self.product = product_instance
+        self.product_name = product_instance.name
+        self.sku = getattr(product_instance, "sku", None)
+        self.unit_price = product_instance.price

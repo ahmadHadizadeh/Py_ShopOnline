@@ -44,7 +44,7 @@
 
         <div class="flex flex-col sm:flex-row gap-3 justify-center">
             <a href="{% url 'orders:initiate_payment' order.order_number %}" class="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl text-sm transition text-center shadow-lg">تلاش مجدد</a>
-            <a href="{% url 'orders:order_detail' order.id %}" class="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition text-center">مشاهده سفارش</a> {# تصحیح به order.id برای انطباق با ساختار URL جزئیات سفارش #}
+            <a href="{% url 'orders:order_detail' order.order_number %}" class="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition text-center">مشاهده سفارش</a> {# تصحیح به order.order_number برای انطباق با ساختار URL جزئیات سفارش #}
         </div>
     </div>
 </div>

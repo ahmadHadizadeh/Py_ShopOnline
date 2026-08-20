@@ -1,3 +1,4 @@
+# cart/view.py
 import logging
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -165,6 +166,11 @@ def move_to_cart(request, item_id):
 
 # cart/views.py/class CheckoutView(View)
 
+from urllib.parse import urlencode
+
+from django.conf import settings
+from django.shortcuts import redirect
+
 
 class CartDetailView(View):
     template_name = "cart/detail.html"
@@ -193,10 +199,13 @@ class CheckoutView(View):
         return AddressForm()
 
     def get_cart_queryset(self):
-        return Cart.objects.prefetch_related("items__product", "items__variant")
+        return Cart.objects.prefetch_related(
+            "items__product",
+        )
 
     def get_cart(self, request, for_update=False):
         queryset = self.get_cart_queryset()
+
         if for_update:
             queryset = queryset.select_for_update()
 
@@ -207,10 +216,15 @@ class CheckoutView(View):
             ).first()
 
         cart_id = request.session.get("cart_id")
+
         if not cart_id:
             return None
 
-        return queryset.filter(id=cart_id).first()
+        return queryset.filter(
+            id=cart_id,
+            status=Cart.STATUS_ACTIVE,
+            user__isnull=True,
+        ).first()
 
     def get_shipping_methods_data(self, request, cart):
         shipping_methods_with_costs = []
@@ -350,12 +364,15 @@ class CheckoutView(View):
         )
 
     def dispatch(self, request, *args, **kwargs):
-        if request.method == "GET":
-            return super().dispatch(request, *args, **kwargs)
-        if not request.user.is_authenticated:
+        if request.method == "POST" and not request.user.is_authenticated:
             messages.warning(
-                request, "لطفاً برای تکمیل خرید ابتدا شماره موبایل خود را تایید کنید."
+                request,
+                "لطفاً برای تکمیل خرید ابتدا وارد حساب کاربری خود شوید.",
             )
-            return redirect("cart:checkout")
-        return super().dispatch(request, *args, **kwargs)
 
+            login_url = getattr(settings, "LOGIN_URL", "/accounts/login/")
+            query_string = urlencode({"next": request.get_full_path()})
+
+            return redirect(f"{login_url}?{query_string}")
+
+        return super().dispatch(request, *args, **kwargs)

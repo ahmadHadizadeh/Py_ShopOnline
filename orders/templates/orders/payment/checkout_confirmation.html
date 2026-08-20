@@ -153,26 +153,16 @@
                     </table>
                 </div>
             </div>
-
+            
             <!-- ۳. دکمه‌های عملیاتی -->
-            <div class="pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+            <div class="pt-6 border-t border-gray-100">
                 {% if not payment or payment.status == 'FAILED' %}
-                    <form action="{% url 'orders:initiate_payment' order.order_number %}" method="POST" class="flex-1">
+                    <form action="{% url 'orders:initiate_payment' order.order_number %}" method="POST">
                         {% csrf_token %}
                         <button type="submit" class="w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl transition duration-200 shadow-lg shadow-emerald-600/20">
                             {% if payment %}تلاش مجدد برای پرداخت{% else %}پرداخت آنلاین و نهایی{% endif %}
                         </button>
                     </form>
-                {% endif %}
-                
-                {% if payment and payment.status == 'SUCCESS' %}
-                    <a href="{% url 'orders:order_list' %}" class="flex-1 text-center bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 px-4 rounded-xl transition duration-200">
-                        مشاهده لیست سفارشات
-                    </a>
-                {% else %}
-                    <a href="{% url 'cart:detail' %}" class="flex-1 text-center bg-gray-50 hover:bg-gray-100 text-gray-800 font-semibold py-3.5 px-4 rounded-xl border border-gray-200 transition duration-200">
-                        بازگشت به سبد خرید
-                    </a>
                 {% endif %}
             </div>
         </div>

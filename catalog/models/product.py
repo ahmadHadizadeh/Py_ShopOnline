@@ -1,3 +1,4 @@
+# catalog/models/Product
 from django.db import models, transaction
 from django.urls import reverse
 from catalog.utils import generate_unique_slug
