@@ -21,7 +21,7 @@
                 <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-3 p-3 rounded-lg text-gray-600 hover:bg-gray-50">
                     <i class="fa-solid fa-house w-5"></i> خلاصه فعالیت‌ها
                 </a>
-                <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-3 p-3 rounded-lg bg-gray-100 text-gray-800 font-bold border-r-4 border-indigo-500">
+                <a href="{% url 'orders:order_list' %}" class="flex items-center gap-3 p-3 rounded-lg bg-gray-100 text-gray-800 font-bold border-r-4 border-indigo-500">
                     <i class="fa-solid fa-bag-shopping w-5"></i> سفارش‌ها
                 </a>
                 <a href="#" class="flex items-center gap-3 p-3 rounded-lg text-red-600 hover:bg-red-50 mt-6">
@@ -33,7 +33,9 @@
 
     <!-- Main Content -->
     <main class="lg:col-span-3">
-        {% block dashboard_content %}{% endblock %}
+        {% block dashboard_content %}
+        
+        {% endblock %}
     </main>
 </div>
 {% endblock %}

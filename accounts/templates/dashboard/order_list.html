@@ -2,47 +2,187 @@
 {% load humanize %}
 
 {% block dashboard_content %}
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-    <h2 class="text-xl font-bold text-gray-800 mb-6">سفارش‌های من</h2>
-    
-    <!-- Status Filters -->
-    <div class="flex gap-2 mb-6 border-b pb-4">
+<div class="space-y-6">
+
+    <div class="flex items-center justify-between border-b border-gray-200 pb-4">
+        <h2 class="text-xl font-bold text-gray-800">
+            سفارش‌های من
+        </h2>
+    </div>
+
+    <!-- تب‌های فیلتر وضعیت -->
+    <div class="flex gap-2 overflow-x-auto border-b border-gray-100 pb-2 text-sm">
         {% for status_key, status_label in status_choices %}
-            <a href="?status={{ status_key }}" 
-               class="px-4 py-2 rounded-full text-sm {% if request.GET.status == status_key or not request.GET.status and status_key == 'current' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
-                {{ status_label }}
-            </a>
+            {% if status_key == 'all' %}
+                <a href="{% url 'accounts:dashboard_orders' %}"
+                   class="whitespace-nowrap rounded-xl px-4 py-2 font-medium transition
+                   {% if selected_status == status_key %}
+                       bg-blue-600 text-white shadow-sm
+                   {% else %}
+                       bg-gray-100 text-gray-600 hover:bg-gray-200
+                   {% endif %}">
+                    {{ status_label }}
+                </a>
+            {% else %}
+                <a href="?status={{ status_key }}"
+                   class="whitespace-nowrap rounded-xl px-4 py-2 font-medium transition
+                   {% if selected_status == status_key %}
+                       bg-blue-600 text-white shadow-sm
+                   {% else %}
+                       bg-gray-100 text-gray-600 hover:bg-gray-200
+                   {% endif %}">
+                    {{ status_label }}
+                </a>
+            {% endif %}
         {% endfor %}
     </div>
 
-    <!-- Orders Table -->
-    <div class="overflow-x-auto">
-        <table class="w-full text-right">
-            <thead class="text-gray-500 text-sm">
-                <tr class="border-b">
-                    <th class="pb-4">شماره سفارش</th>
-                    <th class="pb-4">تاریخ ثبت</th>
-                    <th class="pb-4">مبلغ کل</th>
-                    <th class="pb-4">عملیات</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50">
-                {% for order in orders %}
-                <tr class="hover:bg-gray-50">
-                    <td class="py-4 font-medium num-latin">{{ order.order_number }}</td>
-                    <td class="py-4 text-gray-600">{{ order.jalali_created }}</td>
-                    <td class="py-4 font-bold">{{ order.final_amount|intcomma }} <span class="text-xs text-gray-400">تومان</span></td>
-                    <td class="py-4">
-                        <a href="{% url 'accounts:dashboard_order_detail' order.order_number %}" class="text-indigo-600 hover:text-indigo-800 font-bold">مشاهده</a>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="4" class="py-10 text-center text-gray-400">سفارشی یافت نشد.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- جدول / کارت‌های سفارش‌ها -->
+    <div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+
+        <!-- دسکتاپ -->
+        <div class="hidden overflow-x-auto md:block">
+            <table class="w-full text-right text-sm">
+                <thead class="border-b border-gray-100 bg-gray-50/50 text-gray-500">
+                    <tr>
+                        <th class="px-4 py-3.5 font-semibold">شماره سفارش</th>
+                        <th class="px-4 py-3.5 font-semibold">تاریخ ثبت</th>
+                        <th class="px-4 py-3.5 font-semibold">وضعیت</th>
+                        <th class="px-4 py-3.5 font-semibold">مبلغ کل</th>
+                        <th class="px-4 py-3.5 text-left font-semibold">عملیات</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-gray-100">
+                    {% for order in orders %}
+                    <tr class="transition hover:bg-gray-50/60">
+
+                        <td class="px-4 py-4 font-medium text-gray-900">
+                            <span class="num-latin">{{ order.order_number }}</span>
+                        </td>
+
+                        <td class="px-4 py-4 text-gray-600">
+                            {{ order.jalali_created }}
+                        </td>
+
+                        <td class="px-4 py-4">
+                            <span class="rounded-full px-3 py-1 text-xs font-medium
+                                {% if order.status == 'completed' %}
+                                    bg-green-100 text-green-700
+                                {% elif order.status == 'cancelled' %}
+                                    bg-red-100 text-red-700
+                                {% elif order.status == 'pending' or order.status == 'placed' %}
+                                    bg-amber-100 text-amber-700
+                                {% else %}
+                                    bg-blue-100 text-blue-700
+                                {% endif %}">
+                                {{ order.get_status_display }}
+                            </span>
+                        </td>
+
+                        <td class="px-4 py-4 font-bold text-gray-800">
+                            <span class="num-latin">{{ order.final_amount|intcomma }}</span>
+                            <small class="text-xs font-normal text-gray-400">تومان</small>
+                        </td>
+
+                        <td class="px-4 py-4 text-left">
+                            <a href="{% url 'accounts:dashboard_order_detail' order.order_number %}"
+                               class="inline-flex items-center rounded-lg bg-blue-50 px-3.5 py-1.5 text-xs font-bold text-blue-600 transition hover:bg-blue-600 hover:text-white">
+                                مشاهده جزئیات
+                            </a>
+                        </td>
+
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-4 py-12 text-center text-gray-400">
+                            سفارشی در این وضعیت یافت نشد.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- موبایل -->
+        <div class="divide-y divide-gray-100 md:hidden">
+            {% for order in orders %}
+            <div class="space-y-3 p-4">
+
+                <div class="flex items-center justify-between gap-3">
+                    <span class="font-bold text-gray-900">
+                        <span class="num-latin">{{ order.order_number }}</span>
+                    </span>
+
+                    <span class="rounded-full px-3 py-1 text-xs font-semibold
+                        {% if order.status == 'completed' %}
+                            bg-green-100 text-green-700
+                        {% elif order.status == 'cancelled' %}
+                            bg-red-100 text-red-700
+                        {% elif order.status == 'pending' or order.status == 'placed' %}
+                            bg-amber-100 text-amber-700
+                        {% else %}
+                            bg-blue-100 text-blue-700
+                        {% endif %}">
+                        {{ order.get_status_display }}
+                    </span>
+                </div>
+
+                <div class="flex items-center justify-between text-xs text-gray-500">
+                    <span>{{ order.jalali_created }}</span>
+
+                    <span class="text-sm font-bold text-gray-800">
+                        <span class="num-latin">{{ order.final_amount|intcomma }}</span> تومان
+                    </span>
+                </div>
+
+                <a href="{% url 'accounts:dashboard_order_detail' order.order_number %}"
+                   class="block w-full rounded-xl bg-gray-50 py-2.5 text-center text-xs font-medium text-blue-600 transition hover:bg-blue-600 hover:text-white">
+                    مشاهده جزئیات
+                </a>
+
+            </div>
+            {% empty %}
+            <div class="p-10 text-center text-sm text-gray-400">
+                سفارشی در این وضعیت یافت نشد.
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- صفحه‌بندی -->
+        {% if is_paginated %}
+        <div class="flex flex-wrap items-center justify-center gap-2 border-t border-gray-100 px-6 py-5">
+
+            {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if selected_status != 'all' %}&status={{ selected_status }}{% endif %}"
+                   class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs text-gray-700 transition hover:bg-blue-600 hover:text-white">
+                    قبلی
+                </a>
+            {% endif %}
+
+            {% for page_number in paginator.page_range %}
+                {% if page_number == page_obj.number %}
+                    <span class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white">
+                        <span class="num-latin">{{ page_number }}</span>
+                    </span>
+                {% else %}
+                    <a href="?page={{ page_number }}{% if selected_status != 'all' %}&status={{ selected_status }}{% endif %}"
+                       class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs text-gray-700 transition hover:bg-blue-600 hover:text-white">
+                        <span class="num-latin">{{ page_number }}</span>
+                    </a>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if selected_status != 'all' %}&status={{ selected_status }}{% endif %}"
+                   class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs text-gray-700 transition hover:bg-blue-600 hover:text-white">
+                    بعدی
+                </a>
+            {% endif %}
+
+        </div>
+        {% endif %}
+
     </div>
 </div>
 {% endblock %}

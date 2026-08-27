@@ -1,7 +1,6 @@
 <!-- order_detail.html-->
 {% extends "dashboard/base.html" %}
 
-
 {% load static %}
 {% load humanize %}
 
@@ -28,7 +27,7 @@
                         <span class="text-xs bg-gray-100 px-2 py-1 rounded">{{ order.get_status_display }}</span>
                     </div>
                     <div class="font-bold text-gray-800">{{ order.final_amount|floatformat:0|intcomma }} تومان</div>
-                    <a href="{% url 'orders:order_detail' order.id %}" class="text-blue-600 text-sm mt-2 block">مشاهده جزئیات</a>
+                    <a href="{% url 'orders:order_detail' order.order_number %}" class="text-blue-600 text-sm mt-2 block">مشاهده جزئیات</a>
                 </div>
             {% endfor %}
         </div>

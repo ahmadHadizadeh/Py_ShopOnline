@@ -236,18 +236,48 @@ class OrderListView(LoginRequiredMixin, ListView):
     model = Order
     template_name = "orders/dashboard/order_list.html"
     context_object_name = "orders"
-    paginate_by = 10
+    paginate_by = 5
+
+    STATUS_MAP = {
+        "current": [
+            Order.Status.PENDING,
+            Order.Status.PLACED,
+            Order.Status.PAID,
+            Order.Status.PROCESSING,
+        ],
+        "delivered": [
+            Order.Status.COMPLETED,
+        ],
+        "cancelled": [
+            Order.Status.CANCELLED,
+        ],
+    }
+
+    def get_queryset(self):
+        status_key = self.request.GET.get("status", "current")
+        target_statuses = self.STATUS_MAP.get(status_key, self.STATUS_MAP["current"])
+
+        return (
+            self.request.user.orders.filter(status__in=target_statuses)
+            .select_related("shipping_method")
+            .prefetch_related("items")
+            .order_by("-created")
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        status_key = self.request.GET.get("status", "current")
+        if status_key not in self.STATUS_MAP:
+            status_key = "current"
+
+        # تزریق تاریخ شمسی فقط به سفارش‌های صفحه جاری (Paginated Page)
         for order in context["orders"]:
             order.jalali_created = jdatetime.date.fromgregorian(
                 date=order.created.date()
             ).strftime("%Y/%m/%d")
-        return context
 
-    def get_queryset(self):
-        return self.request.user.orders.all().order_by("-created")
+        context["selected_status"] = status_key
+        return context
 
 
 class OrderDetailView(LoginRequiredMixin, DetailView):
@@ -257,13 +287,14 @@ class OrderDetailView(LoginRequiredMixin, DetailView):
     slug_field = "order_number"
     slug_url_kwarg = "order_number"
 
+    def get_queryset(self):
+        return self.request.user.orders.select_related(
+            "address_snapshot", "shipping_method"
+        ).prefetch_related("items")
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        order = context["order"]
         context["jalali_created"] = jdatetime.datetime.fromgregorian(
-            datetime=order.created
+            datetime=self.object.created
         ).strftime("%Y/%m/%d - %H:%M")
         return context
-
-    def get_queryset(self):
-        return self.request.user.orders.all().prefetch_related("items")
