@@ -52,7 +52,7 @@
             <p class="text-gray-500 mt-2">اطلاعات سفارش خود را بررسی کنید و برای پرداخت اقدام نمایید.</p>
         </div>
 
-        <!-- بخش اصلی محتوا (بهینه‌شده) -->
+        <!-- بخش اصلی محتوا -->
         <div class="p-6 sm:p-8 space-y-8">
             
             <!-- ۱. خلاصه اطلاعات خریدار و سفارش -->
@@ -62,12 +62,11 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-600">
                     <div class="flex justify-between sm:justify-start gap-2">
                         <span class="text-gray-400">شماره سفارش:</span>
-                        <strong class="text-gray-900 font-mono">{{ order.order_number }}</strong>
-                    </div>
-                    
-                    <div class="flex justify-between sm:justify-start gap-2">
-                        <span class="text-gray-400">تاریخ ثبت:</span>
+                        <strong class="text-gray-900 font-mono">{{ order.order_number }}-gray-400">تاریخ ثبت:</span>
                         <strong class="text-gray-900">{{ order.created|date:"Y/m/d H:i" }}</strong>
+                    </div>
+
+                    <div class="flex justify-between sm:justify-start/m/d H:i" }}</strong>
                     </div>
 
                     <div class="flex justify-between sm:justify-start gap-2">
@@ -83,7 +82,7 @@
                     <div class="flex justify-between sm:justify-start gap-2 sm:col-span-2 mt-2">
                         <span class="text-gray-400">مبلغ نهایی سفارش:</span>
                         <strong class="text-lg {% if payment and payment.status == 'SUCCESS' %}text-emerald-700{% else %}text-gray-900{% endif %}">
-                            {{ order.final_amount|intcomma }} تومان
+                            {{ order.final_amount|floatformat:"0"|intcomma }} تومان
                         </strong>
                     </div>
 
@@ -125,13 +124,11 @@
                                 <td class="p-4 font-medium text-gray-900">{{ item.product_name }}</td>
                                 <td class="p-4 text-center">{{ item.quantity }}</td>
                                 <td class="p-4 text-center">{{ item.unit_price|floatformat:"0"|intcomma }}</td>
-
                                 <td class="p-4 text-center text-rose-600 font-medium">
                                     {{ item.discount_amount|floatformat:"0"|intcomma }}
                                 </td>
-                                
-                                
                                 <td class="p-4 text-center font-bold text-gray-900">{{ item.subtotal_price|floatformat:"0"|intcomma }}</td>
+                            </tr>
                             {% endfor %}
                         </tbody>
 
@@ -143,7 +140,6 @@
                             <tr>
                                 <td colspan="5" class="p-4 text-right font-bold text-gray-700">هزینه ارسال:</td>
                                 <td class="p-4 text-center font-bold text-gray-900 whitespace-nowrap">{{ order.shipping_amount|floatformat:"0"|intcomma }} تومان</td>
-
                             </tr>
                             <tr>
                                 <td colspan="5" class="p-4 text-right font-bold text-gray-900 text-lg">مبلغ نهایی قابل پرداخت:</td>
@@ -155,21 +151,25 @@
             </div>
             
             <!-- ۳. دکمه‌های عملیاتی -->
-            <div class="pt-6 border-t border-gray-100">
+            <div class="pt-6 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
                 {% if not payment or payment.status == 'FAILED' %}
-                    <form action="{% url 'orders:initiate_payment' order.order_number %}" method="POST">
+                    <form action="{% url 'orders:initiate_payment' order.order_number %}" method="POST" class="w-full">
                         {% csrf_token %}
                         <button type="submit" class="w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl transition duration-200 shadow-lg shadow-emerald-600/20">
                             {% if payment %}تلاش مجدد برای پرداخت{% else %}پرداخت آنلاین و نهایی{% endif %}
                         </button>
                     </form>
+                {% else %}
+                    <a href="{% url 'accounts:dashboard_order_detail' order.order_number %}" class="w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl transition duration-200">
+                        مشاهده سفارش در پنل کاربری
+                    </a>
                 {% endif %}
             </div>
         </div>
 
         <!-- فوتر کارت -->
         <div class="bg-gray-50 p-4 border-t border-gray-100 text-center">
-            <p class="text-xs text-gray-400 italic">در صورت بروز هرگونه مشکل، لطفاً با پشتیبانی هوش برتر تماس حاصل فرمایید.</p>
+            <p class="text-xs text-gray-400 italic">در صورت بروز هرگونه مشکل، لطفاً با پشتیبانی تماس حاصل فرمایید.</p>
         </div>
     </div>
 </div>

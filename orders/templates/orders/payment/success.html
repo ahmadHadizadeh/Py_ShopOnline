@@ -1,63 +1,69 @@
-{% extends "catalog/base.html" %} 
-{% load static %}
+{% extends "catalog/base.html" %}
+{% load humanize %}
 
-{% block title %}پرداخت موفقیت‌آمیز | هوش برتر{% endblock %}
+{% block title %}پرداخت موفق - {{ order.order_number }}{% endblock %}
 
 {% block content %}
-
-<div class="container mx-auto px-4 pt-8">
-    <nav class="flex text-sm text-gray-500" aria-label="Breadcrumb">
-        <ol class="inline-flex items-center space-x-2 md:space-x-3">
-            <li><a href="/" class="hover:text-blue-700">خانه</a></li>
-            <li>/</li>
-            <li><a href="{% url 'orders:order_list' %}" class="hover:text-blue-700">سفارشات من</a></li>
-            <li>/</li>
-            <li class="text-blue-700 font-bold">نتیجه پرداخت</li>
-        </ol>
-    </nav>
-</div>
-
-<div class="container mx-auto px-4 py-16 flex items-center justify-center min-h-[70vh]">
-    <div class="max-w-md w-full bg-white rounded-2xl shadow-lg border border-emerald-100 p-8 text-center">
-        <!-- Success Icon with Pulse Effect -->
-        <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-emerald-50/50">
-            <svg class="w-10 h-10 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
-            </svg>
-        </div>
-
-        <h1 class="text-2xl font-bold text-gray-800 mb-3">پرداخت شما با موفقیت انجام شد</h1>
-        <p class="text-gray-500 text-sm mb-8">سفارش شما در سیستم ثبت گردید و فرآیند آماده‌سازی آن آغاز شده است.</p>
-
-        <!-- Invoice Details Container -->
-        <div class="bg-gray-50 rounded-xl p-5 mb-8 text-right space-y-4 border border-gray-100">
-            <div class="flex justify-between items-center text-sm">
-                <span class="text-gray-500">شماره سفارش:</span>
-                <span class="font-semibold text-gray-800 num-latin">{{ order.order_number }}</span>
-            </div>
-            <div class="flex justify-between items-center text-sm border-t border-gray-100 pt-3">
-                <span class="text-gray-500">شناسه تراکنش:</span>
-                <span class="font-semibold text-gray-800 num-latin">{{ payment.transaction_code|default:"-" }}</span>
-            </div>
-            <div class="flex justify-between items-center text-sm border-t border-gray-100 pt-3">
-                <span class="text-gray-500">کد رهگیری بانکی:</span>
-                <span class="font-semibold text-gray-800 num-latin">{{ payment.reference_code|default:"-" }}</span>
+<div class="container mx-auto px-4 py-12 max-w-2xl font-['IRANSans']" dir="rtl">
+    <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-emerald-100">
+        
+        <!-- هدر پرداخت موفق -->
+        <div class="p-8 text-center bg-emerald-50">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 bg-emerald-100 text-emerald-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
             </div>
             
-            <div class="flex justify-between items-center text-sm border-t border-gray-100 pt-3">
-                <span class="text-gray-500">مبلغ پرداخت شده:</span>
-                <span class="font-bold text-emerald-600 num-latin">{{ payment.amount|floatformat:0 }} تومان</span>
+            <h1 class="text-2xl font-black text-gray-800">پرداخت با موفقیت انجام شد</h1>
+            <p class="text-gray-500 mt-2">سفارش شما با موفقیت ثبت شد و در مرحله پردازش قرار گرفت.</p>
+        </div>
+
+        <!-- اطلاعات سفارش و پرداخت -->
+        <div class="p-6 sm:p-8 space-y-6">
+            <div class="bg-gray-50 rounded-xl p-5 border border-gray-100 space-y-4 text-sm text-gray-700">
+                <div class="flex justify-between items-center border-b border-gray-200/60 pb-3">
+                    <span class="text-gray-500">شماره سفارش:</span>
+                    <strong class="text-gray-900 font-mono text-base">{{ order.order_number }}</strong>
+                </div>
+
+                <div class="flex justify-between items-center border-b border-gray-200/60 pb-3">
+                    <span class="text-gray-500">کد پیگیری تراکنش:</span>
+                    <strong class="text-emerald-700 font-mono text-base">{{ payment.transaction_code|default:"--" }}</strong>
+                </div>
+
+                <div class="flex justify-between items-center border-b border-gray-200/60 pb-3">
+                    <span class="text-gray-500">تاریخ و زمان پرداخت:</span>
+                    <strong class="text-gray-900">{{ payment.updated|date:"Y/m/d H:i" }}</strong>
+                </div>
+
+                <div class="flex justify-between items-center border-b border-gray-200/60 pb-3">
+                    <span class="text-gray-500">تحویل‌گیرنده:</span>
+                    <strong class="text-gray-900">{{ order.address_snapshot.recipient_name }}</strong>
+                </div>
+
+                <div class="flex justify-between items-center pt-1">
+                    <span class="text-gray-500">مبلغ پرداخت‌شده:</span>
+                    <strong class="text-emerald-700 text-lg font-bold">
+                        {{ payment.amount|floatformat:"0"|intcomma }} تومان
+                    </strong>
+                </div>
+            </div>
+
+            <!-- دکمه‌های عملیاتی -->
+            <div class="pt-4 flex flex-col sm:flex-row gap-3">
+                <a href="{% url 'accounts:dashboard_order_detail' order.order_number %}" class="flex-1 text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg shadow-emerald-600/20">
+                    مشاهده جزئیات سفارش
+                </a>
+                <a href="{% url 'accounts:dashboard_orders' %}" class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-xl transition duration-200">
+                    لیست سفارش‌های من
+                </a>
             </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex flex-col sm:flex-row gap-3 justify-center">
-            <a href="/" class="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition duration-200 text-center">
-                بازگشت به فروشگاه
-            </a>
-            <a href="{% url 'orders:order_detail' order.order_number %}" class="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl text-sm transition duration-200 text-center shadow-md shadow-emerald-600/10">
-                پیگیری سفارش
-            </a>
+        <!-- فوتر کارت -->
+        <div class="bg-gray-50 p-4 border-t border-gray-100 text-center">
+            <p class="text-xs text-gray-400">از خرید شما سپاسگزاریم. جزئیات سفارش از طریق پیامک نیز ارسال خواهد شد.</p>
         </div>
     </div>
 </div>

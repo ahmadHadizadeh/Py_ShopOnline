@@ -6,13 +6,14 @@ from django.db import transaction
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.views import View
 from django.utils import timezone
-from django.views.generic import TemplateView, ListView, DetailView
-from orders.models.payment import Payment
-from orders.models.orders import Order
+from django.views import View
+from django.views.generic import TemplateView
+
 from cart.models import Cart
-import jdatetime
+from orders.models.orders import Order
+from orders.models.payment import Payment
+from decimal import Decimal, InvalidOperation
 
 logger = logging.getLogger(__name__)
 
@@ -31,39 +32,66 @@ class ProcessPaymentView(LoginRequiredMixin, View):
         return self._start_payment(request, order_number)
 
     def _start_payment(self, request, order_number):
-        order = get_object_or_404(
-            Order,
-            order_number=order_number,
-            user=request.user,
-            status=Order.Status.PENDING,
-        )
-
-        payment = (
-            Payment.objects.filter(
-                order=order,
-                status=Payment.Status.PENDING,
-            )
-            .order_by("-created")
-            .first()
-        )
-
-        if payment is None:
-            payment = Payment.objects.create(
-                order=order,
+        with transaction.atomic():
+            order = get_object_or_404(
+                Order.objects.select_for_update(),
+                order_number=order_number,
                 user=request.user,
-                amount=order.final_amount,
-                status=Payment.Status.PENDING,
-                gateway_name="mock_gateway",
             )
 
-        gateway_transaction_id = f"TRX-{payment.id}-{int(timezone.now().timestamp())}"
-        payment.transaction_code = gateway_transaction_id
-        payment.save(update_fields=["transaction_code"])
+            # ۱. جلوگیری از پرداخت مجدد سفارش‌هایی که پرداخت شده یا پردازش شده‌اند
+            non_payable_statuses = {
+                getattr(Order.Status, "PAID", "PAID"),
+                getattr(Order.Status, "PROCESSING", "PROCESSING"),
+                getattr(Order.Status, "COMPLETED", "COMPLETED"),
+            }
+            if hasattr(Order, "Status") and order.status in non_payable_statuses:
+                messages.info(request, "این سفارش قبلاً پرداخت شده است.")
+                return redirect(
+                    "orders:payment_success", order_number=order.order_number
+                )
 
+            # ۲. در تلاش مجدد، وضعیت سفارش به PENDING بازمی‌گردد
+            if hasattr(Order, "Status") and order.status != getattr(
+                Order.Status, "PENDING", "PENDING"
+            ):
+                order.status = getattr(Order.Status, "PENDING", "PENDING")
+                order.save(update_fields=["status"])
+
+            # ۳. رعایت قید OneToOne: بازیابی همان رکورد پرداخت موجود یا ایجاد فقط در صورت عدم وجود
+            payment = Payment.objects.select_for_update().filter(order=order).first()
+
+            gateway_transaction_id = f"TRX-{order.id}-{int(timezone.now().timestamp())}"
+
+            if payment is None:
+                payment = Payment.objects.create(
+                    order=order,
+                    user=request.user,
+                    amount=order.final_amount,
+                    status=Payment.Status.PENDING,
+                    gateway_name="mock_gateway",
+                    transaction_code=gateway_transaction_id,
+                )
+            else:
+                # به‌روزرسانی همان رکورد موجود به جای INSERT مجدد
+                payment.status = Payment.Status.PENDING
+                payment.transaction_code = gateway_transaction_id
+                payment.amount = order.final_amount
+                payment.gateway_name = "mock_gateway"
+                payment.save(
+                    update_fields=[
+                        "status",
+                        "transaction_code",
+                        "amount",
+                        "gateway_name",
+                    ]
+                )
+
+        # هدایت ایمن به درگاه با تراکنش به‌روزشده
         payment_gateway_url = reverse("orders:mock_payment_gateway")
         redirect_url = (
             f"{payment_gateway_url}"
-            f"?trxid={gateway_transaction_id}"
+            f"?trxid={payment.transaction_code}"
             f"&order={order.order_number}"
             f"&amount={payment.amount}"
         )
@@ -94,10 +122,14 @@ class PaymentCallbackView(LoginRequiredMixin, TemplateView):
         try:
             with transaction.atomic():
                 payment = (
-                    Payment.objects.select_related("order")
+                    Payment.objects.select_related("order", "user")
                     .select_for_update()
                     .get(transaction_code=trxid)
                 )
+
+                if payment.user_id != request.user.id:
+                    return HttpResponseBadRequest("دسترسی به این تراکنش مجاز نیست.")
+
                 order = Order.objects.select_for_update().get(pk=payment.order_id)
 
                 if payment.status == Payment.Status.SUCCESS:
@@ -108,13 +140,22 @@ class PaymentCallbackView(LoginRequiredMixin, TemplateView):
                         )
                     )
 
-                if payment.status == Payment.Status.FAILED:
-                    return redirect(
-                        reverse(
-                            "orders:payment_failed",
-                            kwargs={"order_number": order.order_number},
-                        )
-                    )
+                gateway_amount = request.POST.get("amount") or request.GET.get("amount")
+                if gateway_amount not in (None, ""):
+                    try:
+                        if Decimal(str(gateway_amount)) != payment.amount:
+                            logger.warning(
+                                "Payment callback amount mismatch: payment_id=%s trxid=%s expected=%s got=%s",
+                                payment.id,
+                                trxid,
+                                payment.amount,
+                                gateway_amount,
+                            )
+                            return HttpResponseBadRequest(
+                                "مبلغ تراکنش با سفارش مطابقت ندارد."
+                            )
+                    except (InvalidOperation, TypeError, ValueError):
+                        return HttpResponseBadRequest("مبلغ تراکنش نامعتبر است.")
 
                 is_success = status == "success"
                 gateway_response = {
@@ -207,6 +248,7 @@ def mock_payment_gateway_view(request):
 
 class PaymentSuccessView(LoginRequiredMixin, TemplateView):
     template_name = "orders/payment/success.html"
+    login_url = "/accounts/login/"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -229,72 +271,4 @@ class PaymentSuccessView(LoginRequiredMixin, TemplateView):
 
         context["order"] = order
         context["payment"] = payment_record
-        return context
-
-
-class OrderListView(LoginRequiredMixin, ListView):
-    model = Order
-    template_name = "orders/dashboard/order_list.html"
-    context_object_name = "orders"
-    paginate_by = 5
-
-    STATUS_MAP = {
-        "current": [
-            Order.Status.PENDING,
-            Order.Status.PLACED,
-            Order.Status.PAID,
-            Order.Status.PROCESSING,
-        ],
-        "delivered": [
-            Order.Status.COMPLETED,
-        ],
-        "cancelled": [
-            Order.Status.CANCELLED,
-        ],
-    }
-
-    def get_queryset(self):
-        status_key = self.request.GET.get("status", "current")
-        target_statuses = self.STATUS_MAP.get(status_key, self.STATUS_MAP["current"])
-
-        return (
-            self.request.user.orders.filter(status__in=target_statuses)
-            .select_related("shipping_method")
-            .prefetch_related("items")
-            .order_by("-created")
-        )
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        status_key = self.request.GET.get("status", "current")
-        if status_key not in self.STATUS_MAP:
-            status_key = "current"
-
-        # تزریق تاریخ شمسی فقط به سفارش‌های صفحه جاری (Paginated Page)
-        for order in context["orders"]:
-            order.jalali_created = jdatetime.date.fromgregorian(
-                date=order.created.date()
-            ).strftime("%Y/%m/%d")
-
-        context["selected_status"] = status_key
-        return context
-
-
-class OrderDetailView(LoginRequiredMixin, DetailView):
-    model = Order
-    template_name = "orders/dashboard/order_detail.html"
-    context_object_name = "order"
-    slug_field = "order_number"
-    slug_url_kwarg = "order_number"
-
-    def get_queryset(self):
-        return self.request.user.orders.select_related(
-            "address_snapshot", "shipping_method"
-        ).prefetch_related("items")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["jalali_created"] = jdatetime.datetime.fromgregorian(
-            datetime=self.object.created
-        ).strftime("%Y/%m/%d - %H:%M")
         return context

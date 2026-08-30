@@ -1,50 +1,65 @@
-{% extends "catalog/base.html" %} 
-{% load static humanize %}
+{% extends "catalog/base.html" %}
+{% load humanize %}
+{% load static %}
 
-{% block title %}پرداخت ناموفق | هوش برتر{% endblock %}
+{% block title %}خطا در پرداخت سفارش | فروشگاه آنلاین{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 pt-8">
-    <nav class="flex text-sm text-gray-500" aria-label="Breadcrumb">
-        <ol class="inline-flex items-center space-x-2 md:space-x-3">
-            <li><a href="/" class="hover:text-blue-700">خانه</a></li>
-            <li class="text-gray-300">/</li>
-            <li><a href="{% url 'orders:order_list' %}" class="hover:text-blue-700">سفارشات من</a></li>
-            <li class="text-gray-300">/</li>
-            <li class="text-red-700 font-bold">خطای پرداخت</li>
-        </ol>
-    </nav>
-</div>
+<div class="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-xl mx-auto">
+        <!-- Breadcrumb -->
+        <nav class="flex items-center text-sm text-gray-500 mb-8 font-medium">
+            <a href="{% url 'catalog:product_list' %}" class="hover:text-gray-900 transition-colors">خانه</a>
+            <svg class="w-4 h-4 mx-2 rotate-180 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <a href="{% url 'accounts:dashboard_orders' %}" class="hover:text-gray-900 transition-colors">سفارش‌های من</a>
+            <svg class="w-4 h-4 mx-2 rotate-180 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <span class="text-red-600 font-semibold">پرداخت ناموفق</span>
+        </nav>
 
-<div class="container mx-auto px-4 py-8 flex items-center justify-center min-h-[60vh]">
-    <div class="max-w-md w-full bg-white rounded-2xl shadow-lg border border-red-100 p-8 text-center">
-        <div class="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 ring-8 ring-red-50/50">
-            <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-        </div>
-
-        <h1 class="text-2xl font-bold text-gray-800 mb-3">خطا در پرداخت سفارش</h1>
-        <p class="text-gray-500 text-sm mb-8">عملیات پرداخت ناموفق بود یا توسط کاربر لغو گردید. مبلغ کسر شده (در صورت کسر) طی ۷۲ ساعت آینده باز خواهد گشت.</p>
-
-        <div class="bg-gray-50 rounded-xl p-5 mb-8 text-right space-y-4 border border-gray-100">
-            <div class="flex justify-between items-center text-sm">
-                <span class="text-gray-500">شماره سفارش:</span>
-                <span class="font-semibold text-gray-800 num-latin">{{ order.order_number }}</span>
+        <!-- Status Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
+            <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg class="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
             </div>
-            <div class="flex justify-between items-center text-sm border-t border-gray-100 pt-3">
-                <span class="text-gray-500">مبلغ قابل پرداخت:</span>
-                <span class="font-semibold text-gray-800 num-latin">{{ order.final_amount|intcomma }} تومان</span>
-            </div>
-            {% if payment.failure_reason %} {# هماهنگ‌سازی با فیلد failure_reason در مدل پرداخت #}
-            <div class="flex justify-between items-center text-sm border-t border-gray-100 pt-3">
-                <span class="text-gray-500">علت خطا:</span>
-                <span class="font-semibold text-red-600 text-xs">{{ payment.failure_reason }}</span>
-            </div>
-            {% endif %}
-        </div>
+            
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">پرداخت انجام نشد</h1>
+            <p class="text-gray-600 text-sm mb-6 leading-relaxed">
+                تراکنش مالی شما ناموفق بود یا توسط شما لغو شد. در صورتی که مبلغی از حساب شما کسر شده است، ظرف حداکثر ۷۲ ساعت آینده از سوی بانک به حساب شما بازگردانده خواهد شد.
+            </p>
 
-        <div class="flex flex-col sm:flex-row gap-3 justify-center">
-            <a href="{% url 'orders:initiate_payment' order.order_number %}" class="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl text-sm transition text-center shadow-lg">تلاش مجدد</a>
-            <a href="{% url 'orders:order_detail' order.order_number %}" class="flex-1 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition text-center">مشاهده سفارش</a> {# تصحیح به order.order_number برای انطباق با ساختار URL جزئیات سفارش #}
+            <!-- Order Info Box -->
+            <div class="bg-gray-50 rounded-xl p-4 mb-8 text-right space-y-3 border border-gray-100">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-gray-500">شماره سفارش:</span>
+                    <span class="font-bold text-gray-800 tracking-wider font-mono">{{ order.order_number }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-gray-500">مبلغ قابل پرداخت:</span>
+                    <span class="font-bold text-gray-900">{{ order.final_amount|intcomma }} تومان</span>
+                </div>
+                {% if payment and payment.transaction_code %}
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-gray-500">کد رهگیری تراکنش:</span>
+                    <span class="font-mono text-gray-700">{{ payment.transaction_code }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Actions -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <a href="{% url 'orders:initiate_payment' order.order_number %}" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-transparent rounded-xl shadow-sm text-sm font-semibold text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+                    تلاش مجدد برای پرداخت
+                </a>
+                <a href="{% url 'accounts:dashboard_orders' %}" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                    بازگشت به تاریخچه سفارش‌ها
+                </a>
+            </div>
         </div>
     </div>
 </div>
