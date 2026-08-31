@@ -17,11 +17,12 @@
             <span class="font-extrabold text-indigo-700">{{ cart.total_price|floatformat:0 }} تومان</span>
         </div>
     </div>
-    {% if request.user.is_authenticated %}
-        <a href="{% url 'cart:checkout' %}" class="btn btn-primary">ادامه فرایند خرید</a>
-    {% else %}
-        <a href="{% url 'accounts:login' %}?next={% url 'cart:checkout' %}" class="btn btn-warning">
-            برای ادامه خرید ابتدا وارد شوید
-        </a>
-    {% endif %}
+            {% if request.user.is_authenticated %}
+                <a href="{% url 'cart:checkout' %}" class="btn btn-primary">ادامه فرایند خرید</a>
+            {% else %}
+                <a href="{% url 'accounts:login' %}?next={% url 'cart:checkout' %}" class="btn btn-warning">
+                    برای ادامه خرید ابتدا وارد شوید
+                </a>
+            {% endif %}
+
 </div>

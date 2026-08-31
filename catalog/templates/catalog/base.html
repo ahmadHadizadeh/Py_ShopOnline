@@ -1,3 +1,4 @@
+<!--  catalog/templates/catalog/base.html        -->
 {% load static %}
 <!DOCTYPE html>
 <html dir="rtl" lang="fa" class="h-full bg-gray-50">
@@ -62,7 +63,7 @@
                 <ul class="hidden md:flex items-center gap-8 font-medium">
                     <li><a href="{% url 'catalog:product_list' %}" class="text-gray-600 hover:text-indigo-600 transition">خانه</a></li>
                     <!-- Category Dropdown with Hover Logic -->
-                    <div class="relative group/cat">
+                    <li class="relative group/cat">
                         <button class="flex items-center gap-1 text-gray-600 hover:text-indigo-600 transition">
                             دسته‌بندی‌ها <i class="fa-solid fa-chevron-down text-[10px]"></i>
                         </button>
@@ -71,10 +72,11 @@
                             <div class="border-t border-gray-100 my-2"></div>
                             {% for cat in categories %}<a href="{{ cat.get_absolute_url }}" class="block px-5 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 border-r-4 border-transparent hover:border-indigo-600 transition">{{ cat.name }}</a>{% empty %}<span class="block px-5 py-2 text-xs text-gray-400 italic">دسته بندی یافت نشد</span>{% endfor %}
                         </div>
-                    </div>
+                    </li>
                 </ul>
+                
             </div>
-            </div>
+           
 
             <div class="flex items-center gap-5">
                 <div class="relative group hidden sm:block">
@@ -86,34 +88,56 @@
                     <i class="fa-solid fa-basket-shopping text-xl"></i>
                     <span class="absolute -top-2 -left-2 bg-red-500 text-white text-[10px] rounded-full min-w-4 h-4 px-1 flex items-center justify-center font-bold">{{ cart_total_items|default:0 }}</span>
                 </a>
+            {% if user.is_authenticated %}
+                <!-- User Dropdown (Final Fix) -->
+                <div class="relative inline-block" id="accountDropdown">
+                    <button type="button" class="flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition-all duration-300 hover:bg-indigo-700 hover:shadow-indigo-700/30">
+                        <i class="fa-solid fa-user"></i>
+                        <span>حساب کاربری</span>
+                        <i class="fa-solid fa-chevron-down text-[11px] transition-transform duration-300" id="accountChevron"></i>
+                    </button>
             
-                {% if user.is_authenticated %}
-                    <!-- User Dropdown (Final Fix) -->
-                    <div class="relative inline-block" id="accountDropdown">
-                        <button type="button" class="flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-600/25 transition-all duration-300 hover:bg-indigo-700 hover:shadow-indigo-700/30">
-                            <i class="fa-solid fa-user"></i>
-                            <span>حساب کاربری</span>
-                            <i class="fa-solid fa-chevron-down text-[11px] transition-transform duration-300" id="accountChevron"></i>
-                        </button>
-
-                        <div id="accountMenu" class="invisible absolute left-0 top-full z-50 mt-3 w-56 rounded-2xl border border-gray-100 bg-white/95 p-2 text-right opacity-0 translate-y-2 pointer-events-none shadow-2xl shadow-black/10 backdrop-blur-md transition-all duration-200">
-                            <a href="#" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition"><i class="fa-solid fa-id-card text-indigo-500"></i><span>پروفایل من</span></a>
-                            <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition"><i class="fa-solid fa-list-check text-indigo-500"></i><span>سفارشات من</span></a>
-
-                            <a href="{% url 'accounts:address_list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-cyan-50 hover:text-cyan-700 transition"><i class="fa-solid fa-location-dot text-cyan-500"></i><span>آدرس‌های من</span></a>
-                            <div class="my-2 border-t border-gray-100"></div>
-                            <a href="#" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition"><i class="fa-solid fa-right-from-bracket text-red-500"></i><span>خروج</span></a>
-                        </div>
+                    <div id="accountMenu" class="invisible absolute left-0 top-full z-50 mt-3 w-56 rounded-2xl border border-gray-100 bg-white/95 p-2 text-right opacity-0 translate-y-2 pointer-events-none shadow-2xl shadow-black/10 backdrop-blur-md transition-all duration-200">
+                        <a href="{% url 'accounts:profile' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition">
+                            <i class="fa-solid fa-id-card text-indigo-500"></i>
+                            <span>پروفایل من</span>
+                        </a>
+                        <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition">
+                            <i class="fa-solid fa-list-check text-indigo-500"></i>
+                            <span>سفارشات من</span>
+                        </a>
+                        <a href="{% url 'accounts:address_list' %}" class="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-cyan-50 hover:text-cyan-700 transition">
+                            <i class="fa-solid fa-location-dot text-cyan-500"></i>
+                            <span>آدرس‌های من</span>
+                        </a>
+                        
+                        <div class="my-2 border-t border-gray-100"></div>
+            
+                        <!-- خروج امن با متد POST طبق استانداردهای جنگو -->
+                        <form method="post" action="{% url 'accounts:logout' %}" class="w-full">
+                            {% csrf_token %}
+                            <button type="submit" class="w-full text-right px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                <i class="fa-solid fa-right-from-bracket"></i>
+                                <span>خروج از حساب</span>
+                            </button>
+                        </form>
                     </div>
-                {% else %}
-                    <a href="#" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg transition">ورود / ثبت‌نام</a>
-                {% endif %}
+                </div>
+            {% else %}
+                <a href="{% url 'accounts:login' %}" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition">
+                    <i class="fa-regular fa-user"></i>
+                    <span>ورود / ثبت‌نام</span>
+                </a>
+            {% endif %}            
             </div>
         </nav>
     </header>
 
     <main class="flex-grow container mx-auto px-4 lg:px-8 py-8">
-        {% block content %} {% endblock %}
+        {% block content %}
+
+
+        {% endblock %}
     </main>
 
     <footer class="bg-gray-900 text-gray-400 pt-12 pb-6 border-t border-gray-800 mt-auto">
