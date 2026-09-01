@@ -11,7 +11,24 @@ User = get_user_model()
 def create_user_profile(sender, instance, created, **kwargs):
     """ایجاد پروفایل در لحظه ثبت‌نام کاربر"""
     if created:
-        Profile.objects.create(user=instance, phone_number="00000000000")
+        phone = None
+        # استخراج شماره موبایل در صورتی که نام کاربری به شکل شماره ساخته شده باشد
+        if instance.username:
+            if instance.username.startswith("user_09") and len(instance.username) == 16:
+                candidate = instance.username.replace("user_", "")
+                if not Profile.objects.filter(phone_number=candidate).exists():
+                    phone = candidate
+            elif instance.username.startswith("09") and len(instance.username) == 11:
+                if not Profile.objects.filter(phone_number=instance.username).exists():
+                    phone = instance.username
+
+        Profile.objects.get_or_create(
+            user=instance,
+            defaults={
+                "phone_number": phone,
+                "is_verified": bool(phone),
+            },
+        )
 
 
 @receiver(post_save, sender=User)

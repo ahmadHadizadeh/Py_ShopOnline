@@ -92,6 +92,9 @@ class OTPService:
 
         # ۳. تولید کد تصادفی ۶ رقمی ایمن
         code = str(secrets.randbelow(900000) + 100000)
+        print("\n" + "=" * 50)
+        print(f"🔑 [DEBUG OTP] Phone: {phone} | Code: {code}")
+        print("=" * 50 + "\n")
         code_hash = cls._hash_code(phone, code)
 
         # ۴. ذخیره در کش

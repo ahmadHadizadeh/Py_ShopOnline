@@ -102,13 +102,15 @@
     $(function () {
         const $provinceSelect = $('#id_province');
         const $citySelect = $('#id_city');
-        const citiesUrl = "{% url 'accounts:cities_by_province' %}";
+        const citiesUrl = "{% url 'accounts:cities_by_province' %}"; 
+        
         const initialCityValue = "{{ form.city.value|default:''|escapejs }}";
-
+       
         function resetCitySelect(placeholderText = 'ابتدا استان را انتخاب کنید') {
             $citySelect.prop('disabled', true);
             $citySelect.empty().append(new Option(placeholderText, '', true, true)).trigger('change');
         }
+
 
         function populateCities(cities, selectedCity = '') {
             $citySelect.empty();
