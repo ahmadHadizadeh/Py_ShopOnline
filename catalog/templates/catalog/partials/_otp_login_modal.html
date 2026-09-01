@@ -1,0 +1,303 @@
+<!-- catalog/templates/catalog/partials/_otp_modal.html -->
+<div id="otpModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl transition-all sm:p-8">
+            
+            <!-- دکمه بستن مودال -->
+            <button type="button" onclick="closeOtpModal()" class="absolute left-4 top-4 text-gray-400 hover:text-gray-600 transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+
+            <!-- هدر مودال -->
+            <div class="text-center mb-6">
+                <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+                    <i class="fa-solid fa-mobile-screen-button text-2xl"></i>
+                </div>
+                <h3 class="text-xl font-black text-gray-800" id="otpModalTitle">ورود یا ثبت‌نام</h3>
+                <p class="text-sm text-gray-500 mt-1" id="otpModalSubtitle">برای ادامه شماره موبایل خود را وارد کنید</p>
+            </div>
+
+            <!-- پیام خطا / موفقیت عمومی -->
+            <div id="otpAlert" class="hidden mb-4 rounded-xl p-3 text-sm font-medium"></div>
+
+            <!-- استپ ۱: دریافت شماره موبایل -->
+            <div id="otpStepPhone" class="space-y-4">
+                <div>
+                    <label for="otpPhoneNumber" class="block text-xs font-bold text-gray-700 mb-1">شماره موبایل</label>
+                    <div class="relative">
+                        <input type="tel" id="otpPhoneNumber" dir="ltr" placeholder="09123456789" maxlength="11"
+                               class="w-full rounded-xl border border-gray-200 px-4 py-3 text-center text-lg font-bold tracking-widest text-gray-800 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100">
+                        <i class="fa-solid fa-phone absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    </div>
+                </div>
+                <button type="button" id="btnSendOtp" onclick="handleSendOtp()"
+                        class="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 active:scale-[0.99] flex items-center justify-center gap-2">
+                    <span>دریافت کد تأیید</span>
+                    <i class="fa-solid fa-arrow-left text-xs"></i>
+                </button>
+            </div>
+
+            <!-- استپ ۲: دریافت کد OTP -->
+            <div id="otpStepCode" class="hidden space-y-4">
+                <div class="flex items-center justify-between text-xs text-gray-500 px-1">
+                    <span>کد ارسال شده به <strong id="otpDisplayPhone" class="text-gray-800 font-bold" dir="ltr"></strong></span>
+                    <button type="button" onclick="changePhoneNumber()" class="text-indigo-600 hover:underline font-bold">ویرایش شماره</button>
+                </div>
+
+                <!-- باکس‌های ورودی کد ۵ رقمی -->
+                <div class="flex justify-center gap-2" dir="ltr">
+                    <input type="text" maxlength="1" class="otp-digit h-12 w-12 rounded-xl border border-gray-200 text-center text-xl font-black text-gray-800 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
+                    <input type="text" maxlength="1" class="otp-digit h-12 w-12 rounded-xl border border-gray-200 text-center text-xl font-black text-gray-800 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
+                    <input type="text" maxlength="1" class="otp-digit h-12 w-12 rounded-xl border border-gray-200 text-center text-xl font-black text-gray-800 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
+                    <input type="text" maxlength="1" class="otp-digit h-12 w-12 rounded-xl border border-gray-200 text-center text-xl font-black text-gray-800 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
+                    <input type="text" maxlength="1" class="otp-digit h-12 w-12 rounded-xl border border-gray-200 text-center text-xl font-black text-gray-800 outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100" />
+                </div>
+
+                <button type="button" id="btnVerifyOtp" onclick="handleVerifyOtp()"
+                        class="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 active:scale-[0.99] flex items-center justify-center gap-2">
+                    <span>تأیید و ورود</span>
+                    <i class="fa-solid fa-check text-xs"></i>
+                </button>
+
+                <!-- تایمر و ارسال مجدد -->
+                <div class="text-center pt-2">
+                    <div id="otpTimerWrapper" class="text-xs text-gray-500">
+                        ارسال مجدد کد تا <span id="otpTimer" class="font-bold text-indigo-600">03:00</span> دیگر
+                    </div>
+                    <button type="button" id="btnResendOtp" onclick="handleSendOtp()" class="hidden text-xs font-bold text-indigo-600 hover:underline">
+                        ارسال مجدد کد تایید
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    let otpTimerInterval = null;
+    let currentOtpPhone = "";
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function toEnglishDigits(str) {
+        if (!str) return "";
+        return str.replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d))
+                  .replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+    }
+
+    function showOtpAlert(message, type = "error") {
+        const alertBox = document.getElementById("otpAlert");
+        alertBox.className = `mb-4 rounded-xl p-3 text-sm font-medium ${
+            type === "error" ? "bg-rose-50 text-rose-600 border border-rose-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+        }`;
+        alertBox.textContent = message;
+        alertBox.classList.remove("hidden");
+    }
+
+    function hideOtpAlert() {
+        const alertBox = document.getElementById("otpAlert");
+        alertBox.classList.add("hidden");
+        alertBox.textContent = "";
+    }
+
+    function openOtpModal() {
+        document.getElementById("otpModal").classList.remove("hidden");
+        document.body.classList.add("overflow-hidden");
+        document.getElementById("otpPhoneNumber").focus();
+    }
+
+    function closeOtpModal() {
+        document.getElementById("otpModal").classList.add("hidden");
+        document.body.classList.remove("overflow-hidden");
+        hideOtpAlert();
+    }
+
+    function changePhoneNumber() {
+        clearInterval(otpTimerInterval);
+        document.getElementById("otpStepCode").classList.add("hidden");
+        document.getElementById("otpStepPhone").classList.remove("hidden");
+        document.getElementById("otpModalTitle").textContent = "ورود یا ثبت‌نام";
+        document.getElementById("otpModalSubtitle").textContent = "برای ادامه شماره موبایل خود را وارد کنید";
+        hideOtpAlert();
+        document.getElementById("otpPhoneNumber").focus();
+    }
+
+    function startTimer(durationInSeconds) {
+        clearInterval(otpTimerInterval);
+        let timer = durationInSeconds;
+        const timerEl = document.getElementById("otpTimer");
+        const timerWrapper = document.getElementById("otpTimerWrapper");
+        const resendBtn = document.getElementById("btnResendOtp");
+
+        timerWrapper.classList.remove("hidden");
+        resendBtn.classList.add("hidden");
+
+        otpTimerInterval = setInterval(() => {
+            const minutes = Math.floor(timer / 60);
+            const seconds = timer % 60;
+            timerEl.textContent = `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+
+            if (--timer < 0) {
+                clearInterval(otpTimerInterval);
+                timerWrapper.classList.add("hidden");
+                resendBtn.classList.remove("hidden");
+            }
+        }, 1000);
+    }
+
+    // منطق جابجایی خودکار اینپوت‌های ۵ رقمی
+    const otpDigits = document.querySelectorAll(".otp-digit");
+    otpDigits.forEach((input, index) => {
+        input.addEventListener("input", (e) => {
+            e.target.value = toEnglishDigits(e.target.value).replace(/[^0-9]/g, "");
+            if (e.target.value.length === 1 && index < otpDigits.length - 1) {
+                otpDigits[index + 1].focus();
+            }
+            if (getEnteredOtp().length === 5) {
+                handleVerifyOtp();
+            }
+        });
+
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Backspace" && !e.target.value && index > 0) {
+                otpDigits[index - 1].focus();
+            }
+        });
+
+        input.addEventListener("paste", (e) => {
+            e.preventDefault();
+            const pasteData = toEnglishDigits((e.clipboardData || window.clipboardData).getData("text")).replace(/[^0-9]/g, "").slice(0, 5);
+            pasteData.split("").forEach((char, i) => {
+                if (otpDigits[i]) otpDigits[i].value = char;
+            });
+            if (pasteData.length > 0) {
+                const nextFocus = Math.min(pasteData.length, otpDigits.length - 1);
+                otpDigits[nextFocus].focus();
+            }
+            if (pasteData.length === 5) {
+                handleVerifyOtp();
+            }
+        });
+    });
+
+    function getEnteredOtp() {
+        let code = "";
+        otpDigits.forEach(input => { code += input.value.trim(); });
+        return code;
+    }
+
+    async function handleSendOtp() {
+        hideOtpAlert();
+        const phoneInput = document.getElementById("otpPhoneNumber");
+        const phone = toEnglishDigits(phoneInput.value.trim());
+        const sendBtn = document.getElementById("btnSendOtp");
+
+        if (!/^09\d{9}$/.test(phone)) {
+            showOtpAlert("لطفاً شماره موبایل معتبر ۱۱ رقمی وارد کنید (مثال: 09123456789)");
+            return;
+        }
+
+        currentOtpPhone = phone;
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> در حال ارسال...';
+
+        try {
+            const response = await fetch("{% url 'accounts:send_otp' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken")
+                },
+                body: JSON.stringify({ phone_number: phone })
+            });
+            const data = await response.json();
+
+            if (response.ok && data.status === "success") {
+                document.getElementById("otpStepPhone").classList.add("hidden");
+                document.getElementById("otpStepCode").classList.remove("hidden");
+                document.getElementById("otpDisplayPhone").textContent = phone;
+                document.getElementById("otpModalTitle").textContent = "کد تأیید را وارد کنید";
+                document.getElementById("otpModalSubtitle").textContent = "کد ۵ رقمی پیامک شده را وارد نمایید";
+                
+                // پاک‌کردن کدهای قبلی و فوکوس روی خانه اول
+                otpDigits.forEach(i => i.value = "");
+                otpDigits[0].focus();
+                
+                startTimer(data.expires_in || 180);
+            } else {
+                showOtpAlert(data.message || "خطایی در ارسال کد رخ داد.");
+            }
+        } catch (err) {
+            showOtpAlert("خطا در برقراری ارتباط با سرور.");
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<span>دریافت کد تأیید</span><i class="fa-solid fa-arrow-left text-xs"></i>';
+        }
+    }
+
+    async function handleVerifyOtp() {
+        hideOtpAlert();
+        const code = getEnteredOtp();
+        const verifyBtn = document.getElementById("btnVerifyOtp");
+
+        if (code.length !== 5) {
+            showOtpAlert("لطفاً کد ۵ رقمی را به‌طور کامل وارد کنید.");
+            return;
+        }
+
+        verifyBtn.disabled = true;
+        verifyBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> در حال بررسی...';
+
+        try {
+            const response = await fetch("{% url 'accounts:verify_otp' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken")
+                },
+                body: JSON.stringify({ phone_number: currentOtpPhone, code: code })
+            });
+            const data = await response.json();
+
+            if (response.ok && data.status === "success") {
+                showOtpAlert("ورود موفقیت‌آمیز! در حال انتقال...", "success");
+                
+                // بررسی وجود پارامتر ?next در آدرس فعلی
+                const urlParams = new URLSearchParams(window.location.search);
+                const nextUrl = urlParams.get("next");
+                
+                setTimeout(() => {
+                    if (nextUrl) {
+                        window.location.href = nextUrl;
+                    } else {
+                        window.location.reload();
+                    }
+                }, 800);
+            } else {
+                showOtpAlert(data.message || "کد وارد شده صحیح نمی‌باشد.");
+                otpDigits.forEach(i => i.value = "");
+                otpDigits[0].focus();
+            }
+        } catch (err) {
+            showOtpAlert("خطا در برقراری ارتباط با سرور.");
+        } finally {
+            verifyBtn.disabled = false;
+            verifyBtn.innerHTML = '<span>تأیید و ورود</span><i class="fa-solid fa-check text-xs"></i>';
+        }
+    }
+</script>
+

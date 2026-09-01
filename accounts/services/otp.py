@@ -1,145 +1,169 @@
 # accounts/services/otp.py
-import re
-import secrets
 import hashlib
-from typing import Tuple, Optional
-from django.core.cache import cache
+import hmac
+import logging
+import secrets
+import time
 from django.conf import settings
+from django.core.cache import cache
+from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 class OTPService:
-    """
-    Production-Ready OTP Service with Hashing, Cooldown, Rate Limiting and Brute-force protection.
-    """
-
-    OTP_EXPIRY_SECONDS = 180  # 3 minutes lifetime
-    COOLDOWN_SECONDS = 120  # 2 minutes wait before resend
-    MAX_ATTEMPTS = 5  # Max invalid verification attempts before lock
-    MAX_DAILY_REQUESTS = 10  # Max OTP requests per phone per day
-
-    PHONE_REGEX = re.compile(r"^09\d{9}$")
-
-    @classmethod
-    def normalize_phone(cls, phone: str) -> str:
-        """Sanitize and validate Iranian phone numbers."""
-        if not phone:
-            return ""
-        phone = phone.strip()
-        # Convert Persian/Arabic digits to English digits
-        persian_digits = "۰۱۲۳۴۵۶۷۸۹"
-        arabic_digits = "٠١٢٣٤٥٦٧٨٩"
-        for i in range(10):
-            phone = phone.replace(persian_digits[i], str(i)).replace(
-                arabic_digits[i], str(i)
-            )
-        return phone
-
-    @classmethod
-    def validate_phone(cls, phone: str) -> bool:
-        return bool(cls.PHONE_REGEX.match(phone))
+    OTP_EXPIRY_SECONDS = 180
+    COOLDOWN_SECONDS = 120
+    MAX_ATTEMPTS = 5
+    MAX_DAILY_REQUESTS = 10
 
     @classmethod
     def _get_cache_keys(cls, phone: str) -> dict:
+        today_str = timezone.localdate().strftime("%Y-%m-%d")
         return {
             "otp_hash": f"otp:hash:{phone}",
-            "cooldown": f"otp:cooldown:{phone}",
+            "cooldown_end": f"otp:cooldown:{phone}",
             "attempts": f"otp:attempts:{phone}",
-            "daily_count": f"otp:daily:{phone}",
+            "daily_count": f"otp:daily:{phone}:{today_str}",
         }
 
-    @classmethod
-    def _hash_code(cls, code: str, phone: str) -> str:
-        secret_salt = getattr(settings, "SECRET_KEY", "default-salt")
-        payload = f"{phone}:{code}:{secret_salt}".encode("utf-8")
-        return hashlib.sha256(payload).hexdigest()
+    @staticmethod
+    def normalize_phone(phone: str) -> str:
+        """استانداردسازی ارقام فارسی/عربی و حذف کاراکترهای اضافه"""
+        if not phone:
+            return ""
+        persian_digits = "۰۱۲۳۴۵۶۷۸۹"
+        arabic_digits = "٠١٢٣٤٥٦٧٨٩"
+        english_digits = "0123456789"
+        trans = str.maketrans(persian_digits + arabic_digits, english_digits * 2)
+        phone = phone.translate(trans).strip().replace(" ", "").replace("-", "")
+
+        if phone.startswith("+98"):
+            phone = "0" + phone[3:]
+        elif phone.startswith("98"):
+            phone = "0" + phone[2:]
+        elif len(phone) == 10 and phone.startswith("9"):
+            phone = "0" + phone
+
+        return phone
 
     @classmethod
-    def send_otp(cls, raw_phone: str) -> Tuple[bool, str, int]:
-        """
-        Generates and prepares OTP for sending.
-        Returns: (success: bool, message: str, remaining_cooldown: int)
-        """
+    def _hash_code(cls, phone: str, code: str) -> str:
+        """تولید هش امن HMAC-SHA256 وابسته به Secret Key پروژه"""
+        key = settings.SECRET_KEY.encode("utf-8")
+        msg = f"{phone}:{code}".encode("utf-8")
+        return hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+    @classmethod
+    def _dispatch_sms(cls, phone: str, code: str) -> bool:
+        """ارسال پیامک از طریق درگاه / لاگ سیستم در محیط توسعه"""
+        logger.info(f"[OTP Service] OTP code for {phone}: {code}")
+        # اینجا لاجیک اتصال به Kavenegar / FarazSMS قرار می‌گیرد
+        return True
+
+    @classmethod
+    def send_otp(cls, raw_phone: str) -> tuple[bool, str, int]:
+        """ارسال یا بازفرستادن کد یکبار مصرف با کنترل Cooldown و سهمیه روزانه"""
         phone = cls.normalize_phone(raw_phone)
-        if not cls.validate_phone(phone):
-            return False, "شماره موبایل وارد شده معتبر نمی‌باشد (مثال: 09123456789).", 0
+        if not (phone.startswith("09") and len(phone) == 11 and phone.isdigit()):
+            return False, "شماره موبایل وارد شده معتبر نیست (مثال: ۰۹۱۲۳۴۵۶۷۸۹)", 0
 
         keys = cls._get_cache_keys(phone)
 
-        # 1. Check Cooldown
-        cooldown = cache.get(keys["cooldown"])
-        if cooldown:
-            return False, "لطفاً تا پایان زمان تعیین‌شده شکیبا باشید.", cooldown
+        # ۱. بررسی زمان انتظار مجدد (Cooldown)
+        cooldown_end = cache.get(keys["cooldown_end"])
+        if cooldown_end:
+            remaining = int(cooldown_end - time.time())
+            if remaining > 0:
+                return (
+                    False,
+                    f"لطفاً {remaining} ثانیه دیگر مجدداً تلاش کنید.",
+                    remaining,
+                )
 
-        # 2. Check Daily Limit
+        # ۲. بررسی سقف ارسال روزانه
         daily_count = cache.get(keys["daily_count"], 0)
         if daily_count >= cls.MAX_DAILY_REQUESTS:
-            return False, "تعداد درخواست‌های پیامک برای امروز به سقف مجاز رسیده است.", 0
+            return (
+                False,
+                "تعداد درخواست‌های پیامک برای این شماره در امروز به سقف مجاز رسیده است.",
+                0,
+            )
 
-        # 3. Generate 5-digit secure OTP code
-        code = str(secrets.randbelow(90000) + 10000)
-        hashed_code = cls._hash_code(code, phone)
+        # ۳. تولید کد تصادفی ۶ رقمی ایمن
+        code = str(secrets.randbelow(900000) + 100000)
+        code_hash = cls._hash_code(phone, code)
 
-        # 4. Save to Cache
-        cache.set(keys["otp_hash"], hashed_code, timeout=cls.OTP_EXPIRY_SECONDS)
-        cache.set(keys["cooldown"], cls.COOLDOWN_SECONDS, timeout=cls.COOLDOWN_SECONDS)
+        # ۴. ذخیره در کش
+        now = time.time()
+        cache.set(keys["otp_hash"], code_hash, timeout=cls.OTP_EXPIRY_SECONDS)
+        cache.set(
+            keys["cooldown_end"],
+            now + cls.COOLDOWN_SECONDS,
+            timeout=cls.COOLDOWN_SECONDS,
+        )
         cache.set(keys["attempts"], 0, timeout=cls.OTP_EXPIRY_SECONDS)
-        cache.set(keys["daily_count"], daily_count + 1, timeout=86400)  # 24 hours
 
-        # 5. Dispatch SMS (Mock or Provider)
-        cls._dispatch_sms(phone, code)
+        # سهمیه روزانه (با طول عمر ۲۴ ساعت)
+        try:
+            cache.incr(keys["daily_count"])
+        except ValueError:
+            cache.set(keys["daily_count"], 1, timeout=86400)
 
-        return True, "کد تأیید با موفقیت ارسال شد.", cls.COOLDOWN_SECONDS
+        # ۵. ارسال پیامک با مدیریت خطا و رول‌بک کش
+        try:
+            sms_sent = cls._dispatch_sms(phone, code)
+            if not sms_sent:
+                raise Exception("SMS gateway failed.")
+        except Exception as err:
+            logger.exception(f"Failed to dispatch SMS to {phone}: {err}")
+            cache.delete_many(
+                [keys["otp_hash"], keys["cooldown_end"], keys["attempts"]]
+            )
+            return False, "خطا در ارسال پیامک. لطفاً دقایقی دیگر تلاش کنید.", 0
+
+        return (
+            True,
+            f"کد تأیید به شماره {phone} پیامک شد.",
+            cls.COOLDOWN_SECONDS,
+        )
 
     @classmethod
-    def verify_otp(cls, raw_phone: str, code: str) -> Tuple[bool, str]:
-        """
-        Verifies the user-submitted OTP with Brute-force protection.
-        Returns: (success: bool, message: str)
-        """
+    def verify_otp(cls, raw_phone: str, code: str) -> tuple[bool, str]:
+        """اعتبارسنجی کد ارسالی و بررسی محافظت Brute-force"""
         phone = cls.normalize_phone(raw_phone)
-        code = (code or "").strip()
+        code = cls.normalize_phone(code)
 
-        if not cls.validate_phone(phone) or not (code.isdigit() and len(code) == 5):
-            return False, "کد تأیید یا شماره موبایل نامعتبر است."
+        if not phone or not code or len(code) != 6:
+            return False, "کد وارد شده باید ۶ رقم باشد."
 
         keys = cls._get_cache_keys(phone)
         stored_hash = cache.get(keys["otp_hash"])
 
         if not stored_hash:
-            return False, "کد تأیید منقضی شده یا درخواستی ثبت نشده است."
-
-        attempts = cache.get(keys["attempts"], 0)
-        if attempts >= cls.MAX_ATTEMPTS:
-            # Purge OTP on brute force
-            cache.delete(keys["otp_hash"])
-            cache.delete(keys["attempts"])
             return (
                 False,
-                "تعداد تلاش‌های ناموفق بیش از حد مجاز بود. لطفاً کد جدید دریافت کنید.",
+                "کد تأیید منقضی شده یا درخواست نشده است. لطفاً مجدداً درخواست کد دهید.",
             )
 
-        submitted_hash = cls._hash_code(code, phone)
+        attempts = cache.get(keys["attempts"], 0)
 
-        # Constant-time comparison to protect against timing attacks
-        if secrets.compare_digest(stored_hash, submitted_hash):
-            # Success: invalidate OTP immediately to prevent reuse
-            cache.delete(keys["otp_hash"])
-            cache.delete(keys["attempts"])
-            cache.delete(keys["cooldown"])
-            return True, "احراز هویت با موفقیت انجام شد."
+        # بررسی کد با تابع امن زمانی secrets.compare_digest
+        user_hash = cls._hash_code(phone, code)
+        if secrets.compare_digest(stored_hash, user_hash):
+            # کد صحیح است -> پاکسازی وضعیت کد و تلاش‌ها
+            cache.delete_many([keys["otp_hash"], keys["attempts"]])
+            return True, "کد تأیید شد."
 
-        # Increment failed attempts
-        cache.set(keys["attempts"], attempts + 1, timeout=cls.OTP_EXPIRY_SECONDS)
-        remaining = cls.MAX_ATTEMPTS - (attempts + 1)
+        # کد اشتباه است -> افزایش تعداد تلاش‌های ناموفق
+        attempts += 1
+        if attempts >= cls.MAX_ATTEMPTS:
+            cache.delete_many([keys["otp_hash"], keys["attempts"]])
+            return (
+                False,
+                "تعداد تلاش‌های ناموفق بیش از حد مجاز بود. کد باطل شد، لطفاً مجدداً کد دریافت کنید.",
+            )
+
+        cache.set(keys["attempts"], attempts, timeout=cls.OTP_EXPIRY_SECONDS)
+        remaining = cls.MAX_ATTEMPTS - attempts
         return False, f"کد وارد شده اشتباه است. ({remaining} تلاش باقی‌مانده)"
-
-    @classmethod
-    def _dispatch_sms(cls, phone: str, code: str):
-        """
-        SMS Provider handler. Outputs to console in development.
-        """
-        # In Development:
-        print(
-            f"\n{'='*50}\n[SMS SERVICE MOCK]\nTo: {phone}\nOTP Code: {code}\n{'='*50}\n"
-        )
-        # In Production: Hook to SMS Gateway API (Kavenegar, Ghasedak, etc.)

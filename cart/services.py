@@ -1,9 +1,8 @@
+# cart/service
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from cart.models import Cart, CartItem
-
-# cart/service
 
 
 @transaction.atomic
