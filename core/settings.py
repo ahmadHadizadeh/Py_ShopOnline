@@ -11,13 +11,17 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+# بارگذاری فایل .env از ریشه پروژه
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / ".env")
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "django-insecure-q4b&o*i((s@30))qq-jn+%_615zk_rmog$d-ibk1_$b+=4#_do"
@@ -134,3 +138,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 # Default primary key field type
 # DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# SMS.ir Configuration
+SMSIR_CONFIG = {
+    "API_KEY": os.getenv("SMSIR_API_KEY", "").strip(),
+    "TEMPLATE_ID": int(os.getenv("SMSIR_TEMPLATE_ID", "358253") or 358253),
+}
