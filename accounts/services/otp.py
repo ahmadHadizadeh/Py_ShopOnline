@@ -181,7 +181,7 @@ class SMSIRService:
 
         if data.get("status") == 1:
             if data.get("status") == 1:
-                logger.info("[SMS.ir] Code sent to %s. data=%s", norm_mobile, data)
+                logger.info( "[SMS.ir] Code sent to %s. data=%s", norm_mobile, data)
                 return True, "کد تایید پیامک شد."
 
             return True, "کد تأیید با موفقیت پیامک شد."
