@@ -13,7 +13,12 @@ class Profile(models.Model):
         verbose_name=_("کاربر"),
     )
     phone_number = models.CharField(
-        max_length=15, unique=True, db_index=True, verbose_name=_("شماره موبایل")
+        max_length=15,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("شماره موبایل"),
     )
     is_verified = models.BooleanField(default=False, verbose_name=_("تایید شده"))
     otp_code = models.CharField(

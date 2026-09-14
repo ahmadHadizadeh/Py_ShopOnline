@@ -1,35 +1,417 @@
 import pytest
 from django.urls import reverse
 from cart.models import Cart, CartItem
-from catalog.models.category import  Category
-from catalog.models.product import  Product  
+from catalog.models.product import Product
+
+
+from django.test import TestCase
+
+from accounts.models.address import Address
+from catalog.models.category import Category
+from catalog.models.variant import ProductVariant
+from orders.models.order_item import OrderItem
+from orders.models.shipping import ShippingMethod
+from orders.services import OrderService
+
 
 @pytest.mark.django_db
 def test_cart_scenarios(client):
     # ۱. ساخت دسته‌بندی (الزامی برای دیتابیس)
     category = Category.objects.create(name="Test Category", slug="test-cat")
-    
+
     # ۲. ساخت محصول با دسته‌بندی
     product = Product.objects.create(
-        name="Test", 
-        slug="test", 
-        price=1000, 
-        stock=5, 
-        is_active=True, 
-        category=category  # اضافه شد
+        name="Test",
+        slug="test",
+        price=1000,
+        stock=5,
+        is_active=True,
+        category=category,  # اضافه شد
     )
-    
+
     # بقیه کد تست مثل قبل...
     client.post(reverse("cart:add", args=[product.id]), {"quantity": 2})
     cart = Cart.objects.first()
     assert cart.items.get(product=product).quantity == 2
-    
+
     item = cart.items.get(product=product)
     client.post(reverse("cart:update_item", args=[item.id]), {"quantity": 4})
     assert cart.items.get(product=product).quantity == 4
-    
+
     client.post(reverse("cart:save_for_later", args=[item.id]))
     assert cart.items.get(product=product).status == CartItem.STATUS_SAVED
-    
+
     client.post(reverse("cart:move_to_cart", args=[item.id]))
     assert cart.items.get(product=product).status == CartItem.STATUS_ACTIVE
+
+
+@pytest.mark.django_db
+def test_cart_supports_multiple_variants_per_product(client):
+    category = Category.objects.create(name="Variant Category", slug="variant-cat")
+    product = Product.objects.create(
+        name="Variant Product",
+        slug="variant-product",
+        price=1000,
+        stock=10,
+        is_active=True,
+        category=category,
+    )
+    from catalog.models.variant import ProductVariant
+
+    red = ProductVariant.objects.create(
+        product=product, name="رنگ", value="قرمز", price_adjustment=100
+    )
+    blue = ProductVariant.objects.create(
+        product=product, name="رنگ", value="آبی", price_adjustment=200
+    )
+
+    client.post(
+        reverse("cart:add", args=[product.id]), {"quantity": 1, "variant_id": red.id}
+    )
+    client.post(
+        reverse("cart:add", args=[product.id]), {"quantity": 2, "variant_id": blue.id}
+    )
+
+    cart = Cart.objects.first()
+    assert cart.items.count() == 2
+    assert cart.items.get(variant=red).unit_price_snapshot == 1100
+    assert cart.items.get(variant=blue).unit_price_snapshot == 1200
+
+
+@pytest.mark.django_db
+def test_cart_requires_variant_when_product_has_variants(client):
+    category = Category.objects.create(
+        name="Required Variant Category", slug="required-variant-cat"
+    )
+    product = Product.objects.create(
+        name="Required Variant Product",
+        slug="required-variant-product",
+        price=1000,
+        stock=10,
+        is_active=True,
+        category=category,
+    )
+    from catalog.models.variant import ProductVariant
+
+    ProductVariant.objects.create(product=product, name="حافظه", value="256GB")
+
+    response = client.post(reverse("cart:add", args=[product.id]), {"quantity": 1})
+    assert response.status_code == 302
+    cart = Cart.objects.first()
+    assert cart is None or cart.items.count() == 0
+
+
+@pytest.mark.django_db
+def test_order_receives_cart_variant_snapshot(client, django_user_model):
+    user = django_user_model.objects.create_user(
+        username="variant-user", password="testpass"
+    )
+    client.force_login(user)
+    category = Category.objects.create(
+        name="Order Variant Category", slug="order-variant-cat"
+    )
+    product = Product.objects.create(
+        name="Order Variant Product",
+        slug="order-variant-product",
+        price=1000,
+        stock=10,
+        is_active=True,
+        category=category,
+    )
+    from catalog.models.variant import ProductVariant
+    from accounts.models.address import Address
+    from orders.models.shipping import ShippingMethod
+    from orders.models.order_item import OrderItem
+    from orders.services import OrderService
+
+    variant = ProductVariant.objects.create(
+        product=product, name="رنگ", value="قرمز", price_adjustment=250
+    )
+    cart = Cart.objects.create(user=user, status=Cart.STATUS_ACTIVE)
+    CartItem.objects.create(
+        cart=cart,
+        product=product,
+        variant=variant,
+        quantity=2,
+        unit_price_snapshot=1250,
+        status=CartItem.STATUS_ACTIVE,
+    )
+    address = Address.objects.create(
+        user=user,
+        recipient_name="Test",
+        phone_number="09123456789",
+        postal_code="1234567890",
+        province="تهران",
+        city="تهران",
+        address_line="Test Address",
+    )
+    shipping = ShippingMethod.objects.create(name="Test", cost=0, is_active=True)
+
+    order = OrderService.create_order(
+        user=user, cart=cart, shipping_address=address, shipping_method=shipping
+    )
+    item = OrderItem.objects.get(order=order)
+    assert item.variant_id == variant.id
+    assert item.variant_name == "رنگ: قرمز"
+    assert item.unit_price == 1250
+    cart.refresh_from_db()
+    assert cart.status == Cart.STATUS_ORDERED
+    assert cart.items.count() == 1
+
+
+class CartVariantIntegrationTests(TestCase):
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+
+        self.user = User.objects.create_user(
+            username="variant-integration-user",
+            password="testpass123",
+        )
+
+        self.client.force_login(self.user)
+
+        self.category = Category.objects.create(
+            name="Integration Category",
+            slug="integration-category",
+        )
+
+        self.product = Product.objects.create(
+            name="Integration Product",
+            slug="integration-product",
+            price=1000,
+            stock=10,
+            is_active=True,
+            category=self.category,
+        )
+
+        self.red_variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=100,
+        )
+
+        self.blue_variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=200,
+        )
+
+    def test_multiple_variants_can_exist_in_cart_for_same_product(self):
+        self.client.post(
+            reverse("cart:add", args=[self.product.id]),
+            {
+                "quantity": 1,
+                "variant_id": self.red_variant.id,
+            },
+        )
+
+        self.client.post(
+            reverse("cart:add", args=[self.product.id]),
+            {
+                "quantity": 2,
+                "variant_id": self.blue_variant.id,
+            },
+        )
+
+        cart = Cart.objects.get(
+            user=self.user,
+            status=Cart.STATUS_ACTIVE,
+        )
+
+        self.assertEqual(
+            cart.items.filter(product=self.product).count(),
+            2,
+        )
+
+        red_item = cart.items.get(variant=self.red_variant)
+        blue_item = cart.items.get(variant=self.blue_variant)
+
+        self.assertEqual(red_item.quantity, 1)
+        self.assertEqual(red_item.unit_price_snapshot, 1100)
+
+        self.assertEqual(blue_item.quantity, 2)
+        self.assertEqual(blue_item.unit_price_snapshot, 1200)
+
+    def test_order_preserves_variant_snapshot(self):
+        cart = Cart.objects.create(
+            user=self.user,
+            status=Cart.STATUS_ACTIVE,
+        )
+
+        CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            variant=self.red_variant,
+            quantity=2,
+            unit_price_snapshot=1100,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        address = Address.objects.create(
+            user=self.user,
+            recipient_name="Test User",
+            phone_number="09123456789",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="Test Address",
+        )
+
+        shipping_method = ShippingMethod.objects.create(
+            name="Test Shipping",
+            cost=0,
+            is_active=True,
+        )
+
+        order = OrderService.create_order(
+            user=self.user,
+            cart=cart,
+            shipping_address=address,
+            shipping_method=shipping_method,
+        )
+
+        order_item = OrderItem.objects.get(order=order)
+
+        self.assertEqual(order_item.variant_id, self.red_variant.id)
+        self.assertEqual(order_item.variant_name, "رنگ: قرمز")
+        self.assertEqual(order_item.unit_price, 1100)
+
+        cart.refresh_from_db()
+
+        self.assertEqual(cart.status, Cart.STATUS_ORDERED)
+
+
+class CheckoutVariantIntegrationTests(TestCase):
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+
+        self.user = User.objects.create_user(
+            username="checkout-variant-user",
+            password="testpass123",
+        )
+
+        self.category = Category.objects.create(
+            name="Checkout Category",
+            slug="checkout-category",
+        )
+
+        self.product = Product.objects.create(
+            name="Checkout Variant Product",
+            slug="checkout-variant-product",
+            price=1000,
+            stock=10,
+            is_active=True,
+            category=self.category,
+        )
+
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=250,
+        )
+
+        self.cart = Cart.objects.create(
+            user=self.user,
+            status=Cart.STATUS_ACTIVE,
+        )
+
+        CartItem.objects.create(
+            cart=self.cart,
+            product=self.product,
+            variant=self.variant,
+            quantity=2,
+            unit_price_snapshot=1250,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        self.shipping_method = ShippingMethod.objects.create(
+            name="Checkout Test Shipping",
+            cost=100,
+            is_active=True,
+        )
+
+        self.client.force_login(self.user)
+
+    def test_checkout_creates_order_with_variant_snapshot(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            {
+                "shipping_method_id": self.shipping_method.id,
+                "recipient_name": "کاربر تست",
+                "phone_number": "09123456789",
+                "postal_code": "1234567890",
+                "province": "تهران",
+                "city": "تهران",
+                "address_line": "آدرس تست",
+                "is_default": False,
+                "customer_note": "تست Checkout",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/orders/order/confirm/", response.url)
+
+        self.cart.refresh_from_db()
+
+        self.assertEqual(
+            self.cart.status,
+            Cart.STATUS_ORDERED,
+        )
+
+        order = self.cart.orders.get()
+
+        self.assertEqual(
+            order.subtotal_amount,
+            2500,
+        )
+
+        self.assertEqual(
+            order.shipping_amount,
+            100,
+        )
+
+        self.assertEqual(
+            order.final_amount,
+            2600,
+        )
+
+        order_item = order.items.get()
+
+        self.assertEqual(
+            order_item.variant_id,
+            self.variant.id,
+        )
+
+        self.assertEqual(
+            order_item.variant_name,
+            "رنگ: قرمز",
+        )
+
+        self.assertEqual(
+            order_item.quantity,
+            2,
+        )
+
+        self.assertEqual(
+            order_item.unit_price,
+            1250,
+        )
+
+        self.assertEqual(
+            order_item.subtotal_price,
+            2500,
+        )
+
+        self.assertEqual(
+            order.payment.amount,
+            2600,
+        )

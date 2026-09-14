@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.http import HttpResponse
 from catalog.models import Product
+from catalog.models.variant import ProductVariant
 from .models import CartItem, Cart
 from django.db import transaction
 from django.urls import reverse
@@ -22,9 +23,12 @@ from decimal import Decimal
 from cart.services import (
     add_product_to_cart,
     get_or_create_cart,
+    remove_cart_item as remove_cart_item_service,
     remove_product_from_cart,
     toggle_cart_item_status,
+    toggle_cart_item_status_by_id,
     update_cart_item_quantity,
+    update_cart_item_quantity_by_id,
 )
 from django.core.exceptions import ValidationError
 from orders.services import OrderService
@@ -43,10 +47,10 @@ def cart_detail(request):
     cart = get_or_create_cart(request)
 
     active_items = (
-        cart.items.filter(status=CartItem.STATUS_ACTIVE).select_related("product").all()
+        cart.items.filter(status=CartItem.STATUS_ACTIVE).select_related("product", "variant").all()
     )
     saved_items = (
-        cart.items.filter(status=CartItem.STATUS_SAVED).select_related("product").all()
+        cart.items.filter(status=CartItem.STATUS_SAVED).select_related("product", "variant").all()
     )
 
     context = {
@@ -66,10 +70,22 @@ def add_to_cart(request, product_id):
         return redirect(product.get_absolute_url())
 
     quantity = max(1, _parse_quantity(request.POST.get("quantity", 1), default=1))
+    variant_id = request.POST.get("variant_id") or None
+    variant = None
+
+    if variant_id:
+        variant = get_object_or_404(
+            ProductVariant.objects.select_related("product"),
+            pk=variant_id,
+            product=product,
+        )
+
     cart = get_or_create_cart(request)
 
     try:
-        add_product_to_cart(cart=cart, product=product, quantity=quantity)
+        add_product_to_cart(
+            cart=cart, product=product, quantity=quantity, variant=variant
+        )
     except ValidationError as exc:
         messages.error(request, exc.message)
         return redirect(product.get_absolute_url())
@@ -91,15 +107,13 @@ def update_cart_item(request, item_id):
     quantity = _parse_quantity(request.POST.get("quantity", 1), default=1)
 
     if quantity <= 0:
-        remove_product_from_cart(cart=cart, product_id=item.product_id)
+        remove_cart_item_service(cart=cart, item_id=item.id)
         messages.info(request, "محصول از سبد خرید حذف شد.")
         return redirect("cart:detail")
 
     try:
-        update_cart_item_quantity(
-            cart=cart,
-            product_id=item.product_id,
-            quantity=quantity,
+        update_cart_item_quantity_by_id(
+            cart=cart, item_id=item.id, quantity=quantity
         )
     except ValidationError as exc:
         messages.error(request, exc.message)
@@ -114,7 +128,7 @@ def remove_cart_item(request, item_id):
     cart = get_or_create_cart(request)
 
     item = get_object_or_404(CartItem, pk=item_id, cart=cart)
-    remove_product_from_cart(cart=cart, product_id=item.product_id)
+    remove_cart_item_service(cart=cart, item_id=item.id)
 
     messages.info(request, "محصول از سبد خرید حذف شد.")
     return redirect("cart:detail")
@@ -127,10 +141,8 @@ def save_for_later(request, item_id):
     item = get_object_or_404(CartItem, pk=item_id, cart=cart)
 
     try:
-        toggle_cart_item_status(
-            cart=cart,
-            product_id=item.product_id,
-            to_status=CartItem.STATUS_SAVED,
+        toggle_cart_item_status_by_id(
+            cart=cart, item_id=item.id, to_status=CartItem.STATUS_SAVED
         )
     except ValidationError as exc:
         messages.error(request, exc.message)
@@ -151,10 +163,8 @@ def move_to_cart(request, item_id):
     )
 
     try:
-        toggle_cart_item_status(
-            cart=cart,
-            product_id=item.product_id,
-            to_status=CartItem.STATUS_ACTIVE,
+        toggle_cart_item_status_by_id(
+            cart=cart, item_id=item.id, to_status=CartItem.STATUS_ACTIVE
         )
     except ValidationError as exc:
         messages.error(request, exc.message)
@@ -201,6 +211,7 @@ class CheckoutView(View):
     def get_cart_queryset(self):
         return Cart.objects.prefetch_related(
             "items__product",
+            "items__variant",
         )
 
     def get_cart(self, request, for_update=False):

@@ -119,6 +119,14 @@ class CartItem(models.Model):
         related_name="cart_items",
         verbose_name="محصول",
     )
+    variant = models.ForeignKey(
+        "catalog.ProductVariant",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="cart_items",
+        verbose_name="تنوع محصول",
+    )
     quantity = models.PositiveIntegerField(
         default=1,
         validators=[MinValueValidator(1)],
@@ -138,19 +146,25 @@ class CartItem(models.Model):
     created = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
     updated = models.DateTimeField(auto_now=True, verbose_name="آخرین بروزرسانی")
 
-
     class Meta:
         verbose_name = "آیتم سبد خرید"
         verbose_name_plural = "آیتم‌های سبد خرید"
         indexes = [
-            models.Index(fields=["cart", "product"]),
+            models.Index(fields=["cart", "product", "variant"]),
             models.Index(fields=["product"]),
+            models.Index(fields=["variant"]),
             models.Index(fields=["status"]),
         ]
         constraints = [
             models.UniqueConstraint(
                 fields=["cart", "product"],
-                name="unique_product_per_cart",
+                condition=models.Q(variant__isnull=True),
+                name="unique_product_without_variant_per_cart",
+            ),
+            models.UniqueConstraint(
+                fields=["cart", "product", "variant"],
+                condition=models.Q(variant__isnull=False),
+                name="unique_product_variant_per_cart",
             ),
             models.CheckConstraint(
                 condition=models.Q(quantity__gte=1),
@@ -159,7 +173,8 @@ class CartItem(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.product} × {self.quantity}"
+        suffix = f" / {self.variant}" if self.variant_id else ""
+        return f"{self.product}{suffix} × {self.quantity}"
 
     @property
     def subtotal(self):
@@ -186,19 +201,20 @@ class CartItem(models.Model):
     def clean(self):
         super().clean()
 
+        if self.variant_id and self.variant.product_id != self.product_id:
+            raise ValidationError({"variant": "واریانت انتخاب‌شده متعلق به این محصول نیست."})
+
         if self.status == "active":
             if not self.product.is_available:
-                raise ValidationError(
-                    {"product": "این محصول در حال حاضر قابل خرید نیست."}
-                )
-
+                raise ValidationError({"product": "این محصول در حال حاضر قابل خرید نیست."})
             if self.quantity > self.product.stock:
                 raise ValidationError(
                     {"quantity": "تعداد انتخاب‌شده بیشتر از موجودی محصول است."}
                 )
 
     def save(self, *args, **kwargs):
-        if not self.unit_price_snapshot:
-            self.unit_price_snapshot = self.product.price
-
+        if self.unit_price_snapshot is None:
+            self.unit_price_snapshot = self.product.price + (
+                self.variant.price_adjustment if self.variant_id else Decimal("0")
+            )
         super().save(*args, **kwargs)

@@ -152,43 +152,72 @@ class Order(models.Model):
 
         super().save(*args, **kwargs)
 
+    
     @transaction.atomic
     def reduce_item_stock(self):
         if self.stock_reduced:
             return
-
-        # اطمینان از وجود relation 'items' و 'product'
-        # در صورت نیاز، select_related یا prefetch_related را برای performance اضافه کنید
-        order_items = self.items.select_related("product").all().select_for_update()
-
-        if not order_items.exists():
+    
+        order_items = list(self.items.select_related("product").select_for_update())
+    
+        if not order_items:
+            Order.objects.filter(pk=self.pk).update(
+                stock_reduced=True,
+            )
             self.stock_reduced = True
-            Order.objects.filter(pk=self.pk).update(stock_reduced=True)
             return
-
+    
+        # ابتدا تمام موجودی‌ها را قبل از کوچک‌ترین تغییر بررسی می‌کنیم.
+        # بنابراین در صورت کمبود موجودی هیچ محصولی نصفه‌نیمه کاهش پیدا نمی‌کند.
+        locked_products = {}
+    
         for item in order_items:
-            product = item.product
+            if item.product_id is None:
+                raise ValueError(f"محصول آیتم سفارش حذف شده است: order_item={item.pk}")
+    
+            product = type(item.product).objects.select_for_update().get(pk=item.product_id)
+    
+            locked_products[item.product_id] = product
+    
             if product.stock < item.quantity:
                 raise ValueError(
-                    f"موجودی کافی نیست: {product.name}. موجودی: {product.stock}, مقدار: {item.quantity}"
+                    f"موجودی کافی نیست: {product.name}. "
+                    f"موجودی: {product.stock}, مقدار: {item.quantity}"
                 )
-
+    
+        # فقط بعد از اینکه موجودی تمام آیتم‌ها تأیید شد،
+        # عملیات کاهش موجودی انجام می‌شود.
+        for item in order_items:
+            product = locked_products[item.product_id]
+    
             product.stock -= item.quantity
+    
             if product.stock == 0:
                 product.is_available_status = False
-            # بروزرسانی مستقیم در دیتابیس برای کارایی بیشتر
-            product.save(update_fields=["stock", "is_available_status"])
-
-        # بروزرسانی وضعیت و زمان پرداخت فقط در صورتی که قبلاً انجام نشده باشد
-        if self.status == Order.Status.PENDING or self.status == Order.Status.PLACED:
+    
+            product.save(
+                update_fields=[
+                    "stock",
+                    "is_available_status",
+                ]
+            )
+    
+        if self.status in (
+            Order.Status.PENDING,
+            Order.Status.PLACED,
+        ):
             self.status = Order.Status.PAID
+    
             if not self.paid_at:
                 self.paid_at = timezone.now()
-
-        # استفاده از update برای کارایی در صورتی که فقط چند فیلد تغییر کند
+    
         Order.objects.filter(pk=self.pk).update(
-            stock_reduced=True, status=self.status, paid_at=self.paid_at
+            stock_reduced=True,
+            status=self.status,
+            paid_at=self.paid_at,
         )
+    
+        self.stock_reduced = True
 
     @staticmethod
     def generate_order_number():

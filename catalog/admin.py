@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models.category import Category
 from .models.product import Product
 from .models.review import Review
-
+from .models.variant import ProductVariant
 from .models.product_media import ProductImage, ProductSpecification
 
 # فیلتر سفارشی برای وضعیت موجودی
@@ -56,3 +56,11 @@ class ReviewAdmin(admin.ModelAdmin):
     list_editable = ['is_approved']
     search_fields = ['product__name', 'user__username', 'comment']
     ordering = ['-created']
+
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = ["product", "name", "value", "price_adjustment"]
+    search_fields = ["product__name", "product__slug", "name", "value"]
+    list_filter = ["name"]
+    ordering = ["product__name", "name", "value"]

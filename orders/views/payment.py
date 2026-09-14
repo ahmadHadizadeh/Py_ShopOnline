@@ -1,5 +1,6 @@
 import logging
-
+import hashlib
+import hmac
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
@@ -9,11 +10,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
-
 from cart.models import Cart
 from orders.models.orders import Order
 from orders.models.payment import Payment
 from decimal import Decimal, InvalidOperation
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -99,12 +100,29 @@ class ProcessPaymentView(LoginRequiredMixin, View):
         return redirect(redirect_url)
 
 
-class PaymentCallbackView(LoginRequiredMixin, TemplateView):
-    login_url = "/accounts/login/"
+class PaymentCallbackView(View):
+    """
+    Stateless payment callback endpoint.
 
-    @transaction.atomic
-    def dispatch(self, request, *args, **kwargs):
-        return super().dispatch(request, *args, **kwargs)
+    Callback ownership is established by the payment transaction identifier,
+    expected amount and cryptographic signature rather than the user's session.
+    """
+
+    @staticmethod
+    def _build_signature(trxid, amount):
+        callback_secret = getattr(
+            settings,
+            "PAYMENT_CALLBACK_SECRET",
+            settings.SECRET_KEY,
+        )
+
+        payload = f"{trxid}:{amount}".encode("utf-8")
+
+        return hmac.new(
+            callback_secret.encode("utf-8"),
+            payload,
+            hashlib.sha256,
+        ).hexdigest()
 
     def get(self, request, *args, **kwargs):
         return self.handle_callback(request)
@@ -115,60 +133,84 @@ class PaymentCallbackView(LoginRequiredMixin, TemplateView):
     def handle_callback(self, request):
         trxid = request.POST.get("trxid") or request.GET.get("trxid")
         status = request.POST.get("status") or request.GET.get("status")
+        gateway_amount = request.POST.get("amount") or request.GET.get("amount")
+        signature = request.POST.get("signature") or request.GET.get("signature")
 
         if not trxid:
             return HttpResponseBadRequest("شناسه تراکنش نامعتبر است.")
 
+        if not status:
+            return HttpResponseBadRequest("وضعیت تراکنش نامعتبر است.")
+
+        if not gateway_amount:
+            return HttpResponseBadRequest("مبلغ تراکنش ارسال نشده است.")
+
+        if not signature:
+            return HttpResponseBadRequest("امضای تراکنش ارسال نشده است.")
+
+        try:
+            normalized_amount = Decimal(str(gateway_amount))
+        except (InvalidOperation, TypeError, ValueError):
+            return HttpResponseBadRequest("مبلغ تراکنش نامعتبر است.")
+
+        expected_signature = self._build_signature(
+            trxid,
+            normalized_amount,
+        )
+
+        if not hmac.compare_digest(
+            signature,
+            expected_signature,
+        ):
+            logger.warning(
+                "Invalid payment callback signature: trxid=%s",
+                trxid,
+            )
+            return HttpResponseBadRequest("امضای تراکنش نامعتبر است.")
+
         try:
             with transaction.atomic():
                 payment = (
-                    Payment.objects.select_related("order", "user")
+                    Payment.objects.select_related("order")
                     .select_for_update()
                     .get(transaction_code=trxid)
                 )
 
-                if payment.user_id != request.user.id:
-                    return HttpResponseBadRequest("دسترسی به این تراکنش مجاز نیست.")
-
                 order = Order.objects.select_for_update().get(pk=payment.order_id)
+
+                if normalized_amount != payment.amount:
+                    logger.warning(
+                        "Payment callback amount mismatch: "
+                        "payment_id=%s trxid=%s expected=%s got=%s",
+                        payment.id,
+                        trxid,
+                        payment.amount,
+                        normalized_amount,
+                    )
+
+                    return HttpResponseBadRequest("مبلغ تراکنش با سفارش مطابقت ندارد.")
 
                 if payment.status == Payment.Status.SUCCESS:
                     return redirect(
-                        reverse(
-                            "orders:payment_success",
-                            kwargs={"order_number": order.order_number},
-                        )
+                        "orders:payment_success",
+                        order_number=order.order_number,
                     )
 
-                gateway_amount = request.POST.get("amount") or request.GET.get("amount")
-                if gateway_amount not in (None, ""):
-                    try:
-                        if Decimal(str(gateway_amount)) != payment.amount:
-                            logger.warning(
-                                "Payment callback amount mismatch: payment_id=%s trxid=%s expected=%s got=%s",
-                                payment.id,
-                                trxid,
-                                payment.amount,
-                                gateway_amount,
-                            )
-                            return HttpResponseBadRequest(
-                                "مبلغ تراکنش با سفارش مطابقت ندارد."
-                            )
-                    except (InvalidOperation, TypeError, ValueError):
-                        return HttpResponseBadRequest("مبلغ تراکنش نامعتبر است.")
-
-                is_success = status == "success"
                 gateway_response = {
                     "trxid": trxid,
                     "status": status,
+                    "amount": str(normalized_amount),
+                    "signature": signature,
                     **request.POST.dict(),
                     **request.GET.dict(),
                 }
 
-                if is_success:
+                if status == "success":
                     ref_id = (
-                        f"REF-{payment.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                        f"REF-{payment.id}-"
+                        f"{timezone.now().strftime('%Y%m%d%H%M%S')}"
                     )
+
                     payment.update_status_and_order(
                         new_status=Payment.Status.SUCCESS,
                         transaction_id=trxid,
@@ -176,15 +218,8 @@ class PaymentCallbackView(LoginRequiredMixin, TemplateView):
                         gateway_response=str(gateway_response),
                     )
 
-                    if order.cart_id:
-                        try:
-                            cart = Cart.objects.select_for_update().get(
-                                pk=order.cart_id
-                            )
-                            cart.items.all().delete()
-                            cart.delete()
-                        except Cart.DoesNotExist:
-                            pass
+                    redirect_name = "orders:payment_success"
+
                 else:
                     payment.update_status_and_order(
                         new_status=Payment.Status.FAILED,
@@ -193,11 +228,11 @@ class PaymentCallbackView(LoginRequiredMixin, TemplateView):
                         gateway_response=str(gateway_response),
                     )
 
+                    redirect_name = "orders:payment_failed"
+
             return redirect(
-                reverse(
-                    "orders:payment_success" if is_success else "orders:payment_failed",
-                    kwargs={"order_number": order.order_number},
-                )
+                redirect_name,
+                order_number=order.order_number,
             )
 
         except Payment.DoesNotExist:

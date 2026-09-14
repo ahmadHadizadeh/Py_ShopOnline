@@ -1,6 +1,7 @@
 # orders/services.py
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment
@@ -9,7 +10,7 @@ from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment
 class OrderService:
     @staticmethod
     def calculate_order_totals(cart, shipping_method=None):
-        """محاسبه دقیق مبالغ سفارش بر اساس سبد خرید و روش ارسال."""
+        """محاسبه دقیق مبالغ سفارش بر اساس آیتم‌های فعال سبد و روش ارسال."""
         subtotal = Decimal(str(cart.total_price))
         discount = Decimal(str(cart.discount_amount))
 
@@ -33,13 +34,26 @@ class OrderService:
     @staticmethod
     @transaction.atomic
     def create_order(user, cart, shipping_address, shipping_method, customer_note=""):
-        """ایجاد اتمیک سفارش، آیتم‌ها، اسنپ‌شات آدرس و رکورد پرداخت."""
+        """ایجاد اتمیک سفارش از آیتم‌های فعال سبد، بدون حذف تاریخچه سبد."""
+        if not user or not getattr(user, "is_authenticated", False):
+            raise ValidationError("برای ثبت سفارش باید وارد حساب کاربری شوید.")
+
+        if cart.user_id != user.id or cart.status != cart.STATUS_ACTIVE:
+            raise ValidationError("سبد خرید معتبر نیست.")
+
+        active_items = list(
+            cart.items.select_for_update()
+            .select_related("product", "variant")
+            .filter(status="active")
+        )
+        if not active_items:
+            raise ValidationError("سبد خرید فعال فاقد آیتم قابل سفارش است.")
 
         totals = OrderService.calculate_order_totals(cart, shipping_method)
 
-        # ۱. ایجاد سفارش اصلی
         order = Order.objects.create(
             user=user,
+            cart=cart,
             order_number=Order.generate_order_number(),
             status=Order.Status.PENDING,
             shipping_method=shipping_method,
@@ -50,7 +64,6 @@ class OrderService:
             customer_note=customer_note,
         )
 
-        # ۲. ایجاد اسنپ‌شات آدرس (نگاشت phone_number به recipient_mobile)
         OrderAddressSnapshot.objects.create(
             order=order,
             recipient_name=shipping_address.recipient_name,
@@ -61,32 +74,26 @@ class OrderService:
             address_line=shipping_address.address_line,
         )
 
-        # ۳. ایجاد آیتم‌های سفارش از سبد خرید
-        order_items = []
-        for item in cart.items.select_related("product").all():
-            # اولویت با قیمت اسنپ‌شات آیتم سبد، سپس واریانت و در نهایت محصول
-            unit_price = item.unit_price_snapshot
-            if not unit_price:
-                unit_price = item.product.price
-
-            order_items.append(
-                OrderItem(
-                    order=order,
-                    product=item.product,
-                    variant_id=None,
-                    product_name=item.product.name,
-                    variant_name="",
-                    sku=getattr(item.product, "sku", ""),
-                    quantity=item.quantity,
-                    unit_price=unit_price,
-                    subtotal_price=unit_price * item.quantity,
-                )
+        order_items = [
+            OrderItem(
+                order=order,
+                product=item.product,
+                variant_id=item.variant_id,
+                product_name=item.product.name,
+                variant_name=(
+                    f"{item.variant.name}: {item.variant.value}"
+                    if item.variant_id
+                    else ""
+                ),
+                sku=getattr(item.product, "sku", ""),
+                quantity=item.quantity,
+                unit_price=item.unit_price_snapshot,
+                subtotal_price=item.subtotal,
             )
+            for item in active_items
+        ]
+        OrderItem.objects.bulk_create(order_items)
 
-        if order_items:
-            OrderItem.objects.bulk_create(order_items)
-
-        # ۴. ایجاد رکورد پرداخت اولیه
         Payment.objects.create(
             order=order,
             user=user,
@@ -94,8 +101,7 @@ class OrderService:
             status=Payment.Status.PENDING,
         )
 
-        # ۵. تغییر وضعیت سبد خرید (حذف فیزیکی انجام نمی‌شود تا در Callback مدیریت شود)
-        # اما آیتم‌های فعال این سبد را پاک می‌کنیم تا سبد برای خرید بعدی آماده شود
-        cart.items.all().delete()
+        cart.status = cart.STATUS_ORDERED
+        cart.save(update_fields=["status", "updated"])
 
         return order

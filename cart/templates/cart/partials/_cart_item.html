@@ -13,6 +13,9 @@
         <a href="{{ item.product.get_absolute_url }}" class="font-bold text-gray-900 hover:text-indigo-600">
             {{ item.product.name }}
         </a>
+        {% if item.variant %}
+            <span class="mt-1 text-xs font-bold text-gray-500">{{ item.variant.name }}: {{ item.variant.value }}</span>
+        {% endif %}
 
         <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm mt-2">
             <span class="text-gray-500">

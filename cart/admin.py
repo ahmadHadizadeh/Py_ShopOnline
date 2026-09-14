@@ -7,7 +7,7 @@ class CartItemInline(admin.TabularInline):
     model = CartItem
     extra = 0
     readonly_fields = ("unit_price_snapshot", "subtotal", "created", "updated")
-    autocomplete_fields = ("product",)
+    autocomplete_fields = ("product", "variant")
 
 
 @admin.register(Cart)
@@ -21,8 +21,8 @@ class CartAdmin(admin.ModelAdmin):
 
 @admin.register(CartItem)
 class CartItemAdmin(admin.ModelAdmin):
-    list_display = ("id", "cart", "product", "quantity", "unit_price_snapshot", "subtotal", "created")
+    list_display = ("id", "cart", "product", "variant", "quantity", "unit_price_snapshot", "subtotal", "created")
     list_filter = ("created", "updated")
-    search_fields = ("product__name", "product__slug", "cart__session_key", "cart__user__username")
-    autocomplete_fields = ("cart", "product")
+    search_fields = ("product__name", "variant__name", "variant__value", "product__slug", "cart__session_key", "cart__user__username")
+    autocomplete_fields = ("cart", "product", "variant")
     readonly_fields = ("subtotal", "created", "updated")

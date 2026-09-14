@@ -143,3 +143,8 @@ SMSIR_CONFIG = {
     "API_KEY": os.getenv("SMSIR_API_KEY", "").strip(),
     "TEMPLATE_ID": int(os.getenv("SMSIR_TEMPLATE_ID", "358253") or 358253),
 }
+
+PAYMENT_CALLBACK_SECRET = os.getenv(
+    "PAYMENT_CALLBACK_SECRET",
+    SECRET_KEY,
+)

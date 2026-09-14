@@ -1,7 +1,24 @@
 {% extends "catalog/base.html" %}
 {% load static %}
 
-{% block title %}{{ product.name }} | جزئیات محصول{% endblock %}
+{% block title %}{{ product.name }} | جزئیات محصول
+<script>
+(function () {
+  const select = document.getElementById("product-variant");
+  const price = document.querySelector(".text-3xl.font-extrabold.text-indigo-700");
+  if (!select || !price) return;
+  const basePrice = Number("{{ product.price }}");
+  select.addEventListener("change", function () {
+    const option = select.options[select.selectedIndex];
+    if (!option || !option.value) {
+      price.textContent = basePrice.toLocaleString("en-US");
+      return;
+    }
+    price.textContent = Number(option.dataset.price).toLocaleString("en-US");
+  });
+})();
+</script>
+{% endblock %}
 
 {% block content %}
 <div class="container mx-auto px-4 py-8">
@@ -144,6 +161,24 @@
                     </div>
                 </div>
 
+                {% if product.variants.all %}
+                <div class="mb-5">
+                    <label for="product-variant" class="block font-bold text-gray-800 mb-2">انتخاب ویژگی:</label>
+                    <select id="product-variant" name="variant_id" form="add-to-cart-form" required
+                            class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-800 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10">
+                        <option value="">لطفاً یک گزینه انتخاب کنید</option>
+                        {% for variant in product.variants.all %}
+                        <option value="{{ variant.id }}" data-adjustment="{{ variant.price_adjustment }}">
+                            {{ variant.name }}: {{ variant.value }}
+                            {% if variant.price_adjustment %}
+                                (تغییر قیمت: {{ variant.price_adjustment|floatformat:0 }})
+                            {% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
                 <div class="mb-6">
                     <h3 class="font-bold text-gray-800 mb-2">توضیحات محصول:</h3>
                     <div class="text-gray-600 leading-7 text-sm">
@@ -153,7 +188,7 @@
 
                 <div class="flex flex-col sm:flex-row items-stretch gap-4 mt-4">
                     {% if product.stock > 0 %}
-                    <form method="post" action="{% url 'cart:add' product.id %}" class="flex flex-wrap items-center gap-4 w-full">
+                    <form id="add-to-cart-form" method="post" action="{% url 'cart:add' product.id %}" class="flex flex-wrap items-center gap-4 w-full">
                         {% csrf_token %}
                         
                         <div class="flex items-center overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-sm">

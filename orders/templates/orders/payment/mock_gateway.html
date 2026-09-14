@@ -1,59 +1,201 @@
-خوب این حالا با توجه ب بهسنه سازی کامل قالب های payment ازت مخام با توجه ب این بهینه سازی ها قالب mock_gateway.html  را هم بهینه و یکپارچه و کد نهایی آن را برام بزنی این کد واقعی قالب :<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>درگاه پرداخت شبیه‌سازی شده بانکی</title>
+
+    <title>درگاه پرداخت شبیه‌سازی‌شده</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
+
     <style>
-        body { font-family: Tahoma, sans-serif; }
-        .num-latin { font-variant-numeric: lnum; }
+        body {
+            font-family: Tahoma, Arial, sans-serif;
+        }
+
+        .num-latin {
+            font-variant-numeric: lining-nums tabular-nums;
+        }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
-    <div class="max-w-lg w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-        <div class="bg-gradient-to-r from-blue-700 to-indigo-800 p-6 text-white flex justify-between items-center">
-            <div>
-                <h1 class="text-lg font-bold">شبیه‌ساز درگاه پرداخت شاپرک</h1>
-                <p class="text-xs text-blue-200 mt-1">محیط تست هوش برتر</p>
+
+<body class="min-h-screen bg-slate-100 px-4 py-8">
+
+    <main class="flex min-h-[calc(100vh-4rem)] items-center justify-center">
+
+        <section
+            class="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+            aria-labelledby="gateway-title"
+        >
+
+            <!-- Header -->
+            <header class="bg-gradient-to-l from-blue-700 to-indigo-800 px-6 py-6 text-white">
+
+                <div class="flex items-start justify-between gap-4">
+
+                    <div>
+                        <h1
+                            id="gateway-title"
+                            class="text-lg font-bold"
+                        >
+                            درگاه پرداخت شبیه‌سازی‌شده
+                        </h1>
+
+                        <p class="mt-1 text-xs text-blue-100">
+                            محیط تست سیستم پرداخت فروشگاه
+                        </p>
+                    </div>
+
+                    <span
+                        class="shrink-0 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold tracking-wide backdrop-blur"
+                    >
+                        MOCK
+                    </span>
+
+                </div>
+
+            </header>
+
+            <!-- Content -->
+            <div class="space-y-6 p-6 sm:p-8">
+
+                <!-- Transaction information -->
+                <section
+                    class="rounded-xl border border-blue-100 bg-blue-50 p-5"
+                    aria-labelledby="transaction-info-title"
+                >
+
+                    <h2
+                        id="transaction-info-title"
+                        class="mb-5 text-sm font-bold text-slate-800"
+                    >
+                        اطلاعات تراکنش
+                    </h2>
+
+                    <dl class="space-y-4">
+
+                        <!-- Order -->
+                        <div class="flex items-center justify-between gap-4">
+
+                            <dt class="shrink-0 text-sm text-slate-500">
+                                شماره سفارش
+                            </dt>
+
+                            <dd
+                                class="max-w-[65%] break-all text-left text-sm font-bold text-slate-800"
+                            >
+                                {{ order_number }}
+                            </dd>
+
+                        </div>
+
+                        <!-- Transaction -->
+                        <div class="flex items-center justify-between gap-4">
+
+                            <dt class="shrink-0 text-sm text-slate-500">
+                                شناسه تراکنش
+                            </dt>
+
+                            <dd
+                                class="max-w-[65%] break-all text-left font-mono text-xs font-semibold text-slate-700"
+                            >
+                                {{ trxid }}
+                            </dd>
+
+                        </div>
+
+                        <!-- Amount -->
+                        <div class="border-t border-blue-200/70 pt-4">
+
+                            <div class="flex items-center justify-between gap-4">
+
+                                <dt class="text-sm font-medium text-slate-600">
+                                    مبلغ قابل پرداخت
+                                </dt>
+
+                                <dd class="text-left text-lg font-extrabold text-blue-800">
+                                    <span class="num-latin">
+                                        {{ amount|floatformat:0 }}
+                                    </span>
+
+                                    <span class="mr-1 text-sm font-bold">
+                                        تومان
+                                    </span>
+                                </dd>
+
+                            </div>
+
+                        </div>
+
+                    </dl>
+
+                </section>
+
+                <!-- Warning -->
+                <div
+                    class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800"
+                    role="note"
+                >
+                    این صفحه فقط برای شبیه‌سازی پرداخت در محیط توسعه استفاده می‌شود.
+                    هیچ تراکنش واقعی بانکی در این صفحه انجام نمی‌شود.
+                </div>
+
+                <!-- Callback form -->
+                <form
+                    action="{{ callback_url }}"
+                    method="post"
+                    class="space-y-4"
+                >
+                    {% csrf_token %}
+
+                    <!-- Transaction identifier -->
+                    <input
+                        type="hidden"
+                        name="trxid"
+                        value="{{ trxid }}"
+                    >
+
+                    <!-- Amount for callback validation -->
+                    <input
+                        type="hidden"
+                        name="amount"
+                        value="{{ amount }}"
+                    >
+
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                        <!-- Success -->
+                        <button
+                            type="submit"
+                            name="status"
+                            value="success"
+                            class="flex min-h-14 items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 active:scale-[0.99]"
+                        >
+                            تراکنش موفق
+                        </button>
+
+                        <!-- Failure -->
+                        <button
+                            type="submit"
+                            name="status"
+                            value="failed"
+                            class="flex min-h-14 items-center justify-center rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 active:scale-[0.99]"
+                        >
+                            تراکنش ناموفق
+                        </button>
+
+                    </div>
+                </form>
+
+                <p class="text-center text-xs leading-5 text-slate-400">
+                    شناسه تراکنش و مبلغ در Callback مجدداً اعتبارسنجی می‌شوند.
+                </p>
+
             </div>
-        </div>
 
-        <div class="p-8">
-            <div class="bg-blue-50 rounded-xl p-5 mb-8 border border-blue-100">
-                <div class="flex justify-between items-center mb-3">
-                    <span class="text-gray-600 text-sm">شماره سفارش:</span>
-                    <span class="font-bold text-gray-800">{{ order_number }}</span>
-                </div>
-                <div class="flex justify-between items-center mb-3">
-                    <span class="text-gray-600 text-sm">شناسه تراکنش:</span>
-                    <span class="font-semibold text-gray-800 num-latin text-sm">{{ trxid }}</span>
-                </div>
-                <div class="flex justify-between items-center pt-3 border-t border-blue-200/50">
-                    <span class="text-gray-600 text-sm">مبلغ قابل پرداخت:</span>
-                    <span class="text-lg font-extrabold text-blue-800 num-latin">{{ amount|floatformat:0 }} تومان</span>
-                </div>
-            </div>
+        </section>
 
-            <!-- تغییر متد به POST جهت همخوانی با ساختار ویوی درگاه برگشت و افزودن csrf_token -->
-            <form action="{{ callback_url }}" method="POST" class="grid grid-cols-2 gap-4">
-                {% csrf_token %}
-                <input type="hidden" name="trxid" value="{{ trxid }}">
-                
-                <!-- دکمه موفقیت -->
-                <button type="submit" name="status" value="success" 
-                        class="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-lg flex flex-col items-center justify-center">
-                    <span>تراکنش موفق</span>
-                </button>
+    </main>
 
-                <!-- دکمه خطا -->
-                <button type="submit" name="status" value="failed" 
-                        class="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition shadow-lg flex flex-col items-center justify-center">
-                    <span>تراکنش ناموفق</span>
-                </button>
-            </form>
-        </div>
-    </div>
 </body>
 </html>
-
