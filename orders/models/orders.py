@@ -124,35 +124,15 @@ class Order(models.Model):
         if not self.order_number:
             self.order_number = self.generate_order_number()
 
-        # --- محاسبه هزینه ارسال و مبلغ نهایی ---
-        current_shipping_cost = Decimal("0")
-        if self.shipping_method:
-            try:
-                # استفاده از متد calculate_shipping_cost از مدل ShippingMethod
-                # تبدیل به Decimal با دقت 0 برای هماهنگی با فیلدهای مالی سفارش
-                calculated_cost = self.shipping_method.calculate_shipping_cost(
-                    self.subtotal_amount
-                )
-                current_shipping_cost = Decimal(str(calculated_cost)).quantize(
-                    Decimal("0")
-                )
-            except Exception as e:
-                # لاگ خطا در صورت بروز مشکل در محاسبه هزینه ارسال
-                print(
-                    f"Warning: Could not calculate shipping cost for order {self.order_number}. Error: {e}"
-                )
-                current_shipping_cost = Decimal("0")
-
-        self.shipping_amount = current_shipping_cost
+        # Shipping is calculated by OrderService.calculate_order_totals().
+        # Order.save() must not recalculate shipping or swallow shipping errors.
         self.final_amount = max(
             Decimal("0"),
             self.subtotal_amount - self.discount_amount + self.shipping_amount,
         )
-        # --------------------------------------------
 
         super().save(*args, **kwargs)
 
-    
     @transaction.atomic
     def reduce_item_stock(self):
         if self.stock_reduced:
@@ -169,39 +149,49 @@ class Order(models.Model):
     
         # ابتدا تمام موجودی‌ها را قبل از کوچک‌ترین تغییر بررسی می‌کنیم.
         # بنابراین در صورت کمبود موجودی هیچ محصولی نصفه‌نیمه کاهش پیدا نمی‌کند.
-        locked_products = {}
-    
+        # مجموع quantity هر Product را محاسبه می‌کنیم؛ یک Product ممکن است به‌دلیل
+        # Variantهای مختلف در چند OrderItem تکرار شده باشد.
+        required_quantities = {}
         for item in order_items:
             if item.product_id is None:
                 raise ValueError(f"محصول آیتم سفارش حذف شده است: order_item={item.pk}")
-    
-            product = type(item.product).objects.select_for_update().get(pk=item.product_id)
-    
-            locked_products[item.product_id] = product
-    
-            if product.stock < item.quantity:
+
+            required_quantities[item.product_id] = (
+                required_quantities.get(item.product_id, 0) + item.quantity
+            )
+
+        # همه Productها را قبل از کوچک‌ترین تغییر lock و validate می‌کنیم.
+        locked_products = {}
+        for product_id, required_quantity in required_quantities.items():
+            sample_item = next(
+                item for item in order_items if item.product_id == product_id
+            )
+            product = type(sample_item.product).objects.select_for_update().get(
+                pk=product_id
+            )
+            locked_products[product_id] = product
+
+            if product.stock < required_quantity:
                 raise ValueError(
                     f"موجودی کافی نیست: {product.name}. "
-                    f"موجودی: {product.stock}, مقدار: {item.quantity}"
+                    f"موجودی: {product.stock}, مقدار موردنیاز: {required_quantity}"
                 )
-    
-        # فقط بعد از اینکه موجودی تمام آیتم‌ها تأیید شد،
-        # عملیات کاهش موجودی انجام می‌شود.
-        for item in order_items:
-            product = locked_products[item.product_id]
-    
-            product.stock -= item.quantity
-    
+
+        # فقط پس از اعتبارسنجی مجموع موجودی، برای هر Product یک‌بار کاهش انجام می‌شود.
+        for product_id, required_quantity in required_quantities.items():
+            product = locked_products[product_id]
+            product.stock -= required_quantity
+
             if product.stock == 0:
                 product.is_available_status = False
-    
+
             product.save(
                 update_fields=[
                     "stock",
                     "is_available_status",
                 ]
             )
-    
+
         if self.status in (
             Order.Status.PENDING,
             Order.Status.PLACED,

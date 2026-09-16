@@ -12,12 +12,18 @@ from orders.views.payment import (
 app_name = "orders"
 
 urlpatterns = [
-    # Payment Flow
     path(
         "initiate-payment/<str:order_number>/",
         ProcessPaymentView.as_view(),
         name="initiate_payment",
     ),
+    # Explicit gateway-aware callback for multi-gateway integrations.
+    path(
+        "payment/callback/<str:gateway_name>/",
+        PaymentCallbackView.as_view(),
+        name="gateway_payment_callback",
+    ),
+    # Backward-compatible callback route; defaults to the existing mock gateway.
     path(
         "payment/callback/",
         PaymentCallbackView.as_view(),
@@ -38,7 +44,6 @@ urlpatterns = [
         mock_payment_gateway_view,
         name="mock_payment_gateway",
     ),
-    # Order Confirmation
     path(
         "order/confirm/<str:order_number>/",
         order_confirmation_view,

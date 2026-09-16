@@ -1,0 +1,25 @@
+🚩 This My Project Architect  🚩
+       
+                ┌───────────┐
+                │ ACCOUNTS  │
+                │ User      │
+                │ Profile   │
+                │ Address   │
+                │ OTP       │
+                └─────┬─────┘
+                      │
+                      ▼
+┌───────────┐    ┌───────────┐    ┌─────────────┐
+│  CATALOG  │───►│   CART    │───►│   ORDERS    │
+│           │    │           │    │             │
+│ Product   │    │ Cart      │    │ Order       │
+│ Variant   │    │ CartItem  │    │ OrderItem   │
+│ Review    │    │ Snapshot  │    │ Payment     │
+│ Wishlist  │    │           │    │ Shipping    │
+└───────────┘    └───────────┘    └─────────────┘
+                                         │
+                                         ▼
+                                   Payment Callback
+                                         │
+                                         ▼
+                                   Stock Reduction

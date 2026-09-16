@@ -33,5 +33,6 @@ class ProductDetailViewTests(BaseTestCase):
         # در اینجا چون 'login' ندارید، انتظار داریم خطای 403 یا 401 بدهد یا به صفحه اصلی برود
         # تست فقط صحت عدم ثبت نظر را چک می‌کند
         self.assertEqual(Review.objects.count(), 0)
+        
 
-
+        

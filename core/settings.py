@@ -148,3 +148,24 @@ PAYMENT_CALLBACK_SECRET = os.getenv(
     "PAYMENT_CALLBACK_SECRET",
     SECRET_KEY,
 )
+
+# Payment / gateway configuration
+PAYMENT_DEFAULT_GATEWAY = os.getenv("PAYMENT_DEFAULT_GATEWAY", "mock_gateway").strip() or "mock_gateway"
+
+# ZarinPal (Sandbox by default; production endpoints are configured via ENV)
+ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_MERCHANT_ID", "").strip()
+ZARINPAL_CALLBACK_URL = os.getenv("ZARINPAL_CALLBACK_URL", "").strip()
+ZARINPAL_CURRENCY = os.getenv("ZARINPAL_CURRENCY", "IRT").strip().upper() or "IRT"
+ZARINPAL_REQUEST_URL = os.getenv(
+    "ZARINPAL_REQUEST_URL",
+    "https://sandbox.zarinpal.com/pg/v4/payment/request.json",
+).strip()
+ZARINPAL_VERIFY_URL = os.getenv(
+    "ZARINPAL_VERIFY_URL",
+    "https://sandbox.zarinpal.com/pg/v4/payment/verify.json",
+).strip()
+ZARINPAL_STARTPAY_URL = os.getenv(
+    "ZARINPAL_STARTPAY_URL",
+    "https://sandbox.zarinpal.com/pg/StartPay",
+).strip()
+ZARINPAL_HTTP_TIMEOUT = os.getenv("ZARINPAL_HTTP_TIMEOUT", "15").strip() or "15"

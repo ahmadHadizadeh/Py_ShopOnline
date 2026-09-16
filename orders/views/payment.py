@@ -1,30 +1,27 @@
 import logging
-import hashlib
-import hmac
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import transaction
+from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
-from cart.models import Cart
+
 from orders.models.orders import Order
 from orders.models.payment import Payment
-from decimal import Decimal, InvalidOperation
-from django.conf import settings
+from orders.payment.gateways import GatewayVerificationError
+from orders.payment.services import (
+    DEFAULT_GATEWAY_NAME,
+    PaymentService,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ProcessPaymentView(LoginRequiredMixin, View):
     login_url = "/accounts/login/"
-
-    @transaction.atomic
-    def dispatch(self, request, *args, **kwargs):
-        return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, order_number):
         return self._start_payment(request, order_number)
@@ -33,210 +30,71 @@ class ProcessPaymentView(LoginRequiredMixin, View):
         return self._start_payment(request, order_number)
 
     def _start_payment(self, request, order_number):
-        with transaction.atomic():
-            order = get_object_or_404(
-                Order.objects.select_for_update(),
-                order_number=order_number,
+        try:
+            payment, order, initiation = PaymentService.initiate(
                 user=request.user,
+                order_number=order_number,
             )
-
-            # ۱. جلوگیری از پرداخت مجدد سفارش‌هایی که پرداخت شده یا پردازش شده‌اند
-            non_payable_statuses = {
-                getattr(Order.Status, "PAID", "PAID"),
-                getattr(Order.Status, "PROCESSING", "PROCESSING"),
-                getattr(Order.Status, "COMPLETED", "COMPLETED"),
-            }
-            if hasattr(Order, "Status") and order.status in non_payable_statuses:
-                messages.info(request, "این سفارش قبلاً پرداخت شده است.")
-                return redirect(
-                    "orders:payment_success", order_number=order.order_number
-                )
-
-            # ۲. در تلاش مجدد، وضعیت سفارش به PENDING بازمی‌گردد
-            if hasattr(Order, "Status") and order.status != getattr(
-                Order.Status, "PENDING", "PENDING"
-            ):
-                order.status = getattr(Order.Status, "PENDING", "PENDING")
-                order.save(update_fields=["status"])
-
-            # ۳. رعایت قید OneToOne: بازیابی همان رکورد پرداخت موجود یا ایجاد فقط در صورت عدم وجود
-            payment = Payment.objects.select_for_update().filter(order=order).first()
-
-            gateway_transaction_id = f"TRX-{order.id}-{int(timezone.now().timestamp())}"
-
-            if payment is None:
-                payment = Payment.objects.create(
-                    order=order,
-                    user=request.user,
-                    amount=order.final_amount,
-                    status=Payment.Status.PENDING,
-                    gateway_name="mock_gateway",
-                    transaction_code=gateway_transaction_id,
-                )
-            else:
-                # به‌روزرسانی همان رکورد موجود به جای INSERT مجدد
-                payment.status = Payment.Status.PENDING
-                payment.transaction_code = gateway_transaction_id
-                payment.amount = order.final_amount
-                payment.gateway_name = "mock_gateway"
-                payment.save(
-                    update_fields=[
-                        "status",
-                        "transaction_code",
-                        "amount",
-                        "gateway_name",
-                    ]
-                )
-
-        # هدایت ایمن به درگاه با تراکنش به‌روزشده
-        payment_gateway_url = reverse("orders:mock_payment_gateway")
-        redirect_url = (
-            f"{payment_gateway_url}"
-            f"?trxid={payment.transaction_code}"
-            f"&order={order.order_number}"
-            f"&amount={payment.amount}"
-        )
-
-        return redirect(redirect_url)
-
-
-class PaymentCallbackView(View):
-    """
-    Stateless payment callback endpoint.
-
-    Callback ownership is established by the payment transaction identifier,
-    expected amount and cryptographic signature rather than the user's session.
-    """
-
-    @staticmethod
-    def _build_signature(trxid, amount):
-        callback_secret = getattr(
-            settings,
-            "PAYMENT_CALLBACK_SECRET",
-            settings.SECRET_KEY,
-        )
-
-        payload = f"{trxid}:{amount}".encode("utf-8")
-
-        return hmac.new(
-            callback_secret.encode("utf-8"),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
-
-    def get(self, request, *args, **kwargs):
-        return self.handle_callback(request)
-
-    def post(self, request, *args, **kwargs):
-        return self.handle_callback(request)
-
-    def handle_callback(self, request):
-        trxid = request.POST.get("trxid") or request.GET.get("trxid")
-        status = request.POST.get("status") or request.GET.get("status")
-        gateway_amount = request.POST.get("amount") or request.GET.get("amount")
-        signature = request.POST.get("signature") or request.GET.get("signature")
-
-        if not trxid:
-            return HttpResponseBadRequest("شناسه تراکنش نامعتبر است.")
-
-        if not status:
-            return HttpResponseBadRequest("وضعیت تراکنش نامعتبر است.")
-
-        if not gateway_amount:
-            return HttpResponseBadRequest("مبلغ تراکنش ارسال نشده است.")
-
-        if not signature:
-            return HttpResponseBadRequest("امضای تراکنش ارسال نشده است.")
-
-        try:
-            normalized_amount = Decimal(str(gateway_amount))
-        except (InvalidOperation, TypeError, ValueError):
-            return HttpResponseBadRequest("مبلغ تراکنش نامعتبر است.")
-
-        expected_signature = self._build_signature(
-            trxid,
-            normalized_amount,
-        )
-
-        if not hmac.compare_digest(
-            signature,
-            expected_signature,
-        ):
-            logger.warning(
-                "Invalid payment callback signature: trxid=%s",
-                trxid,
-            )
-            return HttpResponseBadRequest("امضای تراکنش نامعتبر است.")
-
-        try:
-            with transaction.atomic():
-                payment = (
-                    Payment.objects.select_related("order")
-                    .select_for_update()
-                    .get(transaction_code=trxid)
-                )
-
-                order = Order.objects.select_for_update().get(pk=payment.order_id)
-
-                if normalized_amount != payment.amount:
-                    logger.warning(
-                        "Payment callback amount mismatch: "
-                        "payment_id=%s trxid=%s expected=%s got=%s",
-                        payment.id,
-                        trxid,
-                        payment.amount,
-                        normalized_amount,
-                    )
-
-                    return HttpResponseBadRequest("مبلغ تراکنش با سفارش مطابقت ندارد.")
-
-                if payment.status == Payment.Status.SUCCESS:
-                    return redirect(
-                        "orders:payment_success",
-                        order_number=order.order_number,
-                    )
-
-                gateway_response = {
-                    "trxid": trxid,
-                    "status": status,
-                    "amount": str(normalized_amount),
-                    "signature": signature,
-                    **request.POST.dict(),
-                    **request.GET.dict(),
-                }
-
-                if status == "success":
-                    ref_id = (
-                        f"REF-{payment.id}-"
-                        f"{timezone.now().strftime('%Y%m%d%H%M%S')}"
-                    )
-
-                    payment.update_status_and_order(
-                        new_status=Payment.Status.SUCCESS,
-                        transaction_id=trxid,
-                        reference_id=ref_id,
-                        gateway_response=str(gateway_response),
-                    )
-
-                    redirect_name = "orders:payment_success"
-
-                else:
-                    payment.update_status_and_order(
-                        new_status=Payment.Status.FAILED,
-                        transaction_id=trxid,
-                        reference_id=None,
-                        gateway_response=str(gateway_response),
-                    )
-
-                    redirect_name = "orders:payment_failed"
-
+        except ValidationError as exc:
+            messages.error(request, str(exc))
             return redirect(
-                redirect_name,
+                "orders:payment_failed",
+                order_number=order_number,
+            )
+
+        if payment is None:
+            messages.info(request, "این سفارش قبلاً پرداخت شده است.")
+            return redirect(
+                "orders:payment_success",
                 order_number=order.order_number,
             )
 
-        except Payment.DoesNotExist:
-            return HttpResponseBadRequest("تراکنش پیدا نشد.")
+        return redirect(initiation.redirect_url)
+
+
+class PaymentCallbackView(View):
+    """HTTP-only callback endpoint; payment rules live in PaymentService."""
+
+    def get(self, request, *args, **kwargs):
+        return self.handle_callback(request, kwargs.get("gateway_name"))
+
+    def post(self, request, *args, **kwargs):
+        return self.handle_callback(request, kwargs.get("gateway_name"))
+
+    def handle_callback(self, request, gateway_name=None):
+        gateway_name = (
+            gateway_name
+            or request.POST.get("gateway")
+            or request.GET.get("gateway")
+            or DEFAULT_GATEWAY_NAME
+        )
+
+        data = {
+            **request.GET.dict(),
+            **request.POST.dict(),
+        }
+
+        try:
+            outcome = PaymentService.handle_callback(
+                gateway_name=gateway_name,
+                data=data,
+            )
+        except (GatewayVerificationError, ValidationError) as exc:
+            logger.warning(
+                "Payment callback rejected: gateway=%s",
+                gateway_name,
+            )
+            return HttpResponseBadRequest(str(exc))
+
+        redirect_name = (
+            "orders:payment_success"
+            if outcome.success
+            else "orders:payment_failed"
+        )
+        return redirect(
+            redirect_name,
+            order_number=outcome.order.order_number,
+        )
 
 
 class PaymentFailedView(LoginRequiredMixin, TemplateView):
@@ -276,7 +134,10 @@ def mock_payment_gateway_view(request):
         "trxid": trxid,
         "order_number": order_number,
         "amount": amount,
-        "callback_url": reverse("orders:payment_callback"),
+        "callback_url": reverse(
+            "orders:gateway_payment_callback",
+            kwargs={"gateway_name": DEFAULT_GATEWAY_NAME},
+        ),
     }
     return render(request, "orders/payment/mock_gateway.html", context)
 
