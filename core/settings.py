@@ -29,7 +29,8 @@ SECRET_KEY = "django-insecure-q4b&o*i((s@30))qq-jn+%_615zk_rmog$d-ibk1_$b+=4#_do
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".loca.lt"]
 
 
 # Application definition
@@ -150,7 +151,9 @@ PAYMENT_CALLBACK_SECRET = os.getenv(
 )
 
 # Payment / gateway configuration
-PAYMENT_DEFAULT_GATEWAY = os.getenv("PAYMENT_DEFAULT_GATEWAY", "mock_gateway").strip() or "mock_gateway"
+PAYMENT_DEFAULT_GATEWAY = (
+    os.getenv("PAYMENT_DEFAULT_GATEWAY", "mock_gateway").strip() or "mock_gateway"
+)
 
 # ZarinPal (Sandbox by default; production endpoints are configured via ENV)
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_MERCHANT_ID", "").strip()

@@ -13,8 +13,8 @@ from orders.models.orders import Order
 from orders.models.payment import Payment
 from orders.payment.gateways import GatewayVerificationError
 from orders.payment.services import (
-    DEFAULT_GATEWAY_NAME,
     PaymentService,
+    get_default_gateway_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class PaymentCallbackView(View):
             gateway_name
             or request.POST.get("gateway")
             or request.GET.get("gateway")
-            or DEFAULT_GATEWAY_NAME
+            or get_default_gateway_name()
         )
 
         data = {
@@ -136,7 +136,7 @@ def mock_payment_gateway_view(request):
         "amount": amount,
         "callback_url": reverse(
             "orders:gateway_payment_callback",
-            kwargs={"gateway_name": DEFAULT_GATEWAY_NAME},
+            kwargs={"gateway_name": "mock_gateway"},
         ),
     }
     return render(request, "orders/payment/mock_gateway.html", context)

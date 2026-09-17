@@ -1,12 +1,13 @@
 from decimal import Decimal
 import hashlib
 import hmac
-from django.contrib.auth import get_user_model
-from django.db.models.signals import post_save
-from django.test import Client, TestCase
-from django.urls import reverse
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+from django.db.models.signals import post_save
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 from accounts.models.profile import Profile
 from accounts.signals import create_user_profile
 from cart.models import Cart, CartItem
@@ -115,7 +116,10 @@ class PaymentCallbackSecurityTests(TestCase):
             gateway_name="mock_gateway",
         )
 
-        self.callback_url = reverse("orders:payment_callback")
+        self.callback_url = reverse(
+            "orders:gateway_payment_callback",
+            kwargs={"gateway_name": "mock_gateway"},
+        )
 
     def callback_signature(self):
         payload = (f"{self.payment.transaction_code}:" f"{self.payment.amount}").encode(
@@ -423,6 +427,7 @@ class PaymentCallbackSecurityTests(TestCase):
         self.assertIsNotNone(self.order.paid_at)
 
 
+@override_settings(PAYMENT_DEFAULT_GATEWAY="mock_gateway")
 class PaymentServiceTests(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -591,6 +596,7 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
             )
 
 
+@override_settings(PAYMENT_DEFAULT_GATEWAY="mock_gateway")
 class ProcessPaymentViewTests(TestCase):
     @classmethod
     def setUpClass(cls):

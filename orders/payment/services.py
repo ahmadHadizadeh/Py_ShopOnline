@@ -16,9 +16,9 @@ from .gateways import (
     PaymentGatewayRegistry,
 )
 
-DEFAULT_GATEWAY_NAME = str(
-    getattr(settings, "PAYMENT_DEFAULT_GATEWAY", "mock_gateway")
-).strip() or "mock_gateway"
+def get_default_gateway_name() -> str:
+    value = getattr(settings, "PAYMENT_DEFAULT_GATEWAY", "mock_gateway")
+    return str(value).strip() or "mock_gateway"
 
 
 @dataclass(frozen=True)
@@ -36,9 +36,11 @@ class PaymentService:
 
     @staticmethod
     @transaction.atomic
-    def initiate(*, user, order_number: str, gateway_name: str = DEFAULT_GATEWAY_NAME):
+    def initiate(*, user, order_number: str, gateway_name: str | None = None):
         if not user or not getattr(user, "is_authenticated", False):
             raise ValidationError("برای شروع پرداخت باید وارد حساب کاربری شوید.")
+
+        gateway_name = gateway_name or get_default_gateway_name()
 
         try:
             gateway = PaymentGatewayRegistry.get(gateway_name)
