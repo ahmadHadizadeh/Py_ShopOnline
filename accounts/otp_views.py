@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.models import Profile
 from accounts.services.otp import SMSIRService
+from cart.services import merge_guest_cart_to_user
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -125,6 +126,8 @@ def verify_otp_view(request):
             status=400,
         )
 
+    guest_session_key = request.session.session_key
+
     try:
         profile = (
             Profile.objects.select_related("user").filter(phone_number=phone).first()
@@ -144,6 +147,11 @@ def verify_otp_view(request):
                 profile.phone_number = phone
                 profile.save(update_fields=["phone_number"])
 
+        merge_guest_cart_to_user(
+            request,
+            user=user,
+            guest_session_key=guest_session_key,
+        )
         login(request, user)
 
     except Exception:

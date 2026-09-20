@@ -1,10 +1,16 @@
 import pytest
+from datetime import timedelta
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.contrib.sessions.backends.db import SessionStore
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
+from django.utils import timezone
+
 from cart.models import Cart, CartItem
+from cart.services import merge_guest_cart_to_user
 from catalog.models.product import Product
-
-
-from django.test import TestCase
 
 from accounts.models.address import Address
 from catalog.models.category import Category
@@ -162,8 +168,7 @@ def test_order_receives_cart_variant_snapshot(client, django_user_model):
 class CartVariantIntegrationTests(TestCase):
 
     def setUp(self):
-        from django.contrib.auth import get_user_model
-
+        
         User = get_user_model()
 
         self.user = User.objects.create_user(
@@ -415,3 +420,447 @@ class CheckoutVariantIntegrationTests(TestCase):
             order.payment.amount,
             2600,
         )
+
+
+# ---------------------------------------------------------------------------
+# Guest-cart merge contract tests
+# ---------------------------------------------------------------------------
+
+
+def _merge_request(user):
+    request = RequestFactory().get("/")
+    request.user = user
+    request.session = SessionStore()
+    request.session.create()
+    return request
+
+
+def _guest_cart(request):
+    return Cart.objects.create(
+        session_key=request.session.session_key,
+        user=None,
+        status=Cart.STATUS_ACTIVE,
+    )
+
+
+class GuestCartMergeContractTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="merge-user",
+            password="testpass123",
+        )
+        self.category = Category.objects.create(
+            name="Merge Category",
+            slug="merge-category",
+        )
+
+    def product(self, *, name="Merge Product", stock=10, active=True):
+        return Product.objects.create(
+            name=name,
+            slug=name.lower().replace(" ", "-"),
+            price=1000,
+            stock=stock,
+            is_active=active,
+            category=self.category,
+        )
+
+    def test_guest_only_item_is_moved_to_user_cart(self):
+        product = self.product(stock=5)
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        guest_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=2,
+            unit_price_snapshot=999,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        user_cart = merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        guest_item.refresh_from_db() if CartItem.objects.filter(pk=guest_item.pk).exists() else None
+        self.assertFalse(Cart.objects.filter(pk=guest_cart.pk).exists())
+        item = user_cart.items.get(product=product)
+        self.assertEqual(item.quantity, 2)
+        self.assertEqual(item.status, CartItem.STATUS_ACTIVE)
+        self.assertEqual(item.unit_price_snapshot, 1000)
+        self.assertEqual(request.session["cart_id"], user_cart.pk)
+
+    def test_same_identity_quantities_are_summed_and_capped_by_product_stock(self):
+        product = self.product(stock=5)
+        user_cart = Cart.objects.create(user=self.user, status=Cart.STATUS_ACTIVE)
+        CartItem.objects.create(
+            cart=user_cart,
+            product=product,
+            quantity=3,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=4,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        item = user_cart.items.get(product=product)
+        self.assertEqual(item.quantity, 5)
+        self.assertEqual(item.status, CartItem.STATUS_ACTIVE)
+
+    def test_different_variants_share_product_stock_and_newer_item_gets_priority(self):
+        product = self.product(stock=5)
+        red = ProductVariant.objects.create(
+            product=product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=100,
+        )
+        blue = ProductVariant.objects.create(
+            product=product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=200,
+        )
+        user_cart = Cart.objects.create(user=self.user, status=Cart.STATUS_ACTIVE)
+        red_item = CartItem.objects.create(
+            cart=user_cart,
+            product=product,
+            variant=red,
+            quantity=3,
+            unit_price_snapshot=1100,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        old = timezone.now() - timedelta(minutes=5)
+        CartItem.objects.filter(pk=red_item.pk).update(updated=old)
+
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        blue_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            variant=blue,
+            quantity=4,
+            unit_price_snapshot=1200,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        CartItem.objects.filter(pk=blue_item.pk).update(updated=timezone.now())
+
+        merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        self.assertEqual(user_cart.items.get(variant=blue).quantity, 4)
+        self.assertEqual(user_cart.items.get(variant=red).quantity, 1)
+        self.assertEqual(
+            sum(
+                user_cart.items.filter(
+                    product=product, status=CartItem.STATUS_ACTIVE
+                ).values_list("quantity", flat=True)
+            ),
+            5,
+        )
+
+    def test_equal_updated_timestamp_gives_guest_priority(self):
+        product = self.product(stock=5)
+        red = ProductVariant.objects.create(
+            product=product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=100,
+        )
+        blue = ProductVariant.objects.create(
+            product=product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=200,
+        )
+        user_cart = Cart.objects.create(user=self.user, status=Cart.STATUS_ACTIVE)
+        red_item = CartItem.objects.create(
+            cart=user_cart,
+            product=product,
+            variant=red,
+            quantity=4,
+            unit_price_snapshot=1100,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        blue_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            variant=blue,
+            quantity=4,
+            unit_price_snapshot=1200,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        same_updated = timezone.now() - timedelta(minutes=1)
+        CartItem.objects.filter(pk=red_item.pk).update(updated=same_updated)
+        CartItem.objects.filter(pk=blue_item.pk).update(updated=same_updated)
+
+        merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        self.assertEqual(user_cart.items.get(variant=blue).quantity, 4)
+        self.assertEqual(user_cart.items.get(variant=red).quantity, 1)
+
+    def test_latest_status_wins_for_duplicate_identity(self):
+        product = self.product(stock=10)
+        user_cart = Cart.objects.create(user=self.user, status=Cart.STATUS_ACTIVE)
+        user_item = CartItem.objects.create(
+            cart=user_cart,
+            product=product,
+            quantity=2,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        guest_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=3,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_SAVED,
+        )
+        newer = timezone.now()
+        CartItem.objects.filter(pk=user_item.pk).update(updated=newer - timedelta(minutes=1))
+        CartItem.objects.filter(pk=guest_item.pk).update(updated=newer)
+
+        merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        item = user_cart.items.get(product=product)
+        self.assertEqual(item.quantity, 5)
+        self.assertEqual(item.status, CartItem.STATUS_SAVED)
+
+    def test_active_newer_guest_status_wins_for_duplicate_identity(self):
+        product = self.product(stock=10)
+        user_cart = Cart.objects.create(user=self.user, status=Cart.STATUS_ACTIVE)
+        user_item = CartItem.objects.create(
+            cart=user_cart,
+            product=product,
+            quantity=2,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_SAVED,
+        )
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        guest_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=3,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        newer = timezone.now()
+        CartItem.objects.filter(pk=user_item.pk).update(updated=newer - timedelta(minutes=1))
+        CartItem.objects.filter(pk=guest_item.pk).update(updated=newer)
+
+        merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        item = user_cart.items.get(product=product)
+        self.assertEqual(item.quantity, 5)
+        self.assertEqual(item.status, CartItem.STATUS_ACTIVE)
+
+    def test_saved_items_sum_without_stock_cap(self):
+        product = self.product(stock=1)
+        user_cart = Cart.objects.create(user=self.user, status=Cart.STATUS_ACTIVE)
+        CartItem.objects.create(
+            cart=user_cart,
+            product=product,
+            quantity=3,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_SAVED,
+        )
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=4,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_SAVED,
+        )
+
+        merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        item = user_cart.items.get(product=product)
+        self.assertEqual(item.quantity, 7)
+        self.assertEqual(item.status, CartItem.STATUS_SAVED)
+
+    def test_active_item_becomes_saved_when_product_unavailable(self):
+        product = self.product(stock=5, active=False)
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=3,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        user_cart = merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        item = user_cart.items.get(product=product)
+        self.assertEqual(item.quantity, 3)
+        self.assertEqual(item.status, CartItem.STATUS_SAVED)
+
+    def test_merge_is_idempotent_after_guest_cart_is_consumed(self):
+        product = self.product(stock=5)
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=2,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        first = merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+        second = merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(second.items.get(product=product).quantity, 2)
+        self.assertEqual(
+            Cart.objects.filter(user=self.user, status=Cart.STATUS_ACTIVE).count(),
+            1,
+        )
+
+    def test_active_item_becomes_saved_when_stock_is_zero(self):
+        product = self.product(stock=0)
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            quantity=2,
+            unit_price_snapshot=1000,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        user_cart = merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        item = user_cart.items.get(product=product)
+        self.assertEqual(item.quantity, 2)
+        self.assertEqual(item.status, CartItem.STATUS_SAVED)
+
+    def test_empty_guest_cart_is_consumed_without_creating_items(self):
+        product = self.product(stock=5)
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+
+        user_cart = merge_guest_cart_to_user(
+            request,
+            user=self.user,
+            guest_session_key=request.session.session_key,
+        )
+
+        self.assertFalse(Cart.objects.filter(pk=guest_cart.pk).exists())
+        self.assertFalse(user_cart.items.filter(product=product).exists())
+
+    def test_merge_rolls_back_when_persisting_an_item_fails(self):
+        product = self.product(stock=10)
+        red = ProductVariant.objects.create(
+            product=product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=100,
+        )
+        blue = ProductVariant.objects.create(
+            product=product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=200,
+        )
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        red_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            variant=red,
+            quantity=1,
+            unit_price_snapshot=1100,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        blue_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=product,
+            variant=blue,
+            quantity=1,
+            unit_price_snapshot=1200,
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        import cart.services as services
+        real_unit_price = services._unit_price
+        calls = {"count": 0}
+
+        def failing_unit_price(product_obj, variant=None):
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise RuntimeError("forced merge failure")
+            return real_unit_price(product_obj, variant)
+
+        with patch("cart.services._unit_price", side_effect=failing_unit_price):
+            with self.assertRaises(RuntimeError):
+                merge_guest_cart_to_user(
+                    request,
+                    user=self.user,
+                    guest_session_key=request.session.session_key,
+                )
+
+        self.assertTrue(Cart.objects.filter(pk=guest_cart.pk).exists())
+        self.assertTrue(CartItem.objects.filter(pk=red_item.pk, cart=guest_cart).exists())
+        self.assertTrue(CartItem.objects.filter(pk=blue_item.pk, cart=guest_cart).exists())
+        user_cart = Cart.objects.filter(
+            user=self.user, status=Cart.STATUS_ACTIVE
+        ).first()
+        self.assertIsNone(user_cart)
