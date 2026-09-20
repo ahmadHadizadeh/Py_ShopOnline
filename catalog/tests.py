@@ -33,6 +33,41 @@ class ProductDetailViewTests(BaseTestCase):
         # در اینجا چون 'login' ندارید، انتظار داریم خطای 403 یا 401 بدهد یا به صفحه اصلی برود
         # تست فقط صحت عدم ثبت نظر را چک می‌کند
         self.assertEqual(Review.objects.count(), 0)
-        
 
-        
+class OtpCsrfIntegrationTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name="Cat OTP", slug="cat-otp")
+        self.product = Product.objects.create(
+            name="OTP Product",
+            slug="otp-product",
+            is_active=True,
+            category=self.category,
+        )
+        self.client = Client(enforce_csrf_checks=True)
+        self.url = reverse("catalog:product_detail", kwargs={"slug": self.product.slug})
+
+    def test_otp_page_bootstraps_csrf_cookie_and_send_otp_accepts_csrf(self):
+        host = "otp-test.loca.lt"
+
+        response = self.client.get(
+            self.url,
+            secure=True,
+            HTTP_HOST=host,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("csrftoken", response.cookies)
+
+        csrf_token = response.cookies["csrftoken"].value
+        otp_response = self.client.post(
+            reverse("accounts:send_otp"),
+            data='{"phone":"09123456789"}',
+            content_type="application/json",
+            secure=True,
+            HTTP_HOST=host,
+            HTTP_ORIGIN=f"https://{host}",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(otp_response.status_code, 200)
+        self.assertEqual(otp_response.json().get("status"), "success")
+

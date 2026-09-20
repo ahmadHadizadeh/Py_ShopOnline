@@ -29,8 +29,29 @@ SECRET_KEY = "django-insecure-q4b&o*i((s@30))qq-jn+%_615zk_rmog$d-ibk1_$b+=4#_do
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# ALLOWED_HOSTS = []
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", ".loca.lt"]
+# Development hosts: support local access and rotating LocalTunnel subdomains.
+if DEBUG:
+    ALLOWED_HOSTS = [
+        "127.0.0.1",
+        "localhost",
+        ".loca.lt",
+    ]
+else:
+    ALLOWED_HOSTS = [
+        host.strip()
+        for host in os.getenv("ALLOWED_HOSTS", "").split(",")
+        if host.strip()
+    ]
+
+# LocalTunnel changes its public subdomain between sessions. Trust all HTTPS
+# LocalTunnel subdomains only in DEBUG; production should use explicit origins.
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS.append("https://*.loca.lt")
 
 
 # Application definition

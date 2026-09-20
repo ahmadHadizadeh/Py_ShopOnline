@@ -1,12 +1,14 @@
 from decimal import Decimal
 import hashlib
 import hmac
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.db.models.signals import post_save
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from accounts.models.profile import Profile
 from accounts.signals import create_user_profile
@@ -520,6 +522,26 @@ class PaymentServiceTests(TestCase):
         )
         self.assertEqual(second_payment.status, Payment.Status.PENDING)
 
+    def test_repeated_pending_initiation_reuses_existing_gateway_transaction(self):
+        from orders.payment.gateways import PaymentGatewayRegistry
+
+        first_payment, _, first_initiation = PaymentService.initiate(
+            user=self.user,
+            order_number=self.order.order_number,
+        )
+        gateway = PaymentGatewayRegistry.get("mock_gateway")
+
+        with patch.object(gateway, "initiate", wraps=gateway.initiate) as mocked_initiate:
+            second_payment, _, second_initiation = PaymentService.initiate(
+                user=self.user,
+                order_number=self.order.order_number,
+            )
+
+        self.assertEqual(first_payment.pk, second_payment.pk)
+        self.assertEqual(first_initiation.transaction_id, second_initiation.transaction_id)
+        self.assertEqual(first_initiation.redirect_url, second_initiation.redirect_url)
+        mocked_initiate.assert_not_called()
+
 
 class PaymentCallbackServiceTests(PaymentServiceTests):
     def setUp(self):
@@ -594,6 +616,196 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
                     "signature": "invalid",
                 },
             )
+
+    def test_repeated_success_callback_does_not_reduce_stock_twice(self):
+        signature = hmac.new(
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            f"{self.payment.transaction_code}:{self.payment.amount}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        data = {
+            "trxid": self.payment.transaction_code,
+            "status": "success",
+            "amount": str(self.payment.amount),
+            "signature": signature,
+        }
+
+        initial_stock = self.product.stock
+        PaymentService.handle_callback(gateway_name="mock_gateway", data=data)
+        self.product.refresh_from_db()
+        first_stock = self.product.stock
+
+        PaymentService.handle_callback(gateway_name="mock_gateway", data=data)
+        self.product.refresh_from_db()
+
+        self.assertEqual(first_stock, initial_stock - 1)
+        self.assertEqual(self.product.stock, first_stock)
+
+    def test_callback_db_failure_rolls_back_payment_transition(self):
+        signature = hmac.new(
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            f"{self.payment.transaction_code}:{self.payment.amount}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        data = {
+            "trxid": self.payment.transaction_code,
+            "status": "success",
+            "amount": str(self.payment.amount),
+            "signature": signature,
+        }
+
+        def mutate_then_fail(*args, **kwargs):
+            self.payment.status = Payment.Status.SUCCESS
+            self.payment.save(update_fields=["status"])
+            raise RuntimeError("simulated payment transition failure")
+
+        with patch.object(
+            Payment,
+            "update_status_and_order",
+            side_effect=mutate_then_fail,
+        ):
+            with self.assertRaises(RuntimeError):
+                PaymentService.handle_callback(
+                    gateway_name="mock_gateway",
+                    data=data,
+                )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.PENDING)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+
+    def test_callback_rejects_amount_drift_after_gateway_verification(self):
+        from orders.payment.gateways import GatewayCallbackResult, PaymentGatewayRegistry
+
+        gateway_name = "drift_test_gateway"
+        transaction_id = "DRIFT-TEST-001"
+        payment = self.payment
+        payment.gateway_name = gateway_name
+        payment.transaction_code = transaction_id
+        payment.save(update_fields=["gateway_name", "transaction_code"])
+
+        class DriftGateway:
+            name = gateway_name
+
+            def extract_transaction_id(self, *, data):
+                return transaction_id
+
+            def verify_callback(self, *, payment, data):
+                # Simulate a concurrent order/payment change while provider
+                # verification is in flight. Final DB validation must use the
+                # freshly locked Payment row.
+                Payment.objects.filter(pk=payment.pk).update(
+                    amount=Decimal("60000000")
+                )
+                return GatewayCallbackResult(
+                    transaction_id=transaction_id,
+                    success=True,
+                    amount=Decimal("50000000"),
+                    reference_id="DRIFT-REF",
+                    raw_response={"code": 100},
+                )
+
+            def build_redirect_url(self, *, payment, transaction_id):
+                return "/"
+
+            def initiate(self, *, payment):
+                raise AssertionError("not used")
+
+        PaymentGatewayRegistry.register(DriftGateway())
+
+        with self.assertRaises(ValidationError):
+            PaymentService.handle_callback(
+                gateway_name=gateway_name,
+                data={},
+            )
+
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertEqual(payment.amount, Decimal("60000000"))
+
+
+class PaymentCallbackTransactionBoundaryTests(TransactionTestCase):
+    reset_sequences = True
+
+    def test_gateway_verification_runs_outside_database_transaction(self):
+        from orders.payment.gateways import GatewayCallbackResult, PaymentGatewayRegistry
+
+        user = User.objects.create_user(username="boundary-user")
+        profile = Profile.objects.get(user=user)
+        profile.phone_number = "09110000011"
+        profile.save(update_fields=["phone_number"])
+        category = Category.objects.create(name="Boundary", slug="boundary")
+        product = Product.objects.create(
+            category=category,
+            name="Boundary Product",
+            slug="boundary-product",
+            price=Decimal("50000000"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+        cart = Cart.objects.create(user=user, status=Cart.STATUS_ORDERED)
+        order = Order.objects.create(
+            user=user,
+            cart=cart,
+            subtotal_amount=Decimal("50000000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+            final_amount=Decimal("50000000"),
+            status=Order.Status.PENDING,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=product,
+            variant_id=None,
+            product_name=product.name,
+            variant_name="",
+            sku=getattr(product, "sku", None),
+            quantity=1,
+            unit_price=Decimal("50000000"),
+            subtotal_price=Decimal("50000000"),
+        )
+        payment = Payment.objects.create(
+            order=order,
+            user=user,
+            amount=Decimal("50000000"),
+            status=Payment.Status.PENDING,
+            transaction_code="BOUNDARY-001",
+            gateway_name="boundary_test_gateway",
+        )
+
+        observed_atomic_state = {"value": None}
+
+        class BoundaryGateway:
+            name = "boundary_test_gateway"
+
+            def extract_transaction_id(self, *, data):
+                return "BOUNDARY-001"
+
+            def verify_callback(self, *, payment, data):
+                observed_atomic_state["value"] = connection.in_atomic_block
+                return GatewayCallbackResult(
+                    transaction_id="BOUNDARY-001",
+                    success=False,
+                    amount=Decimal("50000000"),
+                    raw_response={"status": "NOK"},
+                )
+
+            def build_redirect_url(self, *, payment, transaction_id):
+                return "/"
+
+            def initiate(self, *, payment):
+                raise AssertionError("not used")
+
+        PaymentGatewayRegistry.register(BoundaryGateway())
+
+        PaymentService.handle_callback(
+            gateway_name="boundary_test_gateway",
+            data={"Authority": "BOUNDARY-001", "Status": "NOK"},
+        )
+
+        self.assertFalse(observed_atomic_state["value"])
 
 
 @override_settings(PAYMENT_DEFAULT_GATEWAY="mock_gateway")

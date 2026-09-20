@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404
 
 from orders.models import Order, Payment
 from .gateways import (
+    GatewayInitiation,
     GatewayInitiationError,
     GatewayVerificationError,
     PaymentGatewayRegistry,
@@ -79,6 +80,22 @@ class PaymentService:
                 status=Payment.Status.PENDING,
                 gateway_name=gateway.name,
             )
+        elif (
+            payment.status == Payment.Status.PENDING
+            and payment.gateway_name == gateway.name
+            and payment.transaction_code
+        ):
+            # Reuse the live gateway transaction. This prevents repeated clicks
+            # from requesting a second authority/transaction for the same order.
+            initiation = GatewayInitiation(
+                gateway_name=gateway.name,
+                transaction_id=payment.transaction_code,
+                redirect_url=gateway.build_redirect_url(
+                    payment=payment,
+                    transaction_id=payment.transaction_code,
+                ),
+            )
+            return payment, order, initiation
         else:
             payment.status = Payment.Status.PENDING
             payment.amount = order.final_amount
@@ -102,7 +119,6 @@ class PaymentService:
         return payment, order, initiation
 
     @staticmethod
-    @transaction.atomic
     def handle_callback(*, gateway_name: str, data) -> PaymentCallbackOutcome:
         try:
             gateway = PaymentGatewayRegistry.get(gateway_name)
@@ -116,9 +132,12 @@ class PaymentService:
         except Exception as exc:
             raise GatewayVerificationError("شناسه تراکنش در callback نامعتبر است.") from exc
 
+        # Read the candidate payment before calling the remote gateway. The
+        # provider verification is intentionally outside the DB transaction so a
+        # network round-trip does not hold row locks for the duration of the call.
         payment = (
-            Payment.objects.select_related("order")
-            .select_for_update()
+            Payment.objects
+            .select_related("order")
             .filter(transaction_code=transaction_id)
             .first()
         )
@@ -128,12 +147,10 @@ class PaymentService:
         if payment.gateway_name != gateway.name:
             raise ValidationError("درگاه تراکنش با درگاه Callback مطابقت ندارد.")
 
-        order = payment.order
-
         if payment.status == Payment.Status.SUCCESS:
             return PaymentCallbackOutcome(
                 payment=payment,
-                order=order,
+                order=payment.order,
                 success=True,
             )
 
@@ -147,29 +164,58 @@ class PaymentService:
         except Exception as exc:
             raise GatewayVerificationError("خطا در اعتبارسنجی پاسخ درگاه.") from exc
 
-        if result.amount != payment.amount:
-            raise ValidationError("مبلغ تراکنش با سفارش مطابقت ندارد.")
+        with transaction.atomic():
+            locked_payment = (
+                Payment.objects
+                .select_related("order")
+                .select_for_update()
+                .get(pk=payment.pk)
+            )
+            locked_order = locked_payment.order
 
-        gateway_response = json.dumps(
-            dict(result.raw_response),
-            ensure_ascii=False,
-            default=str,
-        )
+            if locked_payment.gateway_name != gateway.name:
+                raise ValidationError("درگاه تراکنش با درگاه Callback مطابقت ندارد.")
 
-        reference_id = result.reference_id
-        if result.success and not reference_id:
-            reference_id = f"REF-{payment.pk}-{uuid4().hex[:12].upper()}"
+            # A concurrent callback may have committed SUCCESS while the gateway
+            # verification was in flight. Treat that as the idempotent outcome.
+            if locked_payment.status == Payment.Status.SUCCESS:
+                return PaymentCallbackOutcome(
+                    payment=locked_payment,
+                    order=locked_order,
+                    success=True,
+                )
 
-        new_status = Payment.Status.SUCCESS if result.success else Payment.Status.FAILED
-        payment.update_status_and_order(
-            new_status=new_status,
-            transaction_id=result.transaction_id,
-            reference_id=reference_id,
-            gateway_response=gateway_response,
-        )
+            if locked_payment.transaction_code != result.transaction_id:
+                raise ValidationError("شناسه تراکنش با رکورد پرداخت مطابقت ندارد.")
 
-        return PaymentCallbackOutcome(
-            payment=payment,
-            order=order,
-            success=(payment.status == Payment.Status.SUCCESS),
-        )
+            if result.amount != locked_payment.amount:
+                raise ValidationError("مبلغ تراکنش با سفارش مطابقت ندارد.")
+
+            gateway_response = json.dumps(
+                dict(result.raw_response),
+                ensure_ascii=False,
+                default=str,
+            )
+
+            reference_id = result.reference_id
+            if result.success and not reference_id:
+                reference_id = f"REF-{locked_payment.pk}-{uuid4().hex[:12].upper()}"
+
+            new_status = (
+                Payment.Status.SUCCESS
+                if result.success
+                else Payment.Status.FAILED
+            )
+            locked_payment.update_status_and_order(
+                new_status=new_status,
+                transaction_id=result.transaction_id,
+                reference_id=reference_id,
+                gateway_response=gateway_response,
+            )
+
+            return PaymentCallbackOutcome(
+                payment=locked_payment,
+                order=locked_order,
+                success=(locked_payment.status == Payment.Status.SUCCESS),
+            )
+

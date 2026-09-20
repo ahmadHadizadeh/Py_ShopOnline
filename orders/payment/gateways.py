@@ -45,6 +45,14 @@ class PaymentGateway(Protocol):
     def initiate(self, *, payment) -> GatewayInitiation:
         ...
 
+    def build_redirect_url(
+        self,
+        *,
+        payment,
+        transaction_id: str,
+    ) -> str:
+        ...
+
     def extract_transaction_id(self, *, data: Mapping[str, str]) -> str:
         ...
 
@@ -82,19 +90,24 @@ class PaymentGatewayRegistry:
 class MockGateway:
     name = "mock_gateway"
 
-    def initiate(self, *, payment) -> GatewayInitiation:
-        transaction_id = f"TRX-{uuid4().hex.upper()}"
+    def build_redirect_url(self, *, payment, transaction_id: str) -> str:
         payment_gateway_url = reverse("orders:mock_payment_gateway")
-        redirect_url = (
+        return (
             f"{payment_gateway_url}"
             f"?trxid={transaction_id}"
             f"&order={payment.order.order_number}"
             f"&amount={payment.amount}"
         )
+
+    def initiate(self, *, payment) -> GatewayInitiation:
+        transaction_id = f"TRX-{uuid4().hex.upper()}"
         return GatewayInitiation(
             gateway_name=self.name,
             transaction_id=transaction_id,
-            redirect_url=redirect_url,
+            redirect_url=self.build_redirect_url(
+                payment=payment,
+                transaction_id=transaction_id,
+            ),
         )
 
     def extract_transaction_id(self, *, data: Mapping[str, str]) -> str:
@@ -250,6 +263,9 @@ class ZarinPalGateway:
         allowed = {"code", "message", "authority", "ref_id", "fee", "fee_type"}
         return {str(key): value for key, value in data.items() if str(key) in allowed}
 
+    def build_redirect_url(self, *, payment, transaction_id: str) -> str:
+        return f"{self._start_pay_url()}/{transaction_id}"
+
     def initiate(self, *, payment) -> GatewayInitiation:
         payload = {
             "merchant_id": self._merchant_id(),
@@ -279,7 +295,10 @@ class ZarinPalGateway:
         return GatewayInitiation(
             gateway_name=self.name,
             transaction_id=authority,
-            redirect_url=f"{self._start_pay_url()}/{authority}",
+            redirect_url=self.build_redirect_url(
+                payment=payment,
+                transaction_id=authority,
+            ),
         )
 
     def extract_transaction_id(self, *, data: Mapping[str, str]) -> str:
