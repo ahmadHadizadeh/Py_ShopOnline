@@ -1,0 +1,27 @@
+name: Phase 1 Step 2 verification
+
+on:
+  push:
+    branches:
+      - verify/phase1-step2-checkout
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "Django==6.0.6" pytest pytest-django Pillow python-dotenv requests
+
+      - name: Run Checkout / Order suite
+        run: |
+          pytest cart/tests.py orders/tests.py -q
