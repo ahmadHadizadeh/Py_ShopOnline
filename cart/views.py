@@ -179,7 +179,7 @@ def move_to_cart(request, item_id):
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.shortcuts import redirect
+from django.shortcuts import redirect, resolve_url
 
 
 class CartDetailView(View):
@@ -219,6 +219,10 @@ class CheckoutView(View):
 
         if for_update:
             queryset = queryset.select_for_update()
+
+        queryset = queryset.filter(
+            items__status=CartItem.STATUS_ACTIVE,
+        ).distinct()
 
         if request.user.is_authenticated:
             return queryset.filter(
@@ -389,6 +393,7 @@ class CheckoutView(View):
             login_url = getattr(settings, "LOGIN_URL", "/accounts/login/")
             query_string = urlencode({"next": request.get_full_path()})
 
-            return redirect(f"{login_url}?{query_string}")
+            login_target = resolve_url(login_url)
+            return redirect(f"{login_target}?{query_string}")
 
         return super().dispatch(request, *args, **kwargs)
