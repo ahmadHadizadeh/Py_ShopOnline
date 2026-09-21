@@ -1,11 +1,352 @@
 from django.contrib import admin
 from django.contrib.humanize.templatetags.humanize import intcomma
-from .models.shipping import ShippingMethod
+
+from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
+
+
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    readonly_fields = (
+        "product",
+        "variant_id",
+        "product_name",
+        "variant_name",
+        "sku",
+        "quantity",
+        "unit_price",
+        "subtotal_price",
+        "created",
+        "updated",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class OrderAddressSnapshotInline(admin.StackedInline):
+    model = OrderAddressSnapshot
+    extra = 0
+    can_delete = False
+    readonly_fields = (
+        "recipient_name",
+        "recipient_mobile",
+        "postal_code",
+        "province",
+        "city",
+        "address_line",
+        "created",
+        "updated",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class PaymentInline(admin.StackedInline):
+    model = Payment
+    extra = 0
+    can_delete = False
+    readonly_fields = (
+        "user",
+        "amount",
+        "status",
+        "gateway_name",
+        "transaction_code",
+        "reference_code",
+        "gateway_response",
+        "created",
+        "updated",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = (
+        "order_number",
+        "user_display",
+        "get_status_display_value",
+        "get_final_amount_display",
+        "get_payment_status_display",
+        "stock_reduced",
+        "created",
+    )
+    list_filter = (
+        "status",
+        "stock_reduced",
+        "shipping_method",
+        "payment__status",
+        "created",
+    )
+    search_fields = (
+        "order_number",
+        "user__username",
+        "user__email",
+        "payment__transaction_code",
+        "payment__reference_code",
+    )
+    ordering = ("-created",)
+    list_select_related = ("user", "shipping_method", "payment")
+    readonly_fields = (
+        "order_number",
+        "user",
+        "cart",
+        "shipping_method",
+        "status",
+        "subtotal_amount",
+        "discount_amount",
+        "shipping_amount",
+        "final_amount",
+        "paid_at",
+        "cancelled_at",
+        "completed_at",
+        "customer_note",
+        "stock_reduced",
+        "created",
+        "updated",
+    )
+    fieldsets = (
+        (
+            "اطلاعات سفارش",
+            {
+                "fields": (
+                    "order_number",
+                    "user",
+                    "cart",
+                    "shipping_method",
+                    "status",
+                    "stock_reduced",
+                )
+            },
+        ),
+        (
+            "مبالغ",
+            {
+                "fields": (
+                    "subtotal_amount",
+                    "discount_amount",
+                    "shipping_amount",
+                    "final_amount",
+                )
+            },
+        ),
+        (
+            "یادداشت‌ها",
+            {
+                "fields": ("customer_note", "admin_note"),
+            },
+        ),
+        (
+            "زمان‌ها",
+            {
+                "fields": (
+                    "paid_at",
+                    "cancelled_at",
+                    "completed_at",
+                    "created",
+                    "updated",
+                )
+            },
+        ),
+    )
+    inlines = (
+        OrderItemInline,
+        OrderAddressSnapshotInline,
+        PaymentInline,
+    )
+
+    @admin.display(description="کاربر", ordering="user__email")
+    def user_display(self, obj):
+        return obj.user.email or obj.user.username
+
+    @admin.display(description="وضعیت سفارش", ordering="status")
+    def get_status_display_value(self, obj):
+        return obj.get_status_display()
+
+    @admin.display(description="مبلغ نهایی", ordering="final_amount")
+    def get_final_amount_display(self, obj):
+        return f"{intcomma(int(obj.final_amount))} تومان"
+
+    @admin.display(description="وضعیت پرداخت", ordering="payment__status")
+    def get_payment_status_display(self, obj):
+        try:
+            return obj.payment.get_status_display()
+        except Payment.DoesNotExist:
+            return "بدون پرداخت"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(OrderItem)
+class OrderItemAdmin(admin.ModelAdmin):
+    list_display = (
+        "order",
+        "product_name",
+        "variant_name",
+        "quantity",
+        "unit_price",
+        "subtotal_price",
+        "created",
+    )
+    list_filter = ("created", "updated")
+    search_fields = (
+        "order__order_number",
+        "product_name",
+        "variant_name",
+        "sku",
+    )
+    list_select_related = ("order", "product")
+    readonly_fields = (
+        "order",
+        "product",
+        "variant_id",
+        "product_name",
+        "variant_name",
+        "sku",
+        "quantity",
+        "unit_price",
+        "subtotal_price",
+        "created",
+        "updated",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        "order",
+        "user",
+        "amount_display",
+        "status",
+        "gateway_name",
+        "transaction_code",
+        "reference_code",
+        "created",
+    )
+    list_filter = ("status", "gateway_name", "created")
+    search_fields = (
+        "order__order_number",
+        "user__username",
+        "user__email",
+        "transaction_code",
+        "reference_code",
+    )
+    ordering = ("-created",)
+    list_select_related = ("order", "user")
+    readonly_fields = (
+        "order",
+        "user",
+        "amount",
+        "status",
+        "gateway_name",
+        "transaction_code",
+        "reference_code",
+        "gateway_response",
+        "created",
+        "updated",
+    )
+    fieldsets = (
+        (
+            "پرداخت",
+            {
+                "fields": (
+                    "order",
+                    "user",
+                    "amount",
+                    "status",
+                    "gateway_name",
+                )
+            },
+        ),
+        (
+            "شناسه‌های تراکنش",
+            {
+                "fields": (
+                    "transaction_code",
+                    "reference_code",
+                )
+            },
+        ),
+        (
+            "پاسخ درگاه",
+            {
+                "fields": ("gateway_response",),
+            },
+        ),
+        (
+            "زمان‌ها",
+            {
+                "fields": ("created", "updated"),
+            },
+        ),
+    )
+
+    @admin.display(description="مبلغ پرداخت", ordering="amount")
+    def amount_display(self, obj):
+        return f"{intcomma(int(obj.amount))} تومان"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(OrderAddressSnapshot)
+class OrderAddressSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        "order",
+        "recipient_name",
+        "recipient_mobile",
+        "province",
+        "city",
+        "created",
+    )
+    search_fields = (
+        "order__order_number",
+        "recipient_name",
+        "recipient_mobile",
+        "postal_code",
+        "province",
+        "city",
+    )
+    list_select_related = ("order",)
+    readonly_fields = (
+        "order",
+        "recipient_name",
+        "recipient_mobile",
+        "postal_code",
+        "province",
+        "city",
+        "address_line",
+        "created",
+        "updated",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(ShippingMethod)
 class ShippingMethodAdmin(admin.ModelAdmin):
-    # نمایش ستون‌ها در لیست اصلی
     list_display = (
         "name",
         "get_cost_display",
@@ -14,23 +355,11 @@ class ShippingMethodAdmin(admin.ModelAdmin):
         "is_active",
         "updated",
     )
-
-    # فیلترهای سمت راست
     list_filter = ("is_active", "estimated_delivery_days")
-
-    # فیلدهای قابل جستجو
     search_fields = ("name", "description")
-
-    # ویرایش سریع از داخل لیست (بهینه شده برای سرعت ادمین)
     list_editable = ("is_active", "estimated_delivery_days")
-
-    # ترتیب نمایش
     ordering = ("cost",)
-
-    # فیلدهایی که فقط خواندنی هستند
     readonly_fields = ("created", "updated")
-
-    # فیلدبندی فرم ویرایش (Fieldsets) برای نظم بهتر
     fieldsets = (
         ("اطلاعات اصلی", {"fields": ("name", "description", "is_active")}),
         (
@@ -48,7 +377,6 @@ class ShippingMethodAdmin(admin.ModelAdmin):
         ),
     )
 
-    # متدهای نمایش شخصی‌سازی شده برای خوانایی مبالغ (اصل ۱۳)
     @admin.display(description="هزینه ارسال (تومان)")
     def get_cost_display(self, obj):
         return f"{intcomma(int(obj.cost))} تومان"
