@@ -1039,7 +1039,7 @@ class AdminOperationalTests(TestCase):
 
         content = response.content.decode()
         self.assertIn(self.order.order_number, content)
-        self.assertIn(Payment.Status.PENDING.label, content)
+        self.assertIn("در انتظار پرداخت", content)
 
     def test_payment_admin_changelist_is_operational(self):
         response = self.client.get(
