@@ -4,6 +4,7 @@ import hmac
 from unittest.mock import patch
 
 from django.conf import settings
+from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -965,3 +966,88 @@ class ProcessPaymentViewTests(TestCase):
         )
 
         self.assertFalse(Payment.objects.filter(order=self.order).exists())
+
+
+class AdminOperationalTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="admin-ops-user",
+            email="admin-ops@example.com",
+            password="AdminPass123!",
+        )
+        self.client.force_login(self.admin_user)
+
+        self.category = Category.objects.create(
+            name="Admin Ops Category",
+            slug="admin-ops-category",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Admin Ops Product",
+            slug="admin-ops-product",
+            price=Decimal("1200000"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+        self.order = Order.objects.create(
+            user=self.admin_user,
+            subtotal_amount=Decimal("1200000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("150000"),
+            final_amount=Decimal("1350000"),
+            status=Order.Status.PENDING,
+        )
+        OrderItem.objects.create(
+            order=self.order,
+            product=self.product,
+            product_name=self.product.name,
+            variant_name="",
+            sku=None,
+            quantity=1,
+            unit_price=Decimal("1200000"),
+            subtotal_price=Decimal("1200000"),
+        )
+        self.payment = Payment.objects.create(
+            order=self.order,
+            user=self.admin_user,
+            amount=Decimal("1350000"),
+            status=Payment.Status.PENDING,
+            gateway_name="mock_gateway",
+            transaction_code="ADMIN-TRX-001",
+        )
+
+    def test_operational_models_are_registered_in_admin(self):
+        for model in (Order, OrderItem, Payment):
+            self.assertIn(model, admin.site._registry)
+
+        order_admin = admin.site._registry[Order]
+        payment_admin = admin.site._registry[Payment]
+
+        self.assertIn("status", order_admin.readonly_fields)
+        self.assertIn("final_amount", order_admin.readonly_fields)
+        self.assertIn("stock_reduced", order_admin.readonly_fields)
+        self.assertIn("status", payment_admin.readonly_fields)
+        self.assertIn("transaction_code", payment_admin.readonly_fields)
+
+    def test_order_admin_changelist_is_operational(self):
+        response = self.client.get(
+            reverse("admin:orders_order_changelist")
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        content = response.content.decode()
+        self.assertIn(self.order.order_number, content)
+        self.assertIn("mock_gateway", content)
+
+    def test_payment_admin_changelist_is_operational(self):
+        response = self.client.get(
+            reverse("admin:orders_payment_changelist")
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        content = response.content.decode()
+        self.assertIn(self.order.order_number, content)
+        self.assertIn(self.payment.transaction_code, content)
