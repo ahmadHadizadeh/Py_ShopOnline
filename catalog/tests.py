@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from catalog.models.product import Product
 from catalog.models.category import Category
 from catalog.models.review import Review
+from catalog.models.variant import ProductVariant
 from catalog.services import save_product_review, toggle_wishlist
 
 User = get_user_model()
@@ -27,6 +28,25 @@ class WishlistServiceTests(BaseTestCase):
             toggle_wishlist(None, self.product1.pk)
 
 class ProductDetailViewTests(BaseTestCase):
+    def test_product_detail_renders_required_variant_selector(self):
+        variant = ProductVariant.objects.create(
+            product=self.product1,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=150,
+        )
+
+        url = reverse(
+            "catalog:product_detail",
+            kwargs={"slug": self.product1.slug},
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="variant_id"')
+        self.assertContains(response, f'value="{variant.pk}"')
+        self.assertContains(response, 'required')
+
     def test_product_detail_post_review_unauthenticated(self):
         url = reverse("catalog:product_detail", kwargs={"slug": self.product1.slug})
         response = self.client.post(url, {"rating": 5, "comment": "test"})
