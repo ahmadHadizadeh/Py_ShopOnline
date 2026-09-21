@@ -334,26 +334,27 @@ class CheckoutView(View):
                 self.get_context_data(request, cart=cart, address_form=address_form),
             )
 
-        address = address_form.save(commit=False)
-        if request.user.is_authenticated:
-            address.user = request.user
-            address.save()
-            if address.is_default:
-                Address.objects.filter(user=request.user).exclude(id=address.id).update(
-                    is_default=False
-                )
-        else:
-            address.user = None
-            address.save()
-
         try:
-            order = OrderService.create_order(
-                user=request.user if request.user.is_authenticated else None,
-                cart=cart,
-                shipping_method=shipping_method,
-                shipping_address=address,
-                customer_note=request.POST.get("customer_note", "").strip(),
-            )
+            with transaction.atomic():
+                address = address_form.save(commit=False)
+                if request.user.is_authenticated:
+                    address.user = request.user
+                    address.save()
+                    if address.is_default:
+                        Address.objects.filter(
+                            user=request.user
+                        ).exclude(id=address.id).update(is_default=False)
+                else:
+                    address.user = None
+                    address.save()
+
+                order = OrderService.create_order(
+                    user=request.user if request.user.is_authenticated else None,
+                    cart=cart,
+                    shipping_method=shipping_method,
+                    shipping_address=address,
+                    customer_note=request.POST.get("customer_note", "").strip(),
+                )
         except ValidationError as exc:
             messages.error(
                 request,
