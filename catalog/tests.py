@@ -29,8 +29,15 @@ class WishlistServiceTests(BaseTestCase):
 
 class ProductDetailViewTests(BaseTestCase):
     def test_product_detail_renders_required_variant_selector(self):
+        product = Product.objects.create(
+            name="Variant Product",
+            slug="variant-product",
+            is_active=True,
+            stock=10,
+            category=self.category,
+        )
         variant = ProductVariant.objects.create(
-            product=self.product1,
+            product=product,
             name="رنگ",
             value="قرمز",
             price_adjustment=150,
@@ -38,11 +45,12 @@ class ProductDetailViewTests(BaseTestCase):
 
         url = reverse(
             "catalog:product_detail",
-            kwargs={"slug": self.product1.slug},
+            kwargs={"slug": product.slug},
         )
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="product-variant"')
         self.assertContains(response, 'name="variant_id"')
         self.assertContains(response, f'value="{variant.pk}"')
         self.assertContains(response, 'required')
@@ -90,4 +98,3 @@ class OtpCsrfIntegrationTests(TestCase):
 
         self.assertEqual(otp_response.status_code, 200)
         self.assertEqual(otp_response.json().get("status"), "success")
-
