@@ -256,10 +256,14 @@ class CheckoutView(View):
                         }
                     )
                 except Exception as e:
-                    logger.error(f"Error calculating shipping: {e}")
-                    shipping_methods_with_costs.append(
-                        {"method": method, "cost": 0, "formatted_cost": "0"}
+                    logger.error(
+                        "Error calculating shipping for method %s: %s",
+                        method.pk,
+                        e,
                     )
+                    # Never turn a calculation failure into free shipping.
+                    # A failed method must not be offered to the customer.
+                    continue
         except Exception as e:
             logger.error(f"Error fetching shipping methods: {e}")
             messages.error(request, "امکان محاسبه هزینه‌های ارسال وجود ندارد.")
