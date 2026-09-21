@@ -139,7 +139,7 @@
                         {% endif %}
                     </div>
                     <div>
-                        <span class="text-3xl font-extrabold text-indigo-700">{{ product.price|floatformat:0 }}</span>
+                        <span id="product-price-display" class="text-3xl font-extrabold text-indigo-700" data-base-price="{{ product.price }}">{{ product.price|floatformat:0 }}</span>
                         <span class="text-sm text-indigo-600 font-bold mr-1">تومان</span>
                     </div>
                 </div>
@@ -155,7 +155,34 @@
                     {% if product.stock > 0 %}
                     <form method="post" action="{% url 'cart:add' product.id %}" class="flex flex-wrap items-center gap-4 w-full">
                         {% csrf_token %}
-                        
+
+                        {% if product.variants.all %}
+                            <div class="w-full">
+                                <label for="product-variant" class="block text-sm font-bold text-gray-800 mb-2">
+                                    انتخاب ویژگی
+                                </label>
+                                <select
+                                    id="product-variant"
+                                    name="variant_id"
+                                    required
+                                    class="w-full rounded-xl border border-indigo-100 bg-white px-4 py-3 text-sm font-bold text-gray-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                                >
+                                    <option value="" selected disabled>لطفاً یک گزینه را انتخاب کنید</option>
+                                    {% for variant in product.variants.all %}
+                                        <option
+                                            value="{{ variant.id }}"
+                                            data-price-adjustment="{{ variant.price_adjustment }}"
+                                        >
+                                            {{ variant.name }}: {{ variant.value }}
+                                            {% if variant.price_adjustment > 0 %}(+{{ variant.price_adjustment|floatformat:0 }} تومان)
+                                            {% elif variant.price_adjustment < 0 %}({{ variant.price_adjustment|floatformat:0 }} تومان)
+                                            {% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        {% endif %}
+
                         <div class="flex items-center overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-sm">
                             <button
                                 type="button"
@@ -444,6 +471,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const wishlistButton = document.getElementById("wishlist-btn");
     const wishlistMessage = document.getElementById("wishlist-message");
+
+    const variantSelect = document.getElementById("product-variant");
+    const priceDisplay = document.getElementById("product-price-display");
+
+    if (variantSelect && priceDisplay) {
+        const basePrice = Number(priceDisplay.dataset.basePrice || 0);
+
+        const formatPrice = (value) =>
+            new Intl.NumberFormat("fa-IR", {
+                maximumFractionDigits: 0,
+            }).format(value);
+
+        variantSelect.addEventListener("change", function () {
+            const selectedOption = variantSelect.options[variantSelect.selectedIndex];
+            const adjustment = Number(
+                selectedOption?.dataset.priceAdjustment || 0
+            );
+            priceDisplay.textContent = formatPrice(basePrice + adjustment);
+        });
+    }
 
     
 
