@@ -1094,7 +1094,8 @@ class CheckoutOrderIntegrityContractTests(TestCase):
             self.checkout_payload(),
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("cart", response.url)
         self.assertFalse(Order.objects.filter(cart=self.cart).exists())
         self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
         self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
@@ -1102,6 +1103,57 @@ class CheckoutOrderIntegrityContractTests(TestCase):
             Cart.objects.get(pk=self.cart.pk).status,
             Cart.STATUS_ACTIVE,
         )
+
+    def test_checkout_get_rejects_saved_only_cart(self):
+        self.item.status = CartItem.STATUS_SAVED
+        self.item.save(update_fields=["status"])
+
+        response = self.client.get(reverse("cart:checkout"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("cart", response.url)
+
+    def test_checkout_mixed_cart_creates_order_from_active_items_only(self):
+        saved_product = Product.objects.create(
+            name="Saved Only Product",
+            slug="saved-only-product",
+            price=700,
+            stock=10,
+            is_active=True,
+            category=self.category,
+        )
+        CartItem.objects.create(
+            cart=self.cart,
+            product=saved_product,
+            quantity=3,
+            unit_price_snapshot=700,
+            status=CartItem.STATUS_SAVED,
+        )
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        order = Order.objects.get(cart=self.cart)
+        self.assertEqual(order.items.count(), 1)
+        self.assertEqual(order.items.get().product_id, self.product.id)
+        self.assertFalse(
+            order.items.filter(product_id=saved_product.id).exists()
+        )
+
+    def test_guest_post_cannot_enter_checkout_transaction(self):
+        self.client.logout()
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("accounts:login", response.url)
 
     def test_order_service_failure_rolls_back_address_order_payment_and_cart(self):
         with patch(
