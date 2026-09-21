@@ -1,5 +1,6 @@
 import pytest
 from datetime import timedelta
+from django.core.exceptions import ValidationError
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -15,9 +16,10 @@ from catalog.models.product import Product
 from accounts.models.address import Address
 from catalog.models.category import Category
 from catalog.models.variant import ProductVariant
-from orders.models.order_item import OrderItem
+from orders.models.order_item import Order, OrderAddressSnapshot, OrderItem, Payment
 from orders.models.shipping import ShippingMethod
 from orders.services import OrderService
+from cart.views import CheckoutView
 
 
 @pytest.mark.django_db
@@ -864,3 +866,299 @@ class GuestCartMergeContractTests(TestCase):
             user=self.user, status=Cart.STATUS_ACTIVE
         ).first()
         self.assertIsNone(user_cart)
+
+
+# ---------------------------------------------------------------------------
+# Checkout / Order integrity contract tests
+# ---------------------------------------------------------------------------
+
+
+class CheckoutOrderIntegrityContractTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+
+        self.user = User.objects.create_user(
+            username="checkout-integrity-user",
+            password="testpass123",
+        )
+        self.client.force_login(self.user)
+
+        self.category = Category.objects.create(
+            name="Checkout Integrity Category",
+            slug="checkout-integrity-category",
+        )
+        self.product = Product.objects.create(
+            name="Checkout Integrity Product",
+            slug="checkout-integrity-product",
+            price=1000,
+            stock=10,
+            is_active=True,
+            category=self.category,
+        )
+        self.cart = Cart.objects.create(
+            user=self.user,
+            status=Cart.STATUS_ACTIVE,
+        )
+        self.item = CartItem.objects.create(
+            cart=self.cart,
+            product=self.product,
+            quantity=2,
+            unit_price_snapshot=1250,
+            status=CartItem.STATUS_ACTIVE,
+        )
+        self.shipping_method = ShippingMethod.objects.create(
+            name="Checkout Integrity Shipping",
+            cost=100,
+            is_active=True,
+        )
+
+    def checkout_payload(self, **overrides):
+        payload = {
+            "shipping_method_id": self.shipping_method.id,
+            "recipient_name": "کاربر تست",
+            "phone_number": "09123456789",
+            "postal_code": "1234567890",
+            "province": "تهران",
+            "city": "تهران",
+            "address_line": "آدرس تست",
+            "is_default": False,
+            "customer_note": "تست قرارداد Checkout",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_empty_cart_cannot_create_order(self):
+        self.item.delete()
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            Cart.objects.get(pk=self.cart.pk).status,
+            Cart.STATUS_ACTIVE,
+        )
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+
+    def test_ordered_cart_cannot_be_checked_out_again(self):
+        self.cart.status = Cart.STATUS_ORDERED
+        self.cart.save(update_fields=["status"])
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertEqual(
+            Cart.objects.get(pk=self.cart.pk).status,
+            Cart.STATUS_ORDERED,
+        )
+
+    def test_invalid_shipping_method_does_not_create_order(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(shipping_method_id=999999),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+        self.assertEqual(
+            Cart.objects.get(pk=self.cart.pk).status,
+            Cart.STATUS_ACTIVE,
+        )
+
+    def test_inactive_shipping_method_does_not_create_order(self):
+        self.shipping_method.is_active = False
+        self.shipping_method.save(update_fields=["is_active"])
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+    def test_invalid_address_does_not_create_order_or_persist_address(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(postal_code="123"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+    def test_foreign_address_id_can_never_be_used_for_checkout(self):
+        other_user = User.objects.create_user(
+            username="checkout-other-user",
+            password="testpass123",
+        )
+        foreign_address = Address.objects.create(
+            user=other_user,
+            recipient_name="کاربر دیگر",
+            phone_number="09120000000",
+            postal_code="1111111111",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس کاربر دیگر",
+        )
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(
+                address_id=foreign_address.id,
+                recipient_name="گیرنده من",
+                address_line="آدرس من",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(cart=self.cart)
+        snapshot = order.address_snapshot
+
+        self.assertEqual(snapshot.recipient_name, "گیرنده من")
+        self.assertEqual(snapshot.address_line, "آدرس من")
+
+        foreign_address.refresh_from_db()
+        self.assertEqual(foreign_address.recipient_name, "کاربر دیگر")
+        self.assertEqual(foreign_address.address_line, "آدرس کاربر دیگر")
+
+    def test_catalog_price_change_does_not_override_cart_price_snapshot(self):
+        self.product.price = 9999
+        self.product.save(update_fields=["price"])
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(cart=self.cart)
+        order_item = order.items.get()
+
+        self.assertEqual(order_item.unit_price, self.item.unit_price_snapshot)
+        self.assertEqual(order_item.subtotal_price, self.item.unit_price_snapshot * self.item.quantity)
+        self.assertEqual(order.subtotal_amount, self.item.unit_price_snapshot * self.item.quantity)
+
+    def test_address_snapshot_is_historical(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        order = Order.objects.get(cart=self.cart)
+        snapshot = order.address_snapshot
+        address = Address.objects.get(user=self.user)
+
+        address.recipient_name = "نام جدید"
+        address.address_line = "آدرس جدید"
+        address.save(update_fields=["recipient_name", "address_line"])
+
+        snapshot.refresh_from_db()
+
+        self.assertEqual(snapshot.recipient_name, "کاربر تست")
+        self.assertEqual(snapshot.address_line, "آدرس تست")
+
+    def test_checkout_does_not_reduce_stock(self):
+        initial_stock = self.product.stock
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.product.refresh_from_db()
+        order = Order.objects.get(cart=self.cart)
+
+        self.assertEqual(self.product.stock, initial_stock)
+        self.assertFalse(order.stock_reduced)
+
+    def test_saved_only_cart_cannot_create_order(self):
+        self.item.status = CartItem.STATUS_SAVED
+        self.item.save(update_fields=["status"])
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+        self.assertEqual(
+            Cart.objects.get(pk=self.cart.pk).status,
+            Cart.STATUS_ACTIVE,
+        )
+
+    def test_order_service_failure_rolls_back_address_order_payment_and_cart(self):
+        with patch(
+            "cart.views.OrderService.create_order",
+            side_effect=ValidationError("forced checkout failure"),
+        ):
+            response = self.client.post(
+                reverse("cart:checkout"),
+                self.checkout_payload(),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
+
+    def test_checkout_is_idempotent_after_first_success(self):
+        first_response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+        self.assertEqual(first_response.status_code, 302)
+
+        order_count = Order.objects.filter(cart=self.cart).count()
+
+        second_response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(second_response.status_code, 302)
+        self.assertEqual(Order.objects.filter(cart=self.cart).count(), order_count)
+        self.assertEqual(order_count, 1)
+
+    def test_shipping_calculation_failure_never_falls_back_to_zero_cost(self):
+        request = RequestFactory().get(reverse("cart:checkout"))
+        request.user = self.user
+
+        with patch.object(
+            ShippingMethod,
+            "calculate_shipping_cost",
+            side_effect=RuntimeError("forced shipping calculation failure"),
+        ):
+            data = CheckoutView().get_shipping_methods_data(request, self.cart)
+
+        self.assertEqual(data, [])
+
+    def test_payment_amount_matches_final_order_amount(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        order = Order.objects.get(cart=self.cart)
+        self.assertEqual(order.payment.amount, order.final_amount)
