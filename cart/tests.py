@@ -16,7 +16,7 @@ from catalog.models.product import Product
 from accounts.models.address import Address
 from catalog.models.category import Category
 from catalog.models.variant import ProductVariant
-from orders.models.order_item import Order, OrderAddressSnapshot, OrderItem, Payment
+from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment
 from orders.models.shipping import ShippingMethod
 from orders.services import OrderService
 from cart.views import CheckoutView
