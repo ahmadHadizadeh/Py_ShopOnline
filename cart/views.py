@@ -293,8 +293,8 @@ class CheckoutView(View):
 
     def get(self, request):
         cart = self.get_cart(request)
-        if not cart or not cart.items.exists():
-            messages.warning(request, "سبد خرید شما خالی است.")
+        if not cart or not cart.active_items.exists():
+            messages.warning(request, "سبد خرید شما آیتم قابل سفارشی ندارد.")
             return redirect("cart:detail")
 
         return render(
@@ -304,7 +304,7 @@ class CheckoutView(View):
     @transaction.atomic
     def post(self, request):
         cart = self.get_cart(request, for_update=True)
-        if not cart or not cart.items.exists():
+        if not cart or not cart.active_items.exists():
             messages.error(request, "سبد خرید معتبر نیست.")
             return redirect("cart:detail")
 
