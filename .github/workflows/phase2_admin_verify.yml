@@ -1,9 +1,9 @@
 name: Phase 2 Admin Verify
 
 on:
-  push:
+  pull_request:
     branches:
-      - phase2-step1-admin-ops
+      - main
 
 jobs:
   tests:
