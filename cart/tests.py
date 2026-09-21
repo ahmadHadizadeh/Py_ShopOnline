@@ -1153,7 +1153,8 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertIn("accounts:login", response.url)
+        self.assertIn("/accounts/login/", response.url)
+        self.assertIn("next=", response.url)
 
     def test_order_service_failure_rolls_back_address_order_payment_and_cart(self):
         with patch(
