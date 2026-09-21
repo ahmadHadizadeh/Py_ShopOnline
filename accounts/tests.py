@@ -10,36 +10,73 @@ from cart.models import Cart, CartItem
 from catalog.models.category import Category
 from catalog.models.product import Product
 
+
 @pytest.mark.django_db
-def test_address_default_logic(client, user_factory):
-    # استفاده از factory برای ساخت یوزر
-    user = user_factory()
-    
-    # ساخت آدرس اول و پیش‌فرض
-    addr1 = Address.objects.create(user=user, recipient_name='A1', city='Amol', is_default=True)
-    
-    # ساخت آدرس دوم و پیش‌فرض کردن آن
-    addr2 = Address.objects.create(user=user, recipient_name='A2', city='Tehran', is_default=True)
-    
+def test_address_default_logic(django_user_model):
+    user = django_user_model.objects.create_user(
+        username="address-default-user",
+        password="testpass123",
+    )
+
+    addr1 = Address.objects.create(
+        user=user,
+        recipient_name="A1",
+        phone_number="09123456789",
+        postal_code="1234567890",
+        province="مازندران",
+        city="آمل",
+        address_line="آدرس تست اول",
+        is_default=True,
+    )
+
+    addr2 = Address.objects.create(
+        user=user,
+        recipient_name="A2",
+        phone_number="09123456780",
+        postal_code="1234567891",
+        province="تهران",
+        city="تهران",
+        address_line="آدرس تست دوم",
+        is_default=True,
+    )
+
     addr1.refresh_from_db()
-    
+
     assert addr2.is_default is True
     assert addr1.is_default is False
 
+
 @pytest.mark.django_db
-def test_address_idor_prevention(client, user_factory):
-    # یوزر A آدرس می‌سازد
-    user_a = user_factory()
-    addr_a = Address.objects.create(user=user_a, recipient_name='A', city='Amol')
-    
-    # یوزر B لاگین می‌کند
-    user_b = user_factory()
+def test_address_idor_prevention(client, django_user_model):
+    user_a = django_user_model.objects.create_user(
+        username="address-owner-a",
+        password="testpass123",
+    )
+
+    addr_a = Address.objects.create(
+        user=user_a,
+        recipient_name="A",
+        phone_number="09123456789",
+        postal_code="1234567890",
+        province="مازندران",
+        city="آمل",
+        address_line="آدرس مالک A",
+    )
+
+    user_b = django_user_model.objects.create_user(
+        username="address-owner-b",
+        password="testpass123",
+    )
+
     client.force_login(user_b)
-    
-    # تلاش یوزر B برای دسترسی به آدرس یوزر A
-    response = client.get(reverse('accounts:address_update', kwargs={'pk': addr_a.pk}))
-    
-    # باید ۴۰۴ دریافت کند (چون در get_queryset فیلتر کردیم)
+
+    response = client.get(
+        reverse(
+            "accounts:address_update",
+            kwargs={"pk": addr_a.pk},
+        )
+    )
+
     assert response.status_code == 404
 
 
