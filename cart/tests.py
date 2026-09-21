@@ -997,7 +997,7 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
 
     def test_foreign_address_id_can_never_be_used_for_checkout(self):
-        other_user = User.objects.create_user(
+        other_user = get_user_model().objects.create_user(
             username="checkout-other-user",
             password="testpass123",
         )
