@@ -282,6 +282,47 @@ class PaymentCallbackSecurityTests(TestCase):
             self.cart.pk,
         )
 
+    def test_failed_payment_keeps_order_retryable(self):
+        response = self.client1.post(
+            self.callback_url,
+            {
+                "trxid": self.payment.transaction_code,
+                "status": "failed",
+                "amount": "50000000",
+                "signature": self.callback_signature(),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "orders:payment_failed",
+                kwargs={"order_number": self.order.order_number},
+            ),
+        )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.payment.status, Payment.Status.FAILED)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertIsNone(self.order.cancelled_at)
+
+    def test_cancelled_order_cannot_be_paid(self):
+        self.order.status = Order.Status.CANCELLED
+        self.order.save(update_fields=["status"])
+
+        with self.assertRaises(ValidationError):
+            PaymentService.initiate(
+                user=self.user1,
+                order_number=self.order.order_number,
+            )
+
+        self.assertFalse(
+            Payment.objects.filter(order=self.order).exists()
+        )
+
+
     def test_callback_idempotency_on_already_successful_payment(self):
         self.payment.status = Payment.Status.SUCCESS
         self.payment.reference_code = "REF-EXISTING-123"
@@ -504,6 +545,31 @@ class PaymentServiceTests(TestCase):
         self.assertEqual(payment.status, Payment.Status.PENDING)
         self.assertEqual(payment.transaction_code, initiation.transaction_id)
         self.assertIn("mock-payment-gateway", initiation.redirect_url)
+
+    def test_failed_payment_can_be_retried_without_cancelling_order(self):
+        payment, order, first_initiation = PaymentService.initiate(
+            user=self.user,
+            order_number=self.order.order_number,
+        )
+
+        payment.status = Payment.Status.FAILED
+        payment.save(update_fields=["status"])
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
+        retry_payment, retry_order, retry_initiation = PaymentService.initiate(
+            user=self.user,
+            order_number=self.order.order_number,
+        )
+
+        self.assertEqual(retry_payment.pk, payment.pk)
+        self.assertEqual(retry_order.pk, order.pk)
+        self.assertEqual(retry_payment.status, Payment.Status.PENDING)
+        self.assertNotEqual(
+            retry_initiation.transaction_id,
+            first_initiation.transaction_id,
+        )
 
     def test_service_reuses_existing_one_to_one_payment(self):
         first_payment, _, _ = PaymentService.initiate(
