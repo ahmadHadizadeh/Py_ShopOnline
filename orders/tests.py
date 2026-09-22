@@ -309,6 +309,8 @@ class PaymentCallbackSecurityTests(TestCase):
         self.assertIsNone(self.order.cancelled_at)
 
     def test_cancelled_order_cannot_be_paid(self):
+        original_transaction_code = self.payment.transaction_code
+
         self.order.status = Order.Status.CANCELLED
         self.order.save(update_fields=["status"])
 
@@ -318,9 +320,15 @@ class PaymentCallbackSecurityTests(TestCase):
                 order_number=self.order.order_number,
             )
 
-        self.assertFalse(
-            Payment.objects.filter(order=self.order).exists()
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.payment.status, Payment.Status.PENDING)
+        self.assertEqual(
+            self.payment.transaction_code,
+            original_transaction_code,
         )
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
 
 
     def test_callback_idempotency_on_already_successful_payment(self):
