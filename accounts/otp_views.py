@@ -4,6 +4,7 @@ import logging
 
 from django.contrib.auth import get_user_model, login
 from django.http import JsonResponse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.models import Profile
@@ -24,6 +25,22 @@ def parse_json_request(request):
         return None
 
     return data
+
+
+def get_safe_login_redirect(request, next_url):
+    """Return a safe same-site redirect target or the site root."""
+    next_url = (next_url or "").strip()
+    if not next_url:
+        return "/"
+
+    if url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+
+    return "/"
 
 
 @require_POST
@@ -97,6 +114,7 @@ def verify_otp_view(request):
     raw_phone = data.get("phone") or data.get("mobile") or ""
     phone = SMSIRService.normalize_phone(str(raw_phone))
     code = str(data.get("code", "")).strip()
+    next_url = get_safe_login_redirect(request, data.get("next"))
 
     if not phone:
         return JsonResponse(
@@ -168,5 +186,6 @@ def verify_otp_view(request):
         {
             "status": "success",
             "message": "ورود با موفقیت انجام شد.",
+            "redirect_url": next_url,
         }
     )
