@@ -28,9 +28,12 @@
                     <i class="fa-solid fa-location-dot w-5"></i> آدرس‌های من
                 </a>
 
-                <a href="#" class="flex items-center gap-3 p-3 rounded-lg text-red-600 hover:bg-red-50 mt-6 transition-colors">
-                    <i class="fa-solid fa-right-from-bracket w-5"></i> خروج از حساب کاربری
-                </a>
+                <form method="POST" action="{% url 'accounts:logout' %}" class="m-0 mt-6">
+                    {% csrf_token %}
+                    <button type="submit" class="w-full flex items-center gap-3 p-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors">
+                        <i class="fa-solid fa-right-from-bracket w-5"></i> خروج از حساب کاربری
+                    </button>
+                </form>
             </nav>
         </div>
     </aside>
