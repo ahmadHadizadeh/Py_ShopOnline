@@ -1,0 +1,30 @@
+{% extends "catalog/base.html" %}
+
+{% block title %}ورود / ثبت‌نام{% endblock %}
+
+{% block content %}
+<div class="min-h-[55vh] flex items-center justify-center">
+    <div class="w-full max-w-md bg-white border border-gray-100 rounded-3xl shadow-sm p-8 text-center">
+        <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <i class="fa-solid fa-mobile-screen-button text-2xl"></i>
+        </div>
+        <h1 class="text-2xl font-black text-gray-900 mb-3">ورود / ثبت‌نام</h1>
+        <p class="text-sm leading-7 text-gray-500">
+            برای ورود به حساب کاربری، شماره موبایل خود را وارد کنید.
+        </p>
+        <p class="text-xs text-gray-400 mt-3">
+            پنجره ورود امن باید به‌صورت خودکار باز شود.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    if (typeof window.openOtpModal === "function") {
+        window.openOtpModal();
+    }
+});
+</script>
+{% endblock %}
