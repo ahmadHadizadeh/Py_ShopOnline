@@ -105,7 +105,7 @@ def test_dashboard_logout_uses_post_form(client, django_user_model):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    logout_form_marker = '<form method="POST" action="/accounts/logout/"'
+    logout_form_marker = '<form method="POST" action="/accounts/logout/" class="m-0 mt-6">'
     assert logout_form_marker in content
 
     logout_form = content.split(logout_form_marker, 1)[1].split("</form>", 1)[0]
