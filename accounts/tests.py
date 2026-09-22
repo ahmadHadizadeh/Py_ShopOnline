@@ -88,8 +88,9 @@ def test_login_page_renders_otp_entry(client):
     )
 
     assert response.status_code == 200
-    assert b'id="otp-modal"' in response.content
-    assert b"ورود / ثبت‌نام" in response.content
+    content = response.content.decode("utf-8")
+    assert 'id="otp-modal"' in content
+    assert "ورود / ثبت‌نام" in content
 
 
 # ---------------------------------------------------------------------------
