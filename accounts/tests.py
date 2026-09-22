@@ -80,6 +80,18 @@ def test_address_idor_prevention(client, django_user_model):
     assert response.status_code == 404
 
 
+@pytest.mark.django_db
+def test_login_page_renders_otp_entry(client):
+    response = client.get(
+        reverse("accounts:login"),
+        QUERY_STRING="next=/cart/checkout/",
+    )
+
+    assert response.status_code == 200
+    assert b'id="otp-modal"' in response.content
+    assert b"ورود / ثبت‌نام" in response.content
+
+
 # ---------------------------------------------------------------------------
 # OTP + guest-cart merge integration
 # ---------------------------------------------------------------------------
@@ -138,3 +150,47 @@ def test_verify_otp_merges_guest_cart_before_login_and_preserves_cart_id(client)
     current_session = client.session
     assert current_session["cart_id"] == user_cart.pk
     assert current_session.session_key != guest_session_key
+
+
+@pytest.mark.django_db
+def test_verify_otp_returns_safe_internal_redirect(client):
+    with patch(
+        "accounts.otp_views.SMSIRService.verify_otp",
+        return_value=(True, "ok"),
+    ):
+        response = client.post(
+            reverse("accounts:verify_otp"),
+            data=dumps(
+                {
+                    "phone": "09111111111",
+                    "code": "123456",
+                    "next": "/cart/checkout/",
+                }
+            ),
+            content_type="application/json",
+        )
+
+    assert response.status_code == 200
+    assert response.json()["redirect_url"] == "/cart/checkout/"
+
+
+@pytest.mark.django_db
+def test_verify_otp_rejects_external_redirect(client):
+    with patch(
+        "accounts.otp_views.SMSIRService.verify_otp",
+        return_value=(True, "ok"),
+    ):
+        response = client.post(
+            reverse("accounts:verify_otp"),
+            data=dumps(
+                {
+                    "phone": "09222222222",
+                    "code": "123456",
+                    "next": "https://evil.example/phishing",
+                }
+            ),
+            content_type="application/json",
+        )
+
+    assert response.status_code == 200
+    assert response.json()["redirect_url"] == "/"
