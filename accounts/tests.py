@@ -93,6 +93,38 @@ def test_login_page_renders_otp_entry(client):
     assert "ورود / ثبت‌نام" in content
 
 
+@pytest.mark.django_db
+def test_dashboard_logout_uses_post_form(client, django_user_model):
+    user = django_user_model.objects.create_user(
+        username="dashboard-logout-user",
+        password="testpass123",
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("accounts:dashboard_orders"))
+
+    assert response.status_code == 200
+    content = response.content.decode("utf-8")
+    assert 'action="/accounts/logout/"' in content
+    assert 'method="POST"' in content
+    assert 'href="#"' not in content
+
+
+@pytest.mark.django_db
+def test_logout_ends_authenticated_session(client, django_user_model):
+    user = django_user_model.objects.create_user(
+        username="logout-user",
+        password="testpass123",
+    )
+    client.force_login(user)
+
+    response = client.post(reverse("accounts:logout"))
+
+    assert response.status_code == 302
+    assert response.url == "/"
+    assert client.session.get("_auth_user_id") is None
+
+
 # ---------------------------------------------------------------------------
 # OTP + guest-cart merge integration
 # ---------------------------------------------------------------------------
