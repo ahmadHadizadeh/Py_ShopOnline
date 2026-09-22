@@ -1,7 +1,9 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.humanize.templatetags.humanize import intcomma
 
 from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
+from .services import OrderService
 
 
 class OrderItemInline(admin.TabularInline):
@@ -63,6 +65,57 @@ class PaymentInline(admin.StackedInline):
 
     def has_add_permission(self, request, obj=None):
         return False
+
+
+def move_paid_orders_to_processing(modeladmin, request, queryset):
+    changed = 0
+    for order in queryset:
+        try:
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.PROCESSING,
+            )
+            changed += 1
+        except Exception as exc:
+            modeladmin.message_user(request, str(exc), level=messages.ERROR)
+    modeladmin.message_user(request, f"{changed} سفارش به وضعیت در حال پردازش منتقل شد.")
+
+
+move_paid_orders_to_processing.short_description = "انتقال سفارش‌های پرداخت‌شده به در حال پردازش"
+
+
+def move_processing_orders_to_completed(modeladmin, request, queryset):
+    changed = 0
+    for order in queryset:
+        try:
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.COMPLETED,
+            )
+            changed += 1
+        except Exception as exc:
+            modeladmin.message_user(request, str(exc), level=messages.ERROR)
+    modeladmin.message_user(request, f"{changed} سفارش به وضعیت تکمیل‌شده منتقل شد.")
+
+
+move_processing_orders_to_completed.short_description = "تکمیل سفارش‌های در حال پردازش"
+
+
+def cancel_unpaid_orders(modeladmin, request, queryset):
+    changed = 0
+    for order in queryset:
+        try:
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.CANCELLED,
+            )
+            changed += 1
+        except Exception as exc:
+            modeladmin.message_user(request, str(exc), level=messages.ERROR)
+    modeladmin.message_user(request, f"{changed} سفارش لغو شد.")
+
+
+cancel_unpaid_orders.short_description = "لغو سفارش‌های پرداخت‌نشده"
 
 
 @admin.register(Order)
@@ -158,6 +211,11 @@ class OrderAdmin(admin.ModelAdmin):
         OrderItemInline,
         OrderAddressSnapshotInline,
         PaymentInline,
+    )
+    actions = (
+        move_paid_orders_to_processing,
+        move_processing_orders_to_completed,
+        cancel_unpaid_orders,
     )
 
     @admin.display(description="کاربر", ordering="user__email")

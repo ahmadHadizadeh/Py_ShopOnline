@@ -3,11 +3,43 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment
 
 
 class OrderService:
+    @staticmethod
+    @transaction.atomic
+    def transition_status(*, order_id, new_status):
+        """Apply only safe operational order transitions used by backoffice."""
+        order = Order.objects.select_for_update().get(pk=order_id)
+
+        allowed_transitions = {
+            Order.Status.PAID: {Order.Status.PROCESSING},
+            Order.Status.PROCESSING: {Order.Status.COMPLETED},
+            Order.Status.PENDING: {Order.Status.CANCELLED},
+            Order.Status.PLACED: {Order.Status.CANCELLED},
+        }
+        if new_status not in allowed_transitions.get(order.status, set()):
+            raise ValidationError(
+                f"تغییر وضعیت سفارش از {order.get_status_display()} به وضعیت انتخاب‌شده مجاز نیست."
+            )
+
+        now = timezone.now()
+        order.status = new_status
+        update_fields = ["status", "updated"]
+
+        if new_status == Order.Status.CANCELLED:
+            order.cancelled_at = now
+            update_fields.append("cancelled_at")
+        elif new_status == Order.Status.COMPLETED:
+            order.completed_at = now
+            update_fields.append("completed_at")
+
+        order.save(update_fields=update_fields)
+        return order
+
     @staticmethod
     def calculate_order_totals(cart, shipping_method=None):
         """محاسبه دقیق مبالغ سفارش بر اساس آیتم‌های فعال سبد و روش ارسال."""

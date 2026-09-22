@@ -20,6 +20,7 @@ from orders.models.orders import Order
 from orders.models.order_item import OrderItem
 from orders.models.payment import Payment
 from orders.payment.services import PaymentService
+from orders.services import OrderService
 
 User = get_user_model()
 
@@ -1051,3 +1052,101 @@ class AdminOperationalTests(TestCase):
         content = response.content.decode()
         self.assertIn(self.order.order_number, content)
         self.assertIn(self.payment.transaction_code, content)
+
+
+class OrderStatusTransitionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="order-status-user",
+            password="Password123!",
+        )
+        self.category = Category.objects.create(
+            name="Order Status Category",
+            slug="order-status-category",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Order Status Product",
+            slug="order-status-product",
+            price=Decimal("1000000"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+
+    def create_order(self, status):
+        order = Order.objects.create(
+            user=self.user,
+            subtotal_amount=Decimal("1000000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+            final_amount=Decimal("1000000"),
+            status=status,
+        )
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            product_name=self.product.name,
+            variant_name="",
+            sku=None,
+            quantity=1,
+            unit_price=Decimal("1000000"),
+            subtotal_price=Decimal("1000000"),
+        )
+        return order
+
+    def test_paid_order_can_move_to_processing(self):
+        order = self.create_order(Order.Status.PAID)
+        result = OrderService.transition_status(
+            order_id=order.pk,
+            new_status=Order.Status.PROCESSING,
+        )
+        self.assertEqual(result.status, Order.Status.PROCESSING)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PROCESSING)
+
+    def test_processing_order_can_move_to_completed_and_sets_timestamp(self):
+        order = self.create_order(Order.Status.PROCESSING)
+        result = OrderService.transition_status(
+            order_id=order.pk,
+            new_status=Order.Status.COMPLETED,
+        )
+        self.assertEqual(result.status, Order.Status.COMPLETED)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.COMPLETED)
+        self.assertIsNotNone(order.completed_at)
+
+    def test_unpaid_order_can_be_cancelled_and_sets_timestamp(self):
+        order = self.create_order(Order.Status.PENDING)
+        result = OrderService.transition_status(
+            order_id=order.pk,
+            new_status=Order.Status.CANCELLED,
+        )
+        self.assertEqual(result.status, Order.Status.CANCELLED)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(order.cancelled_at)
+
+    def test_invalid_status_transition_is_rejected(self):
+        order = self.create_order(Order.Status.PAID)
+        with self.assertRaises(ValidationError):
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.COMPLETED,
+            )
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)
+
+
+class AdminOrderWorkflowConfigurationTests(TestCase):
+    def test_order_admin_exposes_only_service_backed_workflow_actions(self):
+        order_admin = admin.site._registry[Order]
+        action_names = {action.__name__ for action in order_admin.actions}
+        self.assertEqual(
+            action_names,
+            {
+                "move_paid_orders_to_processing",
+                "move_processing_orders_to_completed",
+                "cancel_unpaid_orders",
+            },
+        )
