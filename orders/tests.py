@@ -1136,3 +1136,17 @@ class OrderStatusTransitionTests(TestCase):
             )
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PAID)
+
+
+class AdminOrderWorkflowConfigurationTests(TestCase):
+    def test_order_admin_exposes_only_service_backed_workflow_actions(self):
+        order_admin = admin.site._registry[Order]
+        action_names = {action.__name__ for action in order_admin.actions}
+        self.assertEqual(
+            action_names,
+            {
+                "move_paid_orders_to_processing",
+                "move_processing_orders_to_completed",
+                "cancel_unpaid_orders",
+            },
+        )
