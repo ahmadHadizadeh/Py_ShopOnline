@@ -212,7 +212,12 @@ class OrderAdmin(admin.ModelAdmin):
         OrderAddressSnapshotInline,
         PaymentInline,
     )
-    actions = (\n        move_paid_orders_to_processing,\n        move_processing_orders_to_completed,\n        cancel_unpaid_orders,\n    )\n
+    actions = (
+        move_paid_orders_to_processing,
+        move_processing_orders_to_completed,
+        cancel_unpaid_orders,
+    )
+
     @admin.display(description="کاربر", ordering="user__email")
     def user_display(self, obj):
         return obj.user.email or obj.user.username
