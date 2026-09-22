@@ -1,3 +1,4 @@
+import re
 import pytest
 from json import dumps
 from unittest.mock import patch
@@ -105,13 +106,17 @@ def test_dashboard_logout_uses_post_form(client, django_user_model):
 
     assert response.status_code == 200
     content = response.content.decode("utf-8")
-    logout_form_marker = '<form method="POST" action="/accounts/logout/" class="m-0 mt-6">'
-    assert logout_form_marker in content
+    logout_form_match = re.search(
+        r'<form(?=[^>]*\\bmethod="POST")'
+        r'(?=[^>]*\\baction="/accounts/logout/")[^>]*>'
+        r'[\\s\\S]*?خروج از حساب کاربری[\\s\\S]*?</form>',
+        content,
+    )
+    assert logout_form_match is not None
 
-    logout_form = content.split(logout_form_marker, 1)[1].split("</form>", 1)[0]
+    logout_form = logout_form_match.group(0)
     assert 'name="csrfmiddlewaretoken"' in logout_form
     assert '<button type="submit"' in logout_form
-    assert "خروج از حساب کاربری" in logout_form
 
 
 @pytest.mark.django_db
