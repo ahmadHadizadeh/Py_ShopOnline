@@ -998,7 +998,6 @@ class ProcessPaymentViewTests(TestCase):
         )
 
         first_payment = Payment.objects.get(order=self.order)
-
         second_response = self.client.get(self.url)
 
         self.assertEqual(
@@ -1557,7 +1556,10 @@ class AdminOrderedCartProtectionTests(TestCase):
             "admin:catalog_product_delete",
             args=[historical_product.pk],
         )
-        response = self.client.post(delete_url)
+        response = self.client.post(
+            delete_url,
+            {"post": "yes"},
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(
