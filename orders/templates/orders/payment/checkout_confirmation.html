@@ -18,11 +18,11 @@
             <h1 class="text-2xl font-black text-gray-800">پیش‌فاکتور نهایی سفارش</h1>
             <p class="text-gray-500 mt-2">اطلاعات سفارش را بررسی کنید و برای پرداخت اقدام نمایید.</p>
 
-            {% if payment and payment.status == 'FAILED' %}
+            {% if payment and payment.status == 'failed' %}
                 <div class="mt-4 inline-flex items-center rounded-xl bg-rose-100 px-4 py-2 text-sm font-semibold text-rose-700">
                     پرداخت قبلی ناموفق بوده است؛ می‌توانید دوباره تلاش کنید.
                 </div>
-            {% elif payment and payment.status == 'PENDING' %}
+            {% elif payment and payment.status == 'pending' %}
                 <div class="mt-4 inline-flex items-center rounded-xl bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-700">
                     وضعیت پرداخت: در انتظار پرداخت
                 </div>
@@ -66,7 +66,7 @@
                         </strong>
                     </div>
 
-                    {% if payment and payment.status == 'FAILED' and payment.transaction_code %}
+                    {% if payment and payment.status == 'failed' and payment.transaction_code %}
                     <div class="flex justify-between sm:justify-start gap-2 sm:col-span-2">
                         <span class="text-gray-400">شناسه تراکنش درگاه:</span>
                         <strong class="text-gray-900 font-mono">{{ payment.transaction_code }}</strong>
@@ -135,14 +135,14 @@
 
             <!-- 3. Payment action -->
             <div class="pt-6 border-t border-gray-100">
-                {% if payment and payment.status == 'FAILED' %}
+                {% if payment and payment.status == 'failed' %}
                     <form action="{% url 'orders:initiate_payment' order.order_number %}" method="POST" class="w-full">
                         {% csrf_token %}
                         <button type="submit" class="w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl transition duration-200 shadow-lg shadow-emerald-600/20">
                             تلاش مجدد برای پرداخت
                         </button>
                     </form>
-                {% elif payment and payment.status == 'PENDING' %}
+                {% elif payment and payment.status == 'pending' %}
                     <form action="{% url 'orders:initiate_payment' order.order_number %}" method="POST" class="w-full">
                         {% csrf_token %}
                         <button type="submit" class="w-full text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl transition duration-200 shadow-lg shadow-emerald-600/20">
