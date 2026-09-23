@@ -1388,3 +1388,142 @@ class PaymentPresentationContractTests(TestCase):
         self.assertIn("شناسه تراکنش درگاه:", content)
         self.assertIn(self.payment.transaction_code, content)
         self.assertNotIn("کد رهگیری تراکنش:", content)
+
+
+class AdminOrderedCartProtectionTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="admin-cart-protection",
+            email="admin-cart-protection@example.com",
+            password="AdminPass123!",
+        )
+        self.client.force_login(self.admin_user)
+
+        self.category = Category.objects.create(
+            name="Admin Cart Protection",
+            slug="admin-cart-protection",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Admin Cart Protection Product",
+            slug="admin-cart-protection-product",
+            price=Decimal("900000"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+        self.ordered_cart = Cart.objects.create(
+            user=self.admin_user,
+            status=Cart.STATUS_ORDERED,
+        )
+        self.cart_item = CartItem.objects.create(
+            cart=self.ordered_cart,
+            product=self.product,
+            quantity=1,
+            unit_price_snapshot=Decimal("900000"),
+            status=CartItem.STATUS_ACTIVE,
+        )
+        self.request = self.client.get("/").wsgi_request
+
+    def test_ordered_cart_freezes_identity_and_lifecycle_fields(self):
+        cart_admin = admin.site._registry[Cart]
+
+        readonly_fields = set(
+            cart_admin.get_readonly_fields(self.request, self.ordered_cart)
+        )
+
+        self.assertTrue(
+            {"user", "session_key", "status"}.issubset(readonly_fields)
+        )
+
+        delete_url = reverse(
+            "admin:cart_cart_delete",
+            args=[self.ordered_cart.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            Cart.objects.filter(pk=self.ordered_cart.pk).exists()
+        )
+
+    def test_ordered_cart_item_is_readonly_and_cannot_be_deleted(self):
+        cart_item_admin = admin.site._registry[CartItem]
+
+        readonly_fields = set(
+            cart_item_admin.get_readonly_fields(self.request, self.cart_item)
+        )
+
+        self.assertTrue(
+            {
+                "cart",
+                "product",
+                "variant",
+                "quantity",
+                "unit_price_snapshot",
+                "status",
+            }.issubset(readonly_fields)
+        )
+
+        delete_url = reverse(
+            "admin:cart_cartitem_delete",
+            args=[self.cart_item.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            CartItem.objects.filter(pk=self.cart_item.pk).exists()
+        )
+
+    def test_ordered_cart_inline_is_readonly_and_cannot_delete_items(self):
+        cart_admin = admin.site._registry[Cart]
+        inline_admin = cart_admin.inlines[0](
+            CartItem,
+            admin.site,
+        )
+
+        readonly_fields = set(
+            inline_admin.get_readonly_fields(self.request, self.ordered_cart)
+        )
+
+        self.assertTrue(
+            {"product", "variant", "quantity", "status"}.issubset(
+                readonly_fields
+            )
+        )
+        self.assertFalse(
+            inline_admin.has_delete_permission(
+                self.request,
+                self.ordered_cart,
+            )
+        )
+
+    def test_active_cart_admin_remains_editable(self):
+        active_cart = Cart.objects.create(
+            user=self.admin_user,
+            status=Cart.STATUS_ACTIVE,
+        )
+
+        cart_admin = admin.site._registry[Cart]
+        cart_readonly = set(
+            cart_admin.get_readonly_fields(self.request, active_cart)
+        )
+        self.assertNotIn("status", cart_readonly)
+        self.assertTrue(cart_admin.has_delete_permission(self.request, active_cart))
+
+        active_item = CartItem.objects.create(
+            cart=active_cart,
+            product=self.product,
+            quantity=1,
+            unit_price_snapshot=Decimal("900000"),
+            status=CartItem.STATUS_ACTIVE,
+        )
+        cart_item_admin = admin.site._registry[CartItem]
+        item_readonly = set(
+            cart_item_admin.get_readonly_fields(self.request, active_item)
+        )
+        self.assertNotIn("quantity", item_readonly)
+        self.assertTrue(
+            cart_item_admin.has_delete_permission(self.request, active_item)
+        )
