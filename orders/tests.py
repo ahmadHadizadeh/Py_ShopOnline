@@ -16,6 +16,7 @@ from accounts.signals import create_user_profile
 from cart.models import Cart, CartItem
 from catalog.models.category import Category
 from catalog.models.product import Product
+from catalog.models.variant import ProductVariant
 from orders.models.orders import Order
 from orders.models.order_item import OrderItem
 from orders.models.order_address_snapshot import OrderAddressSnapshot
@@ -1498,6 +1499,99 @@ class AdminOrderedCartProtectionTests(TestCase):
                 self.ordered_cart,
             )
         )
+
+    def test_product_with_cart_reference_cannot_be_deleted_from_admin(self):
+        product_admin = admin.site._registry[Product]
+
+        self.assertFalse(
+            product_admin.has_delete_permission(self.request, self.product)
+        )
+
+        delete_url = reverse(
+            "admin:catalog_product_delete",
+            args=[self.product.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+        self.assertTrue(
+            CartItem.objects.filter(pk=self.cart_item.pk).exists()
+        )
+
+    def test_product_with_only_order_history_remains_deletable(self):
+        product_admin = admin.site._registry[Product]
+        historical_product = Product.objects.create(
+            category=self.category,
+            name="Historical Product",
+            slug="historical-product",
+            price=Decimal("700000"),
+            stock=0,
+            is_active=False,
+            is_available_status=False,
+        )
+        order = Order.objects.create(
+            user=self.admin_user,
+            subtotal_amount=Decimal("700000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+            final_amount=Decimal("700000"),
+            status=Order.Status.COMPLETED,
+        )
+        order_item = OrderItem.objects.create(
+            order=order,
+            product=historical_product,
+            product_name=historical_product.name,
+            variant_name="",
+            sku=None,
+            quantity=1,
+            unit_price=Decimal("700000"),
+            subtotal_price=Decimal("700000"),
+        )
+
+        self.assertTrue(
+            product_admin.has_delete_permission(self.request, historical_product)
+        )
+
+        delete_url = reverse(
+            "admin:catalog_product_delete",
+            args=[historical_product.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            Product.objects.filter(pk=historical_product.pk).exists()
+        )
+        order_item.refresh_from_db()
+        self.assertIsNone(order_item.product_id)
+        self.assertEqual(order_item.product_name, "Historical Product")
+
+    def test_product_variant_with_cart_reference_cannot_be_deleted_from_admin(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=Decimal("50000"),
+        )
+        self.cart_item.variant = variant
+        self.cart_item.unit_price_snapshot = Decimal("950000")
+        self.cart_item.save(update_fields=["variant", "unit_price_snapshot", "updated"])
+
+        variant_admin = admin.site._registry[ProductVariant]
+        self.assertFalse(
+            variant_admin.has_delete_permission(self.request, variant)
+        )
+
+        delete_url = reverse(
+            "admin:catalog_productvariant_delete",
+            args=[variant.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ProductVariant.objects.filter(pk=variant.pk).exists())
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
 
     def test_active_cart_admin_remains_editable(self):
         active_user = User.objects.create_user(

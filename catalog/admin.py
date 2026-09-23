@@ -35,6 +35,11 @@ class ProductSpecificationInline(admin.TabularInline):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.cart_items.exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
     # 'is_available' را از لیست‌ها حذف کردیم چون متد است
     list_display = ["name", "category", "price", "stock", "status_icon", "updated"]
     list_editable = ["price", "stock"]
@@ -53,6 +58,11 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(ProductVariant)
 class ProductVariantAdmin(admin.ModelAdmin):
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.cart_items.exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
     list_display = ["product", "name", "value", "price_adjustment"]
     list_filter = ["name"]
     search_fields = ["product__name", "name", "value"]
