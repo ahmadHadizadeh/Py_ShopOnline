@@ -43,9 +43,16 @@
                     <span class="text-gray-500">مبلغ قابل پرداخت:</span>
                     <span class="font-bold text-gray-900">{{ order.final_amount|intcomma }} تومان</span>
                 </div>
+                {% if payment and payment.reference_code %}
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-gray-500">کد رهگیری پرداخت:</span>
+                    <span class="font-mono text-gray-700">{{ payment.reference_code }}</span>
+                </div>
+                {% endif %}
+
                 {% if payment and payment.transaction_code %}
                 <div class="flex justify-between items-center text-sm">
-                    <span class="text-gray-500">کد رهگیری تراکنش:</span>
+                    <span class="text-gray-500">شناسه تراکنش درگاه:</span>
                     <span class="font-mono text-gray-700">{{ payment.transaction_code }}</span>
                 </div>
                 {% endif %}
