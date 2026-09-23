@@ -1,12 +1,16 @@
 import pytest
 from json import dumps
 from unittest.mock import patch
+from decimal import Decimal
+
+import jdatetime
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from accounts.models import Address
 from cart.models import Cart, CartItem
+from orders.models import Order, OrderAddressSnapshot, OrderItem, ShippingMethod
 from catalog.models.category import Category
 from catalog.models.product import Product
 
@@ -238,3 +242,276 @@ def test_verify_otp_rejects_external_redirect(client):
 
     assert response.status_code == 200
     assert response.json()["redirect_url"] == "/"
+
+
+# ---------------------------------------------------------------------------
+# Dashboard order contracts
+# ---------------------------------------------------------------------------
+def _create_dashboard_order(user, *, status, subtotal=100000, discount=0, shipping=0):
+    return Order.objects.create(
+        user=user,
+        status=status,
+        subtotal_amount=Decimal(str(subtotal)),
+        discount_amount=Decimal(str(discount)),
+        shipping_amount=Decimal(str(shipping)),
+    )
+
+
+@pytest.mark.django_db
+def test_dashboard_orders_requires_authentication(client):
+    response = client.get(reverse("accounts:dashboard_orders"))
+
+    assert response.status_code == 302
+    assert response.url.startswith("/accounts/login/?next=")
+
+
+@pytest.mark.django_db
+def test_dashboard_order_list_isolated_by_owner(client, django_user_model):
+    owner = django_user_model.objects.create_user(username="dashboard-owner")
+    other_user = django_user_model.objects.create_user(username="dashboard-other")
+
+    owner_order = _create_dashboard_order(
+        owner,
+        status=Order.Status.PAID,
+        subtotal=120000,
+    )
+    other_order = _create_dashboard_order(
+        other_user,
+        status=Order.Status.PAID,
+        subtotal=220000,
+    )
+
+    client.force_login(owner)
+
+    response = client.get(reverse("accounts:dashboard_orders"))
+
+    assert response.status_code == 200
+    visible_orders = {order.pk for order in response.context["orders"]}
+    assert visible_orders == {owner_order.pk}
+    assert str(owner_order.order_number).encode() in response.content
+    assert str(other_order.order_number).encode() not in response.content
+
+
+@pytest.mark.django_db
+def test_dashboard_order_detail_rejects_other_user_order(
+    client,
+    django_user_model,
+):
+    owner = django_user_model.objects.create_user(username="detail-owner")
+    other_user = django_user_model.objects.create_user(username="detail-other")
+
+    order = _create_dashboard_order(
+        owner,
+        status=Order.Status.PAID,
+        subtotal=120000,
+    )
+
+    client.force_login(other_user)
+
+    response = client.get(
+        reverse(
+            "accounts:dashboard_order_detail",
+            kwargs={"order_number": order.order_number},
+        )
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_dashboard_order_list_status_filters_are_contractual(
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(username="dashboard-filters")
+    pending = _create_dashboard_order(user, status=Order.Status.PENDING)
+    paid = _create_dashboard_order(user, status=Order.Status.PAID)
+    processing = _create_dashboard_order(user, status=Order.Status.PROCESSING)
+    completed = _create_dashboard_order(user, status=Order.Status.COMPLETED)
+    cancelled = _create_dashboard_order(user, status=Order.Status.CANCELLED)
+
+    client.force_login(user)
+
+    all_response = client.get(reverse("accounts:dashboard_orders"))
+    assert {
+        order.pk for order in all_response.context["orders"]
+    } == {
+        pending.pk,
+        paid.pk,
+        processing.pk,
+        completed.pk,
+        cancelled.pk,
+    }
+
+    current_response = client.get(
+        reverse("accounts:dashboard_orders"),
+        {"status": "current"},
+    )
+    assert {
+        order.pk for order in current_response.context["orders"]
+    } == {pending.pk, paid.pk, processing.pk}
+
+    delivered_response = client.get(
+        reverse("accounts:dashboard_orders"),
+        {"status": "delivered"},
+    )
+    assert {
+        order.pk for order in delivered_response.context["orders"]
+    } == {completed.pk}
+
+    cancelled_response = client.get(
+        reverse("accounts:dashboard_orders"),
+        {"status": "canceled"},
+    )
+    assert {
+        order.pk for order in cancelled_response.context["orders"]
+    } == {cancelled.pk}
+
+    invalid_response = client.get(
+        reverse("accounts:dashboard_orders"),
+        {"status": "invalid-status"},
+    )
+    assert invalid_response.context["selected_status"] == "all"
+    assert {
+        order.pk for order in invalid_response.context["orders"]
+    } == {
+        pending.pk,
+        paid.pk,
+        processing.pk,
+        completed.pk,
+        cancelled.pk,
+    }
+
+
+@pytest.mark.django_db
+def test_dashboard_order_list_pagination_preserves_status_filter(
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(username="dashboard-pages")
+
+    for _ in range(11):
+        _create_dashboard_order(user, status=Order.Status.PAID)
+
+    response = client.get(
+        reverse("accounts:dashboard_orders"),
+        {"status": "current", "page": 1},
+    )
+
+    assert response.status_code == 200
+    assert response.context["paginator"].num_pages == 2
+    assert len(response.context["orders"]) == 10
+    assert "?page=2&status=current" in response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_dashboard_order_dates_render_as_jalali_in_list_and_detail(
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(username="dashboard-date")
+
+    order = _create_dashboard_order(
+        user,
+        status=Order.Status.PAID,
+        subtotal=150000,
+    )
+    expected_jalali = jdatetime.datetime.fromgregorian(
+        datetime=order.created
+    ).strftime("%Y/%m/%d - %H:%M")
+
+    client.force_login(user)
+
+    list_response = client.get(reverse("accounts:dashboard_orders"))
+    assert expected_jalali in list_response.content.decode("utf-8")
+
+    detail_response = client.get(
+        reverse(
+            "accounts:dashboard_order_detail",
+            kwargs={"order_number": order.order_number},
+        )
+    )
+    assert expected_jalali in detail_response.content.decode("utf-8")
+
+
+@pytest.mark.django_db
+def test_dashboard_order_detail_renders_order_snapshot_contract(
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(username="dashboard-detail")
+
+    shipping_method = ShippingMethod.objects.create(
+        name="ارسال تستی",
+        cost=25000,
+        estimated_delivery_days=3,
+    )
+    order = _create_dashboard_order(
+        user,
+        status=Order.Status.PROCESSING,
+        subtotal=250000,
+        shipping=25000,
+    )
+    OrderAddressSnapshot.objects.create(
+        order=order,
+        recipient_name="گیرنده تست",
+        recipient_mobile="09120000000",
+        postal_code="1234567890",
+        province="تهران",
+        city="تهران",
+        address_line="خیابان تست، پلاک ۱۰",
+    )
+    OrderItem.objects.create(
+        order=order,
+        product_name="محصول تست",
+        variant_name="رنگ: آبی",
+        quantity=2,
+        unit_price=125000,
+        subtotal_price=250000,
+    )
+    order.shipping_method = shipping_method
+    order.save(
+        update_fields=[
+            "shipping_method",
+            "updated",
+        ]
+    )
+
+    client.force_login(user)
+
+    response = client.get(
+        reverse(
+            "accounts:dashboard_order_detail",
+            kwargs={"order_number": order.order_number},
+        )
+    )
+
+    content = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert "محصول تست" in content
+    assert "رنگ: آبی" in content
+    assert "گیرنده تست" in content
+    assert "09120000000" in content
+    assert "1234567890" in content
+    assert "خیابان تست، پلاک ۱۰" in content
+    assert "ارسال تستی" in content
+    assert "250,000" in content
+    assert "500,000" not in content
+
+
+@pytest.mark.django_db
+def test_dashboard_order_alias_routes_render_same_list(
+    client,
+    django_user_model,
+):
+    user = django_user_model.objects.create_user(username="dashboard-alias")
+    _create_dashboard_order(user, status=Order.Status.PAID)
+
+    client.force_login(user)
+
+    dashboard_response = client.get(reverse("accounts:dashboard"))
+    orders_response = client.get(reverse("accounts:dashboard_orders"))
+
+    assert dashboard_response.status_code == 200
+    assert orders_response.status_code == 200
+    assert dashboard_response.content == orders_response.content
