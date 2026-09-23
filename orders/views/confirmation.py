@@ -36,6 +36,7 @@ def order_confirmation_view(request, order_number):
 
     context = {
         "order": order,
+        "payment": getattr(order, "payment", None),
         "payment_amount": order.final_amount,
         "order_address": order.address_snapshot,
     }
