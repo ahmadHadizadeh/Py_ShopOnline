@@ -502,7 +502,7 @@ def test_dashboard_order_detail_renders_order_snapshot_contract(
 
 
 @pytest.mark.django_db
-def test_dashboard_order_alias_routes_render_same_list(
+def test_dashboard_alias_routes_expose_same_order_list(
     client,
     django_user_model,
 ):
