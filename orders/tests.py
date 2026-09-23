@@ -1500,8 +1500,12 @@ class AdminOrderedCartProtectionTests(TestCase):
         )
 
     def test_active_cart_admin_remains_editable(self):
+        active_user = User.objects.create_user(
+            username="active-cart-admin-user",
+            password="Password123!",
+        )
         active_cart = Cart.objects.create(
-            user=self.admin_user,
+            user=active_user,
             status=Cart.STATUS_ACTIVE,
         )
 
