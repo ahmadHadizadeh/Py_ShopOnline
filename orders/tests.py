@@ -1329,6 +1329,9 @@ class PaymentPresentationContractTests(TestCase):
         self.order.status = Order.Status.PAID
         self.order.save(update_fields=["status"])
 
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.save(update_fields=["status"])
+
         response = self.client.get(
             reverse(
                 "orders:order_confirmation",
