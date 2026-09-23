@@ -27,9 +27,16 @@
                     <strong class="text-gray-900 font-mono text-base">{{ order.order_number }}</strong>
                 </div>
 
+                {% if payment.reference_code %}
                 <div class="flex justify-between items-center border-b border-gray-200/60 pb-3">
-                    <span class="text-gray-500">کد پیگیری تراکنش:</span>
-                    <strong class="text-emerald-700 font-mono text-base">{{ payment.transaction_code|default:"--" }}</strong>
+                    <span class="text-gray-500">کد رهگیری پرداخت:</span>
+                    <strong class="text-emerald-700 font-mono text-base">{{ payment.reference_code }}</strong>
+                </div>
+                {% endif %}
+
+                <div class="flex justify-between items-center border-b border-gray-200/60 pb-3">
+                    <span class="text-gray-500">شناسه تراکنش درگاه:</span>
+                    <strong class="text-gray-900 font-mono text-base">{{ payment.transaction_code|default:"--" }}</strong>
                 </div>
 
                 <div class="flex justify-between items-center border-b border-gray-200/60 pb-3">
