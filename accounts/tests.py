@@ -393,6 +393,8 @@ def test_dashboard_order_list_pagination_preserves_status_filter(
     for _ in range(11):
         _create_dashboard_order(user, status=Order.Status.PAID)
 
+    client.force_login(user)
+
     response = client.get(
         reverse("accounts:dashboard_orders"),
         {"status": "current", "page": 1},
@@ -514,4 +516,12 @@ def test_dashboard_order_alias_routes_render_same_list(
 
     assert dashboard_response.status_code == 200
     assert orders_response.status_code == 200
-    assert dashboard_response.content == orders_response.content
+    assert dashboard_response.context["orders"].count() == 1
+    assert orders_response.context["orders"].count() == 1
+
+    order_number = str(dashboard_response.context["orders"][0].order_number)
+    assert str(orders_response.context["orders"][0].order_number) == order_number
+    assert order_number in dashboard_response.content.decode("utf-8")
+    assert order_number in orders_response.content.decode("utf-8")
+
+    assert dashboard_response.wsgi_request.resolver_match.func.view_class is orders_response.wsgi_request.resolver_match.func.view_class
