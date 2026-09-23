@@ -18,6 +18,7 @@ from catalog.models.category import Category
 from catalog.models.product import Product
 from orders.models.orders import Order
 from orders.models.order_item import OrderItem
+from orders.models.order_address_snapshot import OrderAddressSnapshot
 from orders.models.payment import Payment
 from orders.payment.services import PaymentService
 from orders.services import OrderService
@@ -1224,3 +1225,163 @@ class AdminOrderWorkflowConfigurationTests(TestCase):
                 "cancel_unpaid_orders",
             },
         )
+
+
+class PaymentPresentationContractTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="payment-presentation-user",
+            password="Password123!",
+        )
+        self.client.force_login(self.user)
+
+        self.category = Category.objects.create(
+            name="Payment Presentation",
+            slug="payment-presentation",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Payment Presentation Product",
+            slug="payment-presentation-product",
+            price=Decimal("125000"),
+            stock=10,
+            is_active=True,
+            is_available_status=True,
+        )
+
+        self.cart = Cart.objects.create(
+            user=self.user,
+            status=Cart.STATUS_ORDERED,
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            cart=self.cart,
+            subtotal_amount=Decimal("125000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("15000"),
+            final_amount=Decimal("140000"),
+            status=Order.Status.PENDING,
+        )
+        OrderItem.objects.create(
+            order=self.order,
+            product=self.product,
+            product_name=self.product.name,
+            variant_name="",
+            sku=None,
+            quantity=1,
+            unit_price=Decimal("125000"),
+            subtotal_price=Decimal("125000"),
+        )
+        OrderAddressSnapshot.objects.create(
+            order=self.order,
+            recipient_name="کاربر تست",
+            recipient_mobile="09120000000",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس تست",
+        )
+        self.payment = Payment.objects.create(
+            order=self.order,
+            user=self.user,
+            amount=Decimal("140000"),
+            status=Payment.Status.PENDING,
+            gateway_name="zarinpal",
+            transaction_code="AUTH-PRESENT-001",
+        )
+
+    def test_confirmation_pending_state_renders_correct_payment_action(self):
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("پیش‌فاکتور نهایی سفارش", content)
+        self.assertIn("در انتظار پرداخت", content)
+        self.assertIn("پرداخت آنلاین و نهایی", content)
+        self.assertIn(self.order.order_number, content)
+        self.assertIn("تاریخ ثبت:", content)
+
+    def test_confirmation_failed_state_exposes_retry_action(self):
+        self.payment.status = Payment.Status.FAILED
+        self.payment.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("پرداخت قبلی ناموفق بوده است", content)
+        self.assertIn("تلاش مجدد برای پرداخت", content)
+        self.assertIn(self.payment.transaction_code, content)
+
+    def test_confirmation_paid_order_redirects_to_success_page(self):
+        self.order.status = Order.Status.PAID
+        self.order.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "orders:payment_success",
+                kwargs={"order_number": self.order.order_number},
+            ),
+        )
+
+    def test_success_receipt_distinguishes_reference_and_transaction(self):
+        self.order.status = Order.Status.PAID
+        self.order.save(update_fields=["status"])
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.reference_code = "REF-PRESENT-001"
+        self.payment.save(update_fields=["status", "reference_code"])
+
+        response = self.client.get(
+            reverse(
+                "orders:payment_success",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("کد رهگیری پرداخت:", content)
+        self.assertIn(self.payment.reference_code, content)
+        self.assertIn("شناسه تراکنش درگاه:", content)
+        self.assertIn(self.payment.transaction_code, content)
+        self.assertNotIn("کد پیگیری تراکنش:", content)
+
+    def test_failed_receipt_labels_transaction_code_correctly(self):
+        self.payment.status = Payment.Status.FAILED
+        self.payment.reference_code = ""
+        self.payment.save(update_fields=["status", "reference_code"])
+
+        response = self.client.get(
+            reverse(
+                "orders:payment_failed",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("شناسه تراکنش درگاه:", content)
+        self.assertIn(self.payment.transaction_code, content)
+        self.assertNotIn("کد رهگیری تراکنش:", content)
