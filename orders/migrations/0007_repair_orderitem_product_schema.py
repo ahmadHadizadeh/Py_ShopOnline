@@ -122,7 +122,7 @@ def repair_orderitem_product_schema(apps, schema_editor):
         if "REFERENCES" not in product_definition.upper():
             product_definition += (
                 ' REFERENCES "catalog_product" ("id") '
-                "DEFERRABLE INITIALLY DEFERRED"
+                "ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
             )
 
         repaired_create_sql = (
