@@ -1826,6 +1826,17 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
             ],
         )
 
+        raw_connection.execute(
+            'DELETE FROM "catalog_product" WHERE "id" = 1'
+        )
+
+        self.assertEqual(
+            raw_connection.execute(
+                'SELECT "product_id" FROM "orders_orderitem" WHERE "id" = 1'
+            ).fetchone()[0],
+            None,
+        )
+
         indexes = raw_connection.execute(
             """
             SELECT "name"
