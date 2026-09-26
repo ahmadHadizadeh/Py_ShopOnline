@@ -1805,6 +1805,7 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
                 fk[2] == "catalog_product"
                 and fk[3] == "product_id"
                 and fk[4] == "id"
+                and str(fk[6]).upper() == "SET NULL"
                 for fk in foreign_keys
             )
         )
