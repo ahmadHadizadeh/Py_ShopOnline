@@ -1627,3 +1627,226 @@ class AdminOrderedCartProtectionTests(TestCase):
         self.assertTrue(
             cart_item_admin.has_delete_permission(self.request, active_item)
         )
+
+
+class SQLiteOrderItemProductSchemaRepairTests(TestCase):
+    def test_repair_converts_legacy_sqlite_schema_and_preserves_history(self):
+        import importlib
+        import sqlite3
+
+        migration = importlib.import_module(
+            "orders.migrations.0007_repair_orderitem_product_schema"
+        )
+
+        raw_connection = sqlite3.connect(":memory:")
+        raw_connection.execute("PRAGMA foreign_keys = ON")
+
+        raw_connection.executescript(
+            """
+            CREATE TABLE "catalog_product" (
+                "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "name" varchar(250) NOT NULL
+            );
+
+            CREATE TABLE "orders_order" (
+                "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "order_number" varchar(32) NOT NULL
+            );
+
+            CREATE TABLE "orders_orderitem" (
+                "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "product_id" bigint NOT NULL,
+                "variant_id" bigint NULL,
+                "product_name" varchar(255) NOT NULL,
+                "variant_name" varchar(255) NOT NULL,
+                "sku" varchar(100) NULL,
+                "quantity" integer NOT NULL,
+                "unit_price" decimal NOT NULL,
+                "subtotal_price" decimal NOT NULL,
+                "created" datetime NOT NULL,
+                "updated" datetime NOT NULL,
+                "order_id" bigint NOT NULL
+                    REFERENCES "orders_order" ("id")
+                    DEFERRABLE INITIALLY DEFERRED
+            );
+
+            CREATE INDEX "orders_orde_order_i_5d347b_idx"
+            ON "orders_orderitem" ("order_id");
+
+            CREATE INDEX "orders_orde_variant_164791_idx"
+            ON "orders_orderitem" ("variant_id");
+            """
+        )
+
+        raw_connection.execute(
+            'INSERT INTO "catalog_product" ("name") VALUES (?)',
+            ("Valid product",),
+        )
+        raw_connection.execute(
+            'INSERT INTO "orders_order" ("order_number") VALUES (?)',
+            ("ORD-REPAIR-TEST",),
+        )
+
+        raw_connection.executemany(
+            """
+            INSERT INTO "orders_orderitem" (
+                "product_id",
+                "variant_id",
+                "product_name",
+                "variant_name",
+                "sku",
+                "quantity",
+                "unit_price",
+                "subtotal_price",
+                "created",
+                "updated",
+                "order_id"
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    1,
+                    None,
+                    "Valid product",
+                    "",
+                    None,
+                    1,
+                    100,
+                    100,
+                    "2026-01-01 00:00:00",
+                    "2026-01-01 00:00:00",
+                    1,
+                ),
+                (
+                    999,
+                    None,
+                    "Deleted historical product",
+                    "",
+                    None,
+                    2,
+                    200,
+                    400,
+                    "2026-01-02 00:00:00",
+                    "2026-01-02 00:00:00",
+                    1,
+                ),
+            ],
+        )
+        raw_connection.commit()
+
+        class CursorContext:
+            def __init__(self, cursor):
+                self.cursor = cursor
+
+            def __enter__(self):
+                return self.cursor
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self.cursor.close()
+
+        class ConnectionAdapter:
+            vendor = "sqlite"
+            in_atomic_block = False
+
+            def cursor(self):
+                return CursorContext(raw_connection.cursor())
+
+        class SchemaEditorAdapter:
+            connection = ConnectionAdapter()
+
+        schema_editor = SchemaEditorAdapter()
+
+        migration.repair_orderitem_product_schema(
+            None,
+            schema_editor,
+        )
+
+        columns = raw_connection.execute(
+            'PRAGMA table_info("orders_orderitem")'
+        ).fetchall()
+        product_column = next(
+            column for column in columns if column[1] == "product_id"
+        )
+
+        self.assertEqual(product_column[3], 0)
+
+        foreign_keys = raw_connection.execute(
+            'PRAGMA foreign_key_list("orders_orderitem")'
+        ).fetchall()
+
+        self.assertTrue(
+            any(
+                fk[2] == "catalog_product"
+                and fk[3] == "product_id"
+                and fk[4] == "id"
+                for fk in foreign_keys
+            )
+        )
+
+        rows = raw_connection.execute(
+            """
+            SELECT "id", "product_id", "product_name", "quantity", "subtotal_price"
+            FROM "orders_orderitem"
+            ORDER BY "id"
+            """
+        ).fetchall()
+
+        self.assertEqual(
+            rows,
+            [
+                (1, 1, "Valid product", 1, 100),
+                (2, None, "Deleted historical product", 2, 400),
+            ],
+        )
+
+        indexes = raw_connection.execute(
+            """
+            SELECT "name"
+            FROM sqlite_master
+            WHERE "type" = 'index'
+              AND "tbl_name" = 'orders_orderitem'
+              AND "sql" IS NOT NULL
+            ORDER BY "name"
+            """
+        ).fetchall()
+
+        self.assertEqual(
+            indexes,
+            [
+                ("orders_orde_order_i_5d347b_idx",),
+                ("orders_orde_variant_164791_idx",),
+            ],
+        )
+
+        self.assertEqual(
+            raw_connection.execute(
+                'PRAGMA foreign_key_check("orders_orderitem")'
+            ).fetchall(),
+            [],
+        )
+        self.assertEqual(
+            raw_connection.execute("PRAGMA integrity_check").fetchone()[0],
+            "ok",
+        )
+
+        # Idempotence: once repaired, running the repair again is a no-op.
+        migration.repair_orderitem_product_schema(
+            None,
+            schema_editor,
+        )
+
+        self.assertEqual(
+            raw_connection.execute(
+                'SELECT COUNT(*) FROM "orders_orderitem"'
+            ).fetchone()[0],
+            2,
+        )
+        self.assertEqual(
+            raw_connection.execute(
+                'SELECT "product_id" FROM "orders_orderitem" WHERE "id" = 2'
+            ).fetchone()[0],
+            None,
+        )
+
+        raw_connection.close()
