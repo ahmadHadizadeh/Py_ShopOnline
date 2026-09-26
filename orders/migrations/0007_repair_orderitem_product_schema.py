@@ -32,7 +32,7 @@ def repair_orderitem_product_schema(apps, schema_editor):
             """
             SELECT sql
             FROM sqlite_master
-            WHERE type = 'table' AND name = ?
+            WHERE type = 'table' AND name = %s
             """,
             [TABLE_NAME],
         ).fetchone()
@@ -84,7 +84,7 @@ def repair_orderitem_product_schema(apps, schema_editor):
             """
             SELECT type, name, sql
             FROM sqlite_master
-            WHERE tbl_name = ?
+            WHERE tbl_name = %s
               AND type IN ('index', 'trigger')
               AND sql IS NOT NULL
             ORDER BY type, name
@@ -235,7 +235,7 @@ def repair_orderitem_product_schema(apps, schema_editor):
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO sqlite_sequence(name, seq)
-                    SELECT ?, COALESCE(MAX(id), 0)
+                    SELECT %s, COALESCE(MAX(id), 0)
                     FROM "orders_orderitem"
                     """,
                     [TABLE_NAME],
