@@ -133,7 +133,7 @@ def repair_orderitem_product_schema(apps, schema_editor):
 
         repaired_create_sql = re.sub(
             r'(\bCREATE\s+TABLE\s+)'
-            r'(?:"orders_orderitem"|orders_orderitem)\b',
+            r'(?:"orders_orderitem"|orders_orderitem)(?=\s|\()',
             rf'\1{quoted_temp}',
             repaired_create_sql,
             count=1,
