@@ -1735,6 +1735,29 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
         )
         raw_connection.commit()
 
+        class DebugCursor:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def execute(self, sql, params=None):
+                if params is None:
+                    return self._cursor.execute(sql)
+
+                converted_sql = sql.replace("%s", "?")
+                result = self._cursor.execute(converted_sql, params)
+
+                # Reproduce Django 6.0.6 SQLite DEBUG interpolation.
+                connection.ops.last_executed_query(
+                    self._cursor,
+                    sql,
+                    params,
+                )
+
+                return result
+
+            def __getattr__(self, name):
+                return getattr(self._cursor, name)
+
         class CursorContext:
             def __init__(self, cursor):
                 self.cursor = cursor
@@ -1750,7 +1773,9 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
             in_atomic_block = False
 
             def cursor(self):
-                return CursorContext(raw_connection.cursor())
+                return CursorContext(
+                    DebugCursor(raw_connection.cursor())
+                )
 
         class SchemaEditorAdapter:
             connection = ConnectionAdapter()
