@@ -72,7 +72,7 @@ def repair_orderitem_product_schema(apps, schema_editor):
             """
             SELECT 1
             FROM sqlite_master
-            WHERE type = 'table' AND name = ?
+            WHERE type = 'table' AND name = %s
             """,
             [TEMP_TABLE],
         ).fetchone():
