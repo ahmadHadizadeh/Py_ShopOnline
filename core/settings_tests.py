@@ -53,9 +53,7 @@ def zarinpal_production_env(**overrides):
 
 def test_debug_is_env_driven():
     settings = load_settings_env(
-        DJANGO_DEBUG="0",
-        SECRET_KEY="test-secret",
-        ALLOWED_HOSTS="example.com",
+        **production_base_env(SECRET_KEY="test-secret"),
     )
 
     assert settings["DEBUG"] is False
