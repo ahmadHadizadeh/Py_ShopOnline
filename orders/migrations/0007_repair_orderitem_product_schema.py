@@ -64,7 +64,6 @@ def repair_orderitem_product_schema(apps, schema_editor):
             fk[2] == PRODUCT_TABLE
             and fk[3] == "product_id"
             and fk[4] == "id"
-            and str(fk[6]).upper() == "SET NULL"
             for fk in foreign_keys
         )
 
@@ -122,7 +121,7 @@ def repair_orderitem_product_schema(apps, schema_editor):
         if "REFERENCES" not in product_definition.upper():
             product_definition += (
                 ' REFERENCES "catalog_product" ("id") '
-                "ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED"
+                "DEFERRABLE INITIALLY DEFERRED"
             )
 
         repaired_create_sql = (
@@ -270,7 +269,6 @@ def repair_orderitem_product_schema(apps, schema_editor):
             fk[2] == PRODUCT_TABLE
             and fk[3] == "product_id"
             and fk[4] == "id"
-            and str(fk[6]).upper() == "SET NULL"
             for fk in final_foreign_keys
         )
 
