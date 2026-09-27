@@ -105,18 +105,30 @@ def test_untrusted_csrf_origin_is_rejected_for_state_changing_logout():
 
 
 @pytest.mark.django_db
-def test_authenticated_response_sets_expected_session_cookie_security():
-    user = User.objects.create_user(
-        username="session-security-user",
-        password="testpass123",
-    )
+def test_real_otp_login_sets_expected_session_cookie_security():
     client = Client()
 
-    client.force_login(user)
-    response = client.get(reverse("accounts:dashboard_orders"))
+    with patch(
+        "accounts.otp_views.SMSIRService.verify_otp",
+        return_value=(True, "ok"),
+    ):
+        response = client.post(
+            reverse("accounts:verify_otp"),
+            data=dumps(
+                {
+                    "phone": "09123334444",
+                    "code": "123456",
+                    "next": "/",
+                }
+            ),
+            content_type="application/json",
+        )
 
     assert response.status_code == 200
-    session_cookie = client.cookies["sessionid"]
+    assert response.json()["redirect_url"] == "/"
+    assert "sessionid" in response.cookies
+
+    session_cookie = response.cookies["sessionid"]
 
     assert session_cookie["httponly"] == "True"
     assert session_cookie["samesite"] == "Lax"
