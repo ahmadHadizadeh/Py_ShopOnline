@@ -12,49 +12,100 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
-from dotenv import load_dotenv
+import secrets
 
-# بارگذاری فایل .env از ریشه پروژه
+from dotenv import load_dotenv
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load local development values when a .env file exists.
+# Deployment environments should provide configuration through environment
+# variables directly.
 load_dotenv(BASE_DIR / ".env")
 
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-q4b&o*i((s@30))qq-jn+%_615zk_rmog$d-ibk1_$b+=4#_do"
+# -------------------------------------------------------------------------
+# Environment helpers
+# -------------------------------------------------------------------------
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
 
-# Development hosts: support local access and rotating LocalTunnel subdomains.
+
+def _env_bool(name: str, *, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    value = raw_value.strip().lower()
+    if value in _TRUE_VALUES:
+        return True
+    if value in _FALSE_VALUES:
+        return False
+
+    raise RuntimeError(
+        f"{name} must be one of: "
+        "1, 0, true, false, yes, no, on, off."
+    )
+
+
+def _env_csv(name: str) -> list[str]:
+    return [
+        value.strip()
+        for value in os.getenv(name, "").split(",")
+        if value.strip()
+    ]
+
+
+def _required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} must be set.")
+    return value
+
+
+# -------------------------------------------------------------------------
+# Security
+# -------------------------------------------------------------------------
+
+DEBUG = _env_bool("DJANGO_DEBUG", default=True)
+
+# SECRET_KEY is always read from the environment. In development only, when
+# a key was not supplied, generate an ephemeral key so no reusable secret is
+# embedded in source control. Production must provide a persistent key.
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = f"django-insecure-{secrets.token_urlsafe(64)}"
+    else:
+        raise RuntimeError("SECRET_KEY must be set when DJANGO_DEBUG=0.")
+
+
+# Development hosts: local access plus rotating LocalTunnel subdomains.
 if DEBUG:
-    ALLOWED_HOSTS = [
+    configured_hosts = _env_csv("ALLOWED_HOSTS")
+    ALLOWED_HOSTS = configured_hosts or [
         "127.0.0.1",
         "localhost",
         ".loca.lt",
     ]
 else:
-    ALLOWED_HOSTS = [
-        host.strip()
-        for host in os.getenv("ALLOWED_HOSTS", "").split(",")
-        if host.strip()
-    ]
+    ALLOWED_HOSTS = _env_csv("ALLOWED_HOSTS")
+    if not ALLOWED_HOSTS:
+        raise RuntimeError("ALLOWED_HOSTS must be set when DJANGO_DEBUG=0.")
 
-# LocalTunnel changes its public subdomain between sessions. Trust all HTTPS
-# LocalTunnel subdomains only in DEBUG; production should use explicit origins.
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
-    if origin.strip()
-]
-if DEBUG:
+
+# LocalTunnel is development-only. Production must use explicit origins.
+CSRF_TRUSTED_ORIGINS = _env_csv("CSRF_TRUSTED_ORIGINS")
+if DEBUG and "https://*.loca.lt" not in CSRF_TRUSTED_ORIGINS:
     CSRF_TRUSTED_ORIGINS.append("https://*.loca.lt")
 
 
+# -------------------------------------------------------------------------
 # Application definition
+# -------------------------------------------------------------------------
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -102,8 +153,10 @@ TEMPLATES = [
 WSGI_APPLICATION = "core.wsgi.application"
 
 
+# -------------------------------------------------------------------------
 # Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+# NOTE: Database hardening/migration to production DB belongs to phase 3.7.6.
+# -------------------------------------------------------------------------
 
 DATABASES = {
     "default": {
@@ -113,8 +166,9 @@ DATABASES = {
 }
 
 
+# -------------------------------------------------------------------------
 # Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
+# -------------------------------------------------------------------------
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -135,20 +189,20 @@ LOGIN_URL = "accounts:login"
 LOGIN_REDIRECT_URL = "catalog:home"
 LOGOUT_REDIRECT_URL = "catalog:home"
 
+
+# -------------------------------------------------------------------------
 # Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
+# -------------------------------------------------------------------------
 
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
 
 
+# -------------------------------------------------------------------------
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
+# -------------------------------------------------------------------------
 
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
@@ -158,38 +212,101 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 
-# Default primary key field type
-# DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# -------------------------------------------------------------------------
 # SMS.ir Configuration
+# -------------------------------------------------------------------------
+
 SMSIR_CONFIG = {
     "API_KEY": os.getenv("SMSIR_API_KEY", "").strip(),
     "TEMPLATE_ID": int(os.getenv("SMSIR_TEMPLATE_ID", "358253") or 358253),
 }
 
-PAYMENT_CALLBACK_SECRET = os.getenv(
-    "PAYMENT_CALLBACK_SECRET",
-    SECRET_KEY,
-)
+if not DEBUG and not SMSIR_CONFIG["API_KEY"]:
+    raise RuntimeError("SMSIR_API_KEY must be set when DJANGO_DEBUG=0.")
 
+
+# -------------------------------------------------------------------------
 # Payment / gateway configuration
-PAYMENT_DEFAULT_GATEWAY = (
-    os.getenv("PAYMENT_DEFAULT_GATEWAY", "mock_gateway").strip() or "mock_gateway"
-)
+# -------------------------------------------------------------------------
 
-# ZarinPal (Sandbox by default; production endpoints are configured via ENV)
+PAYMENT_CALLBACK_SECRET = os.getenv("PAYMENT_CALLBACK_SECRET", "").strip()
+if not PAYMENT_CALLBACK_SECRET:
+    if DEBUG:
+        PAYMENT_CALLBACK_SECRET = SECRET_KEY
+    else:
+        raise RuntimeError(
+            "PAYMENT_CALLBACK_SECRET must be set when DJANGO_DEBUG=0."
+        )
+
+
+PAYMENT_DEFAULT_GATEWAY = os.getenv("PAYMENT_DEFAULT_GATEWAY", "").strip()
+if not PAYMENT_DEFAULT_GATEWAY:
+    if DEBUG:
+        PAYMENT_DEFAULT_GATEWAY = "mock_gateway"
+    else:
+        raise RuntimeError(
+            "PAYMENT_DEFAULT_GATEWAY must be set when DJANGO_DEBUG=0."
+        )
+
+
+# -------------------------------------------------------------------------
+# ZarinPal
+# -------------------------------------------------------------------------
+# Sandbox defaults are development-only. When ZarinPal is the selected
+# production gateway, merchant/callback/endpoints must be explicit and the
+# production endpoints may not point to the sandbox host.
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_MERCHANT_ID", "").strip()
 ZARINPAL_CALLBACK_URL = os.getenv("ZARINPAL_CALLBACK_URL", "").strip()
-ZARINPAL_CURRENCY = os.getenv("ZARINPAL_CURRENCY", "IRT").strip().upper() or "IRT"
-ZARINPAL_REQUEST_URL = os.getenv(
-    "ZARINPAL_REQUEST_URL",
-    "https://sandbox.zarinpal.com/pg/v4/payment/request.json",
-).strip()
-ZARINPAL_VERIFY_URL = os.getenv(
-    "ZARINPAL_VERIFY_URL",
-    "https://sandbox.zarinpal.com/pg/v4/payment/verify.json",
-).strip()
-ZARINPAL_STARTPAY_URL = os.getenv(
-    "ZARINPAL_STARTPAY_URL",
-    "https://sandbox.zarinpal.com/pg/StartPay",
-).strip()
+ZARINPAL_CURRENCY = (
+    os.getenv("ZARINPAL_CURRENCY", "IRT").strip().upper() or "IRT"
+)
 ZARINPAL_HTTP_TIMEOUT = os.getenv("ZARINPAL_HTTP_TIMEOUT", "15").strip() or "15"
+
+if DEBUG:
+    ZARINPAL_REQUEST_URL = (
+        os.getenv(
+            "ZARINPAL_REQUEST_URL",
+            "https://sandbox.zarinpal.com/pg/v4/payment/request.json",
+        )
+        .strip()
+    )
+    ZARINPAL_VERIFY_URL = (
+        os.getenv(
+            "ZARINPAL_VERIFY_URL",
+            "https://sandbox.zarinpal.com/pg/v4/payment/verify.json",
+        )
+        .strip()
+    )
+    ZARINPAL_STARTPAY_URL = (
+        os.getenv(
+            "ZARINPAL_STARTPAY_URL",
+            "https://sandbox.zarinpal.com/pg/StartPay",
+        )
+        .strip()
+    )
+else:
+    if PAYMENT_DEFAULT_GATEWAY == "zarinpal":
+        ZARINPAL_MERCHANT_ID = _required_env("ZARINPAL_MERCHANT_ID")
+        ZARINPAL_CALLBACK_URL = _required_env("ZARINPAL_CALLBACK_URL")
+        ZARINPAL_REQUEST_URL = _required_env("ZARINPAL_REQUEST_URL")
+        ZARINPAL_VERIFY_URL = _required_env("ZARINPAL_VERIFY_URL")
+        ZARINPAL_STARTPAY_URL = _required_env("ZARINPAL_STARTPAY_URL")
+
+        sandbox_markers = ("sandbox.zarinpal.com",)
+        for setting_name, setting_value in (
+            ("ZARINPAL_REQUEST_URL", ZARINPAL_REQUEST_URL),
+            ("ZARINPAL_VERIFY_URL", ZARINPAL_VERIFY_URL),
+            ("ZARINPAL_STARTPAY_URL", ZARINPAL_STARTPAY_URL),
+        ):
+            if any(
+                marker in setting_value.lower()
+                for marker in sandbox_markers
+            ):
+                raise RuntimeError(
+                    f"{setting_name} must not point to a ZarinPal sandbox URL "
+                    "when DJANGO_DEBUG=0."
+                )
+    else:
+        ZARINPAL_REQUEST_URL = os.getenv("ZARINPAL_REQUEST_URL", "").strip()
+        ZARINPAL_VERIFY_URL = os.getenv("ZARINPAL_VERIFY_URL", "").strip()
+        ZARINPAL_STARTPAY_URL = os.getenv("ZARINPAL_STARTPAY_URL", "").strip()
