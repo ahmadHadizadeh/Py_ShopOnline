@@ -116,7 +116,7 @@ def test_authenticated_response_sets_expected_session_cookie_security():
     response = client.get(reverse("accounts:dashboard_orders"))
 
     assert response.status_code == 200
-    session_cookie = response.cookies["sessionid"]
+    session_cookie = client.cookies["sessionid"]
 
     assert session_cookie["httponly"] is True
     assert session_cookie["samesite"] == "Lax"
