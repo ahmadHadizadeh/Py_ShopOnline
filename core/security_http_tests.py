@@ -4,6 +4,7 @@ from json import dumps
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth import SESSION_KEY
 from django.test import Client, TestCase, override_settings
@@ -201,7 +202,6 @@ class PaymentCallbackHttpContractTests(TestCase):
         self.order = Order.objects.create(
             user=self.user,
             status=Order.Status.PENDING,
-            total_amount=50000000,
             final_amount=50000000,
         )
         self.payment = Payment.objects.create(
@@ -222,7 +222,7 @@ class PaymentCallbackHttpContractTests(TestCase):
             "utf-8"
         )
         return hmac.new(
-            self.settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
             payload,
             hashlib.sha256,
         ).hexdigest()
