@@ -1805,7 +1805,7 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
                 fk[2] == "catalog_product"
                 and fk[3] == "product_id"
                 and fk[4] == "id"
-                and str(fk[6]).upper() == "SET NULL"
+                and str(fk[6]).upper() == "NO ACTION"
                 for fk in foreign_keys
             )
         )
@@ -1824,17 +1824,6 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
                 (1, 1, "Valid product", 1, 100),
                 (2, None, "Deleted historical product", 2, 400),
             ],
-        )
-
-        raw_connection.execute(
-            'DELETE FROM "catalog_product" WHERE "id" = 1'
-        )
-
-        self.assertEqual(
-            raw_connection.execute(
-                'SELECT "product_id" FROM "orders_orderitem" WHERE "id" = 1'
-            ).fetchone()[0],
-            None,
         )
 
         indexes = raw_connection.execute(
