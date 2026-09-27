@@ -183,3 +183,34 @@ def test_zarinpal_production_rejects_sandbox_endpoint():
                 )
             )
         )
+
+
+def test_production_uses_secure_session_and_csrf_cookies():
+    settings = load_settings_env(**production_base_env())
+
+    assert settings["SESSION_COOKIE_SECURE"] is True
+    assert settings["CSRF_COOKIE_SECURE"] is True
+
+
+def test_development_does_not_force_secure_cookies():
+    settings = load_settings_env(
+        DJANGO_DEBUG="1",
+        SECRET_KEY="dev-secret",
+    )
+
+    assert settings["SESSION_COOKIE_SECURE"] is False
+    assert settings["CSRF_COOKIE_SECURE"] is False
+
+
+def test_session_cookie_security_contract():
+    settings = load_settings_env(**production_base_env())
+
+    assert settings["SESSION_COOKIE_HTTPONLY"] is True
+    assert settings["SESSION_COOKIE_SAMESITE"] == "Lax"
+
+
+def test_csrf_cookie_remains_javascript_readable():
+    settings = load_settings_env(**production_base_env())
+
+    assert settings["CSRF_COOKIE_HTTPONLY"] is False
+    assert settings["CSRF_COOKIE_SAMESITE"] == "Lax"
