@@ -104,6 +104,21 @@ if DEBUG and "https://*.loca.lt" not in CSRF_TRUSTED_ORIGINS:
 
 
 # -------------------------------------------------------------------------
+# Session / CSRF cookie security
+# -------------------------------------------------------------------------
+# HTTPS-only cookies are required in production. Development remains usable
+# over local HTTP. Session cookies are HttpOnly; the CSRF cookie remains
+# JavaScript-readable because the frontend reads csrftoken for AJAX requests.
+SESSION_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = "Lax"
+
+
+# -------------------------------------------------------------------------
 # Application definition
 # -------------------------------------------------------------------------
 
