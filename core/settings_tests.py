@@ -39,10 +39,12 @@ def zarinpal_production_env(**overrides):
     env.update(
         {
             "ZARINPAL_MERCHANT_ID": "test-merchant",
-            "ZARINPAL_CALLBACK_URL": "https://shop.example.com/orders/payment/callback/",
-            "ZARINPAL_REQUEST_URL": "https://api.zarinpal.com/pg/v4/payment/request.json",
-            "ZARINPAL_VERIFY_URL": "https://api.zarinpal.com/pg/v4/payment/verify.json",
-            "ZARINPAL_STARTPAY_URL": "https://www.zarinpal.com/pg/StartPay",
+            "ZARINPAL_CALLBACK_URL": (
+                "https://shop.example.test/orders/payment/callback/"
+            ),
+            "ZARINPAL_REQUEST_URL": "https://gateway.example.test/request",
+            "ZARINPAL_VERIFY_URL": "https://gateway.example.test/verify",
+            "ZARINPAL_STARTPAY_URL": "https://gateway.example.test/startpay",
         }
     )
     env.update(overrides)
@@ -161,16 +163,16 @@ def test_zarinpal_production_accepts_explicit_non_sandbox_configuration():
 
     assert settings["ZARINPAL_MERCHANT_ID"] == "test-merchant"
     assert settings["ZARINPAL_CALLBACK_URL"] == (
-        "https://shop.example.com/orders/payment/callback/"
+        "https://shop.example.test/orders/payment/callback/"
     )
-    assert settings["ZARINPAL_REQUEST_URL"].startswith(
-        "https://api.zarinpal.com/"
+    assert settings["ZARINPAL_REQUEST_URL"] == (
+        "https://gateway.example.test/request"
     )
-    assert settings["ZARINPAL_VERIFY_URL"].startswith(
-        "https://api.zarinpal.com/"
+    assert settings["ZARINPAL_VERIFY_URL"] == (
+        "https://gateway.example.test/verify"
     )
     assert settings["ZARINPAL_STARTPAY_URL"] == (
-        "https://www.zarinpal.com/pg/StartPay"
+        "https://gateway.example.test/startpay"
     )
 
 
