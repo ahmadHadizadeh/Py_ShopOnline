@@ -130,7 +130,7 @@ def test_real_otp_login_sets_expected_session_cookie_security():
 
     session_cookie = response.cookies["sessionid"]
 
-    assert session_cookie["httponly"] == "True"
+    assert session_cookie["httponly"] is True
     assert session_cookie["samesite"] == "Lax"
 
 
