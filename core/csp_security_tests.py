@@ -74,8 +74,6 @@ def test_csp_report_only_contract_does_not_enable_enforcement_yet():
 def test_csp_report_only_policy_has_minimum_baseline_directives():
     policy = _report_only_policy()
 
-    assert "'none'" in " ".join(
-        token for token in policy.split() if token == "'none'"
-    ) or "object-src 'none'" in policy
+    assert "object-src 'none'" in policy
     assert "base-uri 'self'" in policy
     assert "frame-ancestors 'none'" in policy
