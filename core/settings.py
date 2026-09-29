@@ -15,6 +15,7 @@ import os
 import secrets
 
 from dotenv import load_dotenv
+from django.utils.csp import CSP
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -119,6 +120,40 @@ CSRF_COOKIE_SAMESITE = "Lax"
 
 
 # -------------------------------------------------------------------------
+# Content Security Policy (Report-Only)
+# -------------------------------------------------------------------------
+# Phase 3.7.4 deliberately starts in Report-Only mode. The current frontend
+# contains inline JavaScript/event handlers and approved third-party assets;
+# this policy records browser violations without blocking site behavior.
+SECURE_CSP_REPORT_ONLY = {
+    "default-src": [CSP.SELF],
+    "script-src": [
+        CSP.SELF,
+        "https://cdn.tailwindcss.com",
+        "https://cdnjs.cloudflare.com",
+        "https://code.jquery.com",
+        "https://cdn.jsdelivr.net",
+    ],
+    "style-src": [
+        CSP.SELF,
+        "https://cdnjs.cloudflare.com",
+        "https://cdn.jsdelivr.net",
+    ],
+    "font-src": [CSP.SELF, "https://cdnjs.cloudflare.com"],
+    "img-src": [CSP.SELF, "data:"],
+    "connect-src": [CSP.SELF],
+    "form-action": [CSP.SELF],
+    "object-src": [CSP.NONE],
+    "base-uri": [CSP.SELF],
+    "frame-ancestors": [CSP.NONE],
+}
+
+# Enforcement is intentionally deferred until real browser violations have
+# been audited and the existing inline frontend has been migrated safely.
+SECURE_CSP = {}
+
+
+# -------------------------------------------------------------------------
 # Application definition
 # -------------------------------------------------------------------------
 
@@ -139,6 +174,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
