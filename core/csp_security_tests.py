@@ -7,7 +7,6 @@ REPORT_ONLY_HEADER = "Content-Security-Policy-Report-Only"
 
 REQUIRED_SCRIPT_SOURCES = {
     "'self'",
-    "'unsafe-inline'",
     "https://cdn.tailwindcss.com",
     "https://cdnjs.cloudflare.com",
     "https://code.jquery.com",
@@ -16,7 +15,6 @@ REQUIRED_SCRIPT_SOURCES = {
 
 REQUIRED_STYLE_SOURCES = {
     "'self'",
-    "'unsafe-inline'",
     "https://cdnjs.cloudflare.com",
     "https://cdn.jsdelivr.net",
 }
@@ -28,9 +26,9 @@ def _csp_directive(policy, name):
 
 def _report_only_policy():
     policy = getattr(settings, "SECURE_CSP_REPORT_ONLY", None)
-    assert policy is not None, (
-        "3.7.4 contract: SECURE_CSP_REPORT_ONLY must be configured "
-        "before CSP enforcement is considered."
+    assert policy, (
+        "3.7.4 contract: SECURE_CSP_REPORT_ONLY must be explicitly "
+        "configured with a non-empty Django 6 CSP mapping."
     )
     assert isinstance(policy, dict), (
         "3.7.4 contract: SECURE_CSP_REPORT_ONLY must use Django 6 "
