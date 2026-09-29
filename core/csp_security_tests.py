@@ -23,11 +23,7 @@ REQUIRED_STYLE_SOURCES = {
 
 
 def _csp_directive(policy, name):
-    for directive in policy.split(";"):
-        directive = directive.strip()
-        if directive.startswith(f"{name} "):
-            return set(directive.split()[1:])
-    return set()
+    return set(policy.get(name, []))
 
 
 def _report_only_policy():
@@ -36,9 +32,9 @@ def _report_only_policy():
         "3.7.4 contract: SECURE_CSP_REPORT_ONLY must be configured "
         "before CSP enforcement is considered."
     )
-    assert isinstance(policy, str), (
+    assert isinstance(policy, dict), (
         "3.7.4 contract: SECURE_CSP_REPORT_ONLY must use Django 6 "
-        "string CSP syntax."
+        "dictionary CSP syntax."
     )
     return policy
 
@@ -74,6 +70,6 @@ def test_csp_report_only_contract_does_not_enable_enforcement_yet():
 def test_csp_report_only_policy_has_minimum_baseline_directives():
     policy = _report_only_policy()
 
-    assert "object-src 'none'" in policy
-    assert "base-uri 'self'" in policy
-    assert "frame-ancestors 'none'" in policy
+    assert set(policy.get("object-src", [])) == {"'none'"}
+    assert set(policy.get("base-uri", [])) == {"'self'"}
+    assert set(policy.get("frame-ancestors", [])) == {"'none'"}
