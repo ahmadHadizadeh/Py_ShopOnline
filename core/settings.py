@@ -120,6 +120,31 @@ CSRF_COOKIE_SAMESITE = "Lax"
 
 
 # -------------------------------------------------------------------------
+# Shared cache
+# -------------------------------------------------------------------------
+# OTP state must be shared between Gunicorn workers.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "pyshop_cache",
+    }
+}
+
+
+# -------------------------------------------------------------------------
+# HTTPS / reverse-proxy security
+# -------------------------------------------------------------------------
+# Nginx terminates HTTPS and forwards the original scheme.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# HTTPS redirection is enforced by the Nginx reverse proxy.
+# Django stays aware of the original scheme via SECURE_PROXY_SSL_HEADER.
+SECURE_SSL_REDIRECT = False
+SECURE_HSTS_SECONDS = 15552000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = False
+
+
+# -------------------------------------------------------------------------
 # Content Security Policy (Report-Only)
 # -------------------------------------------------------------------------
 # Phase 3.7.4 deliberately starts in Report-Only mode. The current frontend
