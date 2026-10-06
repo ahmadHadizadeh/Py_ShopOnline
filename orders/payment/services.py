@@ -62,6 +62,19 @@ class PaymentService:
         if order.status in non_payable_statuses:
             return None, order, None
 
+        if order.status == Order.Status.CANCELLED:
+            raise ValidationError(
+                "این سفارش لغو شده و امکان پرداخت مجدد برای آن وجود ندارد."
+            )
+
+        if order.status not in {
+            Order.Status.PENDING,
+            Order.Status.PLACED,
+        }:
+            raise ValidationError(
+                "وضعیت فعلی سفارش برای شروع پرداخت معتبر نیست."
+            )
+
         if order.status != Order.Status.PENDING:
             order.status = Order.Status.PENDING
             order.save(update_fields=["status"])

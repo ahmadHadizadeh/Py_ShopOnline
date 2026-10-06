@@ -16,8 +16,10 @@ from accounts.signals import create_user_profile
 from cart.models import Cart, CartItem
 from catalog.models.category import Category
 from catalog.models.product import Product
+from catalog.models.variant import ProductVariant
 from orders.models.orders import Order
 from orders.models.order_item import OrderItem
+from orders.models.order_address_snapshot import OrderAddressSnapshot
 from orders.models.payment import Payment
 from orders.payment.services import PaymentService
 from orders.services import OrderService
@@ -282,6 +284,55 @@ class PaymentCallbackSecurityTests(TestCase):
             self.cart.pk,
         )
 
+    def test_failed_payment_keeps_order_retryable(self):
+        response = self.client1.post(
+            self.callback_url,
+            {
+                "trxid": self.payment.transaction_code,
+                "status": "failed",
+                "amount": "50000000",
+                "signature": self.callback_signature(),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "orders:payment_failed",
+                kwargs={"order_number": self.order.order_number},
+            ),
+        )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.payment.status, Payment.Status.FAILED)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertIsNone(self.order.cancelled_at)
+
+    def test_cancelled_order_cannot_be_paid(self):
+        original_transaction_code = self.payment.transaction_code
+
+        self.order.status = Order.Status.CANCELLED
+        self.order.save(update_fields=["status"])
+
+        with self.assertRaises(ValidationError):
+            PaymentService.initiate(
+                user=self.user1,
+                order_number=self.order.order_number,
+            )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+
+        self.assertEqual(self.payment.status, Payment.Status.PENDING)
+        self.assertEqual(
+            self.payment.transaction_code,
+            original_transaction_code,
+        )
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+
+
     def test_callback_idempotency_on_already_successful_payment(self):
         self.payment.status = Payment.Status.SUCCESS
         self.payment.reference_code = "REF-EXISTING-123"
@@ -504,6 +555,31 @@ class PaymentServiceTests(TestCase):
         self.assertEqual(payment.status, Payment.Status.PENDING)
         self.assertEqual(payment.transaction_code, initiation.transaction_id)
         self.assertIn("mock-payment-gateway", initiation.redirect_url)
+
+    def test_failed_payment_can_be_retried_without_cancelling_order(self):
+        payment, order, first_initiation = PaymentService.initiate(
+            user=self.user,
+            order_number=self.order.order_number,
+        )
+
+        payment.status = Payment.Status.FAILED
+        payment.save(update_fields=["status"])
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+
+        retry_payment, retry_order, retry_initiation = PaymentService.initiate(
+            user=self.user,
+            order_number=self.order.order_number,
+        )
+
+        self.assertEqual(retry_payment.pk, payment.pk)
+        self.assertEqual(retry_order.pk, order.pk)
+        self.assertEqual(retry_payment.status, Payment.Status.PENDING)
+        self.assertNotEqual(
+            retry_initiation.transaction_id,
+            first_initiation.transaction_id,
+        )
 
     def test_service_reuses_existing_one_to_one_payment(self):
         first_payment, _, _ = PaymentService.initiate(
@@ -922,7 +998,6 @@ class ProcessPaymentViewTests(TestCase):
         )
 
         first_payment = Payment.objects.get(order=self.order)
-
         second_response = self.client.get(self.url)
 
         self.assertEqual(
@@ -1150,3 +1225,654 @@ class AdminOrderWorkflowConfigurationTests(TestCase):
                 "cancel_unpaid_orders",
             },
         )
+
+
+class PaymentPresentationContractTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="payment-presentation-user",
+            password="Password123!",
+        )
+        self.client.force_login(self.user)
+
+        self.category = Category.objects.create(
+            name="Payment Presentation",
+            slug="payment-presentation",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Payment Presentation Product",
+            slug="payment-presentation-product",
+            price=Decimal("125000"),
+            stock=10,
+            is_active=True,
+            is_available_status=True,
+        )
+
+        self.cart = Cart.objects.create(
+            user=self.user,
+            status=Cart.STATUS_ORDERED,
+        )
+        self.order = Order.objects.create(
+            user=self.user,
+            cart=self.cart,
+            subtotal_amount=Decimal("125000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("15000"),
+            final_amount=Decimal("140000"),
+            status=Order.Status.PENDING,
+        )
+        OrderItem.objects.create(
+            order=self.order,
+            product=self.product,
+            product_name=self.product.name,
+            variant_name="",
+            sku=None,
+            quantity=1,
+            unit_price=Decimal("125000"),
+            subtotal_price=Decimal("125000"),
+        )
+        OrderAddressSnapshot.objects.create(
+            order=self.order,
+            recipient_name="کاربر تست",
+            recipient_mobile="09120000000",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس تست",
+        )
+        self.payment = Payment.objects.create(
+            order=self.order,
+            user=self.user,
+            amount=Decimal("140000"),
+            status=Payment.Status.PENDING,
+            gateway_name="zarinpal",
+            transaction_code="AUTH-PRESENT-001",
+        )
+
+    def test_confirmation_pending_state_renders_correct_payment_action(self):
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("پیش‌فاکتور نهایی سفارش", content)
+        self.assertIn("در انتظار پرداخت", content)
+        self.assertIn("پرداخت آنلاین و نهایی", content)
+        self.assertIn(self.order.order_number, content)
+        self.assertIn("تاریخ ثبت:", content)
+
+    def test_confirmation_failed_state_exposes_retry_action(self):
+        self.payment.status = Payment.Status.FAILED
+        self.payment.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("پرداخت قبلی ناموفق بوده است", content)
+        self.assertIn("تلاش مجدد برای پرداخت", content)
+        self.assertIn(self.payment.transaction_code, content)
+
+    def test_confirmation_paid_order_redirects_to_success_page(self):
+        self.order.status = Order.Status.PAID
+        self.order.save(update_fields=["status"])
+
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "orders:payment_success",
+                kwargs={"order_number": self.order.order_number},
+            ),
+        )
+
+    def test_success_receipt_distinguishes_reference_and_transaction(self):
+        self.order.status = Order.Status.PAID
+        self.order.save(update_fields=["status"])
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.reference_code = "REF-PRESENT-001"
+        self.payment.save(update_fields=["status", "reference_code"])
+
+        response = self.client.get(
+            reverse(
+                "orders:payment_success",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("کد رهگیری پرداخت:", content)
+        self.assertIn(self.payment.reference_code, content)
+        self.assertIn("شناسه تراکنش درگاه:", content)
+        self.assertIn(self.payment.transaction_code, content)
+        self.assertNotIn("کد پیگیری تراکنش:", content)
+
+    def test_failed_receipt_labels_transaction_code_correctly(self):
+        self.payment.status = Payment.Status.FAILED
+        self.payment.reference_code = ""
+        self.payment.save(update_fields=["status", "reference_code"])
+
+        response = self.client.get(
+            reverse(
+                "orders:payment_failed",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+
+        self.assertIn("شناسه تراکنش درگاه:", content)
+        self.assertIn(self.payment.transaction_code, content)
+        self.assertNotIn("کد رهگیری تراکنش:", content)
+
+
+class AdminOrderedCartProtectionTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="admin-cart-protection",
+            email="admin-cart-protection@example.com",
+            password="AdminPass123!",
+        )
+        self.client.force_login(self.admin_user)
+
+        self.category = Category.objects.create(
+            name="Admin Cart Protection",
+            slug="admin-cart-protection",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Admin Cart Protection Product",
+            slug="admin-cart-protection-product",
+            price=Decimal("900000"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+        self.ordered_cart = Cart.objects.create(
+            user=self.admin_user,
+            status=Cart.STATUS_ORDERED,
+        )
+        self.cart_item = CartItem.objects.create(
+            cart=self.ordered_cart,
+            product=self.product,
+            quantity=1,
+            unit_price_snapshot=Decimal("900000"),
+            status=CartItem.STATUS_ACTIVE,
+        )
+        self.request = self.client.get("/").wsgi_request
+
+    def test_ordered_cart_freezes_identity_and_lifecycle_fields(self):
+        cart_admin = admin.site._registry[Cart]
+
+        readonly_fields = set(
+            cart_admin.get_readonly_fields(self.request, self.ordered_cart)
+        )
+
+        self.assertTrue(
+            {"user", "session_key", "status"}.issubset(readonly_fields)
+        )
+
+        delete_url = reverse(
+            "admin:cart_cart_delete",
+            args=[self.ordered_cart.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            Cart.objects.filter(pk=self.ordered_cart.pk).exists()
+        )
+
+    def test_ordered_cart_item_is_readonly_and_cannot_be_deleted(self):
+        cart_item_admin = admin.site._registry[CartItem]
+
+        readonly_fields = set(
+            cart_item_admin.get_readonly_fields(self.request, self.cart_item)
+        )
+
+        self.assertTrue(
+            {
+                "cart",
+                "product",
+                "variant",
+                "quantity",
+                "unit_price_snapshot",
+                "status",
+            }.issubset(readonly_fields)
+        )
+
+        delete_url = reverse(
+            "admin:cart_cartitem_delete",
+            args=[self.cart_item.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            CartItem.objects.filter(pk=self.cart_item.pk).exists()
+        )
+
+    def test_ordered_cart_inline_is_readonly_and_cannot_delete_items(self):
+        cart_admin = admin.site._registry[Cart]
+        inline_admin = cart_admin.inlines[0](
+            CartItem,
+            admin.site,
+        )
+
+        readonly_fields = set(
+            inline_admin.get_readonly_fields(self.request, self.ordered_cart)
+        )
+
+        self.assertTrue(
+            {"product", "variant", "quantity", "status"}.issubset(
+                readonly_fields
+            )
+        )
+        self.assertFalse(
+            inline_admin.has_delete_permission(
+                self.request,
+                self.ordered_cart,
+            )
+        )
+
+    def test_product_with_cart_reference_cannot_be_deleted_from_admin(self):
+        product_admin = admin.site._registry[Product]
+
+        self.assertFalse(
+            product_admin.has_delete_permission(self.request, self.product)
+        )
+
+        delete_url = reverse(
+            "admin:catalog_product_delete",
+            args=[self.product.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+        self.assertTrue(
+            CartItem.objects.filter(pk=self.cart_item.pk).exists()
+        )
+
+    def test_product_with_only_order_history_remains_deletable(self):
+        product_admin = admin.site._registry[Product]
+        historical_product = Product.objects.create(
+            category=self.category,
+            name="Historical Product",
+            slug="historical-product",
+            price=Decimal("700000"),
+            stock=0,
+            is_active=False,
+            is_available_status=False,
+        )
+        order = Order.objects.create(
+            user=self.admin_user,
+            subtotal_amount=Decimal("700000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+            final_amount=Decimal("700000"),
+            status=Order.Status.COMPLETED,
+        )
+        order_item = OrderItem.objects.create(
+            order=order,
+            product=historical_product,
+            product_name=historical_product.name,
+            variant_name="",
+            sku=None,
+            quantity=1,
+            unit_price=Decimal("700000"),
+            subtotal_price=Decimal("700000"),
+        )
+
+        self.assertTrue(
+            product_admin.has_delete_permission(self.request, historical_product)
+        )
+
+        delete_url = reverse(
+            "admin:catalog_product_delete",
+            args=[historical_product.pk],
+        )
+        response = self.client.post(
+            delete_url,
+            {"post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            Product.objects.filter(pk=historical_product.pk).exists()
+        )
+        order_item.refresh_from_db()
+        self.assertIsNone(order_item.product_id)
+        self.assertEqual(order_item.product_name, "Historical Product")
+
+    def test_product_variant_with_cart_reference_cannot_be_deleted_from_admin(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=Decimal("50000"),
+        )
+        self.cart_item.variant = variant
+        self.cart_item.unit_price_snapshot = Decimal("950000")
+        self.cart_item.save(update_fields=["variant", "unit_price_snapshot", "updated"])
+
+        variant_admin = admin.site._registry[ProductVariant]
+        self.assertFalse(
+            variant_admin.has_delete_permission(self.request, variant)
+        )
+
+        delete_url = reverse(
+            "admin:catalog_productvariant_delete",
+            args=[variant.pk],
+        )
+        response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ProductVariant.objects.filter(pk=variant.pk).exists())
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
+
+    def test_active_cart_admin_remains_editable(self):
+        active_user = User.objects.create_user(
+            username="active-cart-admin-user",
+            password="Password123!",
+        )
+        active_cart = Cart.objects.create(
+            user=active_user,
+            status=Cart.STATUS_ACTIVE,
+        )
+
+        cart_admin = admin.site._registry[Cart]
+        cart_readonly = set(
+            cart_admin.get_readonly_fields(self.request, active_cart)
+        )
+        self.assertNotIn("status", cart_readonly)
+        self.assertTrue(cart_admin.has_delete_permission(self.request, active_cart))
+
+        active_item = CartItem.objects.create(
+            cart=active_cart,
+            product=self.product,
+            quantity=1,
+            unit_price_snapshot=Decimal("900000"),
+            status=CartItem.STATUS_ACTIVE,
+        )
+        cart_item_admin = admin.site._registry[CartItem]
+        item_readonly = set(
+            cart_item_admin.get_readonly_fields(self.request, active_item)
+        )
+        self.assertNotIn("quantity", item_readonly)
+        self.assertTrue(
+            cart_item_admin.has_delete_permission(self.request, active_item)
+        )
+
+
+class SQLiteOrderItemProductSchemaRepairTests(TestCase):
+    def test_repair_converts_legacy_sqlite_schema_and_preserves_history(self):
+        import importlib
+        import sqlite3
+
+        migration = importlib.import_module(
+            "orders.migrations.0007_repair_orderitem_product_schema"
+        )
+
+        raw_connection = sqlite3.connect(":memory:")
+        raw_connection.execute("PRAGMA foreign_keys = ON")
+
+        raw_connection.executescript(
+            """
+            CREATE TABLE "catalog_product" (
+                "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "name" varchar(250) NOT NULL
+            );
+
+            CREATE TABLE "orders_order" (
+                "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "order_number" varchar(32) NOT NULL
+            );
+
+            CREATE TABLE "orders_orderitem" (
+                "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "product_id" bigint NOT NULL,
+                "variant_id" bigint NULL,
+                "product_name" varchar(255) NOT NULL,
+                "variant_name" varchar(255) NOT NULL,
+                "sku" varchar(100) NULL,
+                "quantity" integer NOT NULL,
+                "unit_price" decimal NOT NULL,
+                "subtotal_price" decimal NOT NULL,
+                "created" datetime NOT NULL,
+                "updated" datetime NOT NULL,
+                "order_id" bigint NOT NULL
+                    REFERENCES "orders_order" ("id")
+                    DEFERRABLE INITIALLY DEFERRED
+            );
+
+            CREATE INDEX "orders_orde_order_i_5d347b_idx"
+            ON "orders_orderitem" ("order_id");
+
+            CREATE INDEX "orders_orde_variant_164791_idx"
+            ON "orders_orderitem" ("variant_id");
+            """
+        )
+
+        raw_connection.execute(
+            'INSERT INTO "catalog_product" ("name") VALUES (?)',
+            ("Valid product",),
+        )
+        raw_connection.execute(
+            'INSERT INTO "orders_order" ("order_number") VALUES (?)',
+            ("ORD-REPAIR-TEST",),
+        )
+
+        raw_connection.executemany(
+            """
+            INSERT INTO "orders_orderitem" (
+                "product_id",
+                "variant_id",
+                "product_name",
+                "variant_name",
+                "sku",
+                "quantity",
+                "unit_price",
+                "subtotal_price",
+                "created",
+                "updated",
+                "order_id"
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    1,
+                    None,
+                    "Valid product",
+                    "",
+                    None,
+                    1,
+                    100,
+                    100,
+                    "2026-01-01 00:00:00",
+                    "2026-01-01 00:00:00",
+                    1,
+                ),
+                (
+                    999,
+                    None,
+                    "Deleted historical product",
+                    "",
+                    None,
+                    2,
+                    200,
+                    400,
+                    "2026-01-02 00:00:00",
+                    "2026-01-02 00:00:00",
+                    1,
+                ),
+            ],
+        )
+        raw_connection.commit()
+
+        class DebugCursor:
+            def __init__(self, cursor):
+                self._cursor = cursor
+
+            def execute(self, sql, params=None):
+                if params is None:
+                    return self._cursor.execute(sql)
+
+                converted_sql = sql.replace("%s", "?")
+                result = self._cursor.execute(converted_sql, params)
+
+                # Reproduce Django 6.0.6 SQLite DEBUG interpolation.
+                connection.ops.last_executed_query(
+                    self._cursor,
+                    sql,
+                    params,
+                )
+
+                return result
+
+            def __getattr__(self, name):
+                return getattr(self._cursor, name)
+
+        class CursorContext:
+            def __init__(self, cursor):
+                self.cursor = cursor
+
+            def __enter__(self):
+                return self.cursor
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self.cursor.close()
+
+        class ConnectionAdapter:
+            vendor = "sqlite"
+            in_atomic_block = False
+
+            def cursor(self):
+                return CursorContext(
+                    DebugCursor(raw_connection.cursor())
+                )
+
+        class SchemaEditorAdapter:
+            connection = ConnectionAdapter()
+
+        schema_editor = SchemaEditorAdapter()
+
+        migration.repair_orderitem_product_schema(
+            None,
+            schema_editor,
+        )
+
+        columns = raw_connection.execute(
+            'PRAGMA table_info("orders_orderitem")'
+        ).fetchall()
+        product_column = next(
+            column for column in columns if column[1] == "product_id"
+        )
+
+        self.assertEqual(product_column[3], 0)
+
+        foreign_keys = raw_connection.execute(
+            'PRAGMA foreign_key_list("orders_orderitem")'
+        ).fetchall()
+
+        self.assertTrue(
+            any(
+                fk[2] == "catalog_product"
+                and fk[3] == "product_id"
+                and fk[4] == "id"
+                and str(fk[6]).upper() == "NO ACTION"
+                for fk in foreign_keys
+            )
+        )
+
+        rows = raw_connection.execute(
+            """
+            SELECT "id", "product_id", "product_name", "quantity", "subtotal_price"
+            FROM "orders_orderitem"
+            ORDER BY "id"
+            """
+        ).fetchall()
+
+        self.assertEqual(
+            rows,
+            [
+                (1, 1, "Valid product", 1, 100),
+                (2, None, "Deleted historical product", 2, 400),
+            ],
+        )
+
+        indexes = raw_connection.execute(
+            """
+            SELECT "name"
+            FROM sqlite_master
+            WHERE "type" = 'index'
+              AND "tbl_name" = 'orders_orderitem'
+              AND "sql" IS NOT NULL
+            ORDER BY "name"
+            """
+        ).fetchall()
+
+        self.assertEqual(
+            indexes,
+            [
+                ("orders_orde_order_i_5d347b_idx",),
+                ("orders_orde_variant_164791_idx",),
+            ],
+        )
+
+        self.assertEqual(
+            raw_connection.execute(
+                'PRAGMA foreign_key_check("orders_orderitem")'
+            ).fetchall(),
+            [],
+        )
+        self.assertEqual(
+            raw_connection.execute("PRAGMA integrity_check").fetchone()[0],
+            "ok",
+        )
+
+        # Idempotence: once repaired, running the repair again is a no-op.
+        migration.repair_orderitem_product_schema(
+            None,
+            schema_editor,
+        )
+
+        self.assertEqual(
+            raw_connection.execute(
+                'SELECT COUNT(*) FROM "orders_orderitem"'
+            ).fetchone()[0],
+            2,
+        )
+        self.assertEqual(
+            raw_connection.execute(
+                'SELECT "product_id" FROM "orders_orderitem" WHERE "id" = 2'
+            ).fetchone()[0],
+            None,
+        )
+
+        raw_connection.close()

@@ -4,6 +4,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
+import jdatetime
 
 
 class Order(models.Model):
@@ -119,6 +120,12 @@ class Order(models.Model):
 
     def __str__(self):
         return self.order_number
+
+    @property
+    def jalali_created(self):
+        return jdatetime.datetime.fromgregorian(
+            datetime=self.created
+        ).strftime("%Y/%m/%d - %H:%M")
 
     def save(self, *args, **kwargs):
         if not self.order_number:

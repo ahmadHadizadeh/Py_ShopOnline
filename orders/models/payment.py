@@ -108,9 +108,6 @@ class Payment(models.Model):
                 self.gateway_response = str(exc)
                 self.order.status = Order.Status.CANCELLED
                 self.order.save(update_fields=["status"])
-        elif new_status in (self.Status.FAILED, self.Status.CANCELLED):
-            self.order.status = Order.Status.CANCELLED
-            self.order.save(update_fields=["status"])
 
         self.save(
             update_fields=[

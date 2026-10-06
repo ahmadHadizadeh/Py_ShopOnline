@@ -118,6 +118,10 @@ class PaymentFailedView(LoginRequiredMixin, TemplateView):
 
         context["order"] = order
         context["payment"] = payment
+        context["can_retry_payment"] = order.status in {
+            Order.Status.PENDING,
+            Order.Status.PLACED,
+        }
         return context
 
 
