@@ -525,3 +525,68 @@ def test_dashboard_alias_routes_expose_same_order_list(
     assert order_number in orders_response.content.decode("utf-8")
 
     assert dashboard_response.wsgi_request.resolver_match.func.view_class is orders_response.wsgi_request.resolver_match.func.view_class
+
+
+# ---------------------------------------------------------------------------
+# OTP / SMS.ir production contracts
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_otp_production_uses_smsir_verify_api():
+    from django.test import override_settings
+    from accounts.services.otp import SMSIRService
+
+    class FakeResponse:
+        status_code = 200
+        text = "ok"
+
+        def json(self):
+            return {"status": 1, "message": "ok"}
+
+    with override_settings(
+        DEBUG=False,
+        SMSIR_CONFIG={
+            "API_KEY": "TEST_API_KEY",
+            "TEMPLATE_ID": 358253,
+        },
+    ):
+        with patch(
+            "accounts.services.otp.requests.post",
+            return_value=FakeResponse(),
+        ) as mocked_post:
+            ok, _ = SMSIRService.send_verification_code(
+                "09123456789",
+                "123456",
+            )
+
+    assert ok is True
+    mocked_post.assert_called_once()
+    call = mocked_post.call_args
+    assert call.args[0] == "https://api.sms.ir/v1/send/verify"
+    assert call.kwargs["json"]["templateId"] == 358253
+    assert call.kwargs["json"]["parameters"] == [
+        {"name": "CODE", "value": "123456"}
+    ]
+    assert call.kwargs["headers"]["x-api-key"] == "TEST_API_KEY"
+
+
+@pytest.mark.django_db
+def test_otp_development_uses_console_instead_of_smsir():
+    from django.test import override_settings
+    from accounts.services.otp import SMSIRService
+
+    with override_settings(
+        DEBUG=True,
+        SMSIR_CONFIG={
+            "API_KEY": "TEST_API_KEY",
+            "TEMPLATE_ID": 358253,
+        },
+    ):
+        with patch("accounts.services.otp.requests.post") as mocked_post:
+            ok, message = SMSIRService.send_verification_code(
+                "09123456789",
+                "123456",
+            )
+
+    assert ok is True
+    assert "تستی" in message
+    mocked_post.assert_not_called()

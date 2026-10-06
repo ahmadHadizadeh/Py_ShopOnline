@@ -118,10 +118,10 @@ class SMSIRService:
             return False, "شماره موبایل وارد شده نامعتبر است."
 
         # =========================================================================
-        # ⚠️ تنظیم موقت برای محیط توسعه (Development Mode)
-        # برای حالت پروداکشن و ارسال واقعی پیامک، مقدار زیر را False بگذارید.
+        # Development: console OTP
+        # Production: real SMS.ir Verify API
         # =========================================================================
-        DEBUG_OTP_CONSOLE = True
+        DEBUG_OTP_CONSOLE = bool(getattr(settings, "DEBUG", False))
 
         if DEBUG_OTP_CONSOLE:
             print("\n" + "=" * 50)
