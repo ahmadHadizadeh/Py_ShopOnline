@@ -92,7 +92,7 @@ def merge_guest_cart_to_user(request, *, user=None, guest_session_key=None):
         return user_cart
 
     guest_items = list(
-        guest_cart.items.select_for_update()
+        guest_cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
         .order_by("id")
     )
@@ -104,7 +104,7 @@ def merge_guest_cart_to_user(request, *, user=None, guest_session_key=None):
 
     product_ids = {item.product_id for item in guest_items}
     user_items = list(
-        user_cart.items.select_for_update()
+        user_cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
         .filter(product_id__in=product_ids)
         .order_by("id")
@@ -257,7 +257,7 @@ def add_product_to_cart(cart, product, quantity=1, variant=None):
 
     _validate_variant(product, variant)
     item = (
-        cart.items.select_for_update()
+        cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
         .filter(product=product, variant=variant)
         .first()
@@ -293,7 +293,7 @@ def update_cart_item_quantity(cart, product_id, quantity):
     if quantity < 1:
         raise ValidationError("تعداد باید حداقل 1 باشد.")
     item = (
-        cart.items.select_for_update()
+        cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
         .filter(product_id=product_id, status=CartItem.STATUS_ACTIVE)
         .first()
@@ -308,7 +308,7 @@ def update_cart_item_quantity_by_id(cart, item_id, quantity):
     if quantity < 1:
         raise ValidationError("تعداد باید حداقل 1 باشد.")
     item = (
-        cart.items.select_for_update()
+        cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
         .filter(pk=item_id, status=CartItem.STATUS_ACTIVE)
         .first()
@@ -329,7 +329,7 @@ def update_cart_item_quantity_by_id(cart, item_id, quantity):
 @transaction.atomic
 def toggle_cart_item_status(cart, product_id, to_status):
     item = (
-        cart.items.select_for_update()
+        cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
         .filter(product_id=product_id)
         .first()
@@ -344,7 +344,7 @@ def toggle_cart_item_status_by_id(cart, item_id, to_status):
     if to_status not in {CartItem.STATUS_ACTIVE, CartItem.STATUS_SAVED}:
         raise ValidationError("وضعیت نامعتبر است.")
     item = (
-        cart.items.select_for_update()
+        cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
         .filter(pk=item_id)
         .first()

@@ -1,6 +1,7 @@
 from decimal import Decimal
 import hashlib
 import hmac
+from unittest import skipUnless
 from unittest.mock import patch
 
 from django.conf import settings
@@ -1629,6 +1630,10 @@ class AdminOrderedCartProtectionTests(TestCase):
         )
 
 
+@skipUnless(
+    connection.vendor == "sqlite",
+    "This migration repair test requires the SQLite backend.",
+)
 class SQLiteOrderItemProductSchemaRepairTests(TestCase):
     def test_repair_converts_legacy_sqlite_schema_and_preserves_history(self):
         import importlib

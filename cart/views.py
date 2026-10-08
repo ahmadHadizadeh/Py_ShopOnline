@@ -9,6 +9,7 @@ from catalog.models import Product
 from catalog.models.variant import ProductVariant
 from .models import CartItem, Cart
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.urls import reverse
 from django.views.generic import View
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -209,9 +210,21 @@ class CheckoutView(View):
         return AddressForm()
 
     def get_cart_queryset(self):
-        return Cart.objects.prefetch_related(
-            "items__product",
-            "items__variant",
+        active_items = CartItem.objects.filter(
+            cart_id=OuterRef("pk"),
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        return (
+            Cart.objects
+            .prefetch_related(
+                "items__product",
+                "items__variant",
+            )
+            .annotate(
+                _has_active_items=Exists(active_items),
+            )
+            .filter(_has_active_items=True)
         )
 
     def get_cart(self, request, for_update=False):
@@ -219,10 +232,6 @@ class CheckoutView(View):
 
         if for_update:
             queryset = queryset.select_for_update()
-
-        queryset = queryset.filter(
-            items__status=CartItem.STATUS_ACTIVE,
-        ).distinct()
 
         if request.user.is_authenticated:
             return queryset.filter(
