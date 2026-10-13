@@ -34,7 +34,7 @@ class Category(models.Model):
         return self.name
 
     def clean(self):
-        if self.parent_id == self.pk:
+        if self.pk is not None and self.parent_id == self.pk:
             raise ValidationError({"parent": "دسته‌بندی نمی‌تواند والد خودش باشد."})
 
         parent = self.parent

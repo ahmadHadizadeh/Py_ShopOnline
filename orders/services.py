@@ -74,7 +74,7 @@ class OrderService:
             raise ValidationError("سبد خرید معتبر نیست.")
 
         active_items = list(
-            cart.items.select_for_update()
+            cart.items.select_for_update(of=("self",))
             .select_related("product", "variant")
             .filter(status="active")
         )

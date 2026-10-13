@@ -145,7 +145,9 @@ class Order(models.Model):
         if self.stock_reduced:
             return
     
-        order_items = list(self.items.select_related("product").select_for_update())
+        order_items = list(
+            self.items.select_related("product").select_for_update(of=("self",))
+        )
     
         if not order_items:
             Order.objects.filter(pk=self.pk).update(

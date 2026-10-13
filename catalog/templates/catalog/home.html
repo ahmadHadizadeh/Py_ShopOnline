@@ -6,6 +6,16 @@
 
 {% endblock %}
 
+{% block extra_head %}
+{% if category %}
+<link rel="canonical" href="https://codeamoz.com{{ category.get_absolute_url }}">
+<meta property="og:url" content="https://codeamoz.com{{ category.get_absolute_url }}">
+{% else %}
+<link rel="canonical" href="https://codeamoz.com{% url 'catalog:product_list' %}">
+<meta property="og:url" content="https://codeamoz.com{% url 'catalog:product_list' %}">
+{% endif %}
+{% endblock %}
+
 {% block content %}
 
 

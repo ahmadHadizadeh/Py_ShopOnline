@@ -29,6 +29,12 @@ def production_base_env(**overrides):
         "PAYMENT_CALLBACK_SECRET": "test-payment-callback-secret",
         "PAYMENT_DEFAULT_GATEWAY": "mock_gateway",
         "SMSIR_API_KEY": "test-smsir-key",
+        "DB_ENGINE": "postgresql",
+        "DB_NAME": "pyshop_db",
+        "DB_USER": "pyshop",
+        "DB_PASSWORD": "test-db-password",
+        "DB_HOST": "127.0.0.1",
+        "DB_PORT": "5432",
     }
     env.update(overrides)
     return env
@@ -214,3 +220,91 @@ def test_csrf_cookie_remains_javascript_readable():
 
     assert settings["CSRF_COOKIE_HTTPONLY"] is False
     assert settings["CSRF_COOKIE_SAMESITE"] == "Lax"
+
+
+def test_production_uses_postgresql_from_environment():
+    settings = load_settings_env(
+        **production_base_env(
+            DB_ENGINE="postgresql",
+            DB_NAME="pyshop_db",
+            DB_USER="pyshop",
+            DB_PASSWORD="test-db-password",
+            DB_HOST="127.0.0.1",
+            DB_PORT="5432",
+        )
+    )
+
+    database = settings["DATABASES"]["default"]
+
+    assert database["ENGINE"] == "django.db.backends.postgresql"
+    assert database["NAME"] == "pyshop_db"
+    assert database["USER"] == "pyshop"
+    assert database["PASSWORD"] == "test-db-password"
+    assert database["HOST"] == "127.0.0.1"
+    assert database["PORT"] == "5432"
+
+
+def test_production_uses_real_test_database_default():
+    settings = load_settings_env(
+        **production_base_env(
+            DB_ENGINE="postgresql",
+        )
+    )
+
+    assert settings["DATABASES"]["default"]["TEST"]["NAME"] == (
+        "pyshop_test_db"
+    )
+
+
+def test_production_accepts_explicit_test_database_name():
+    settings = load_settings_env(
+        **production_base_env(
+            DB_ENGINE="postgresql",
+            DB_TEST_NAME="custom_pyshop_test_db",
+        )
+    )
+
+    assert settings["DATABASES"]["default"]["TEST"]["NAME"] == (
+        "custom_pyshop_test_db"
+    )
+
+
+def test_development_keeps_sqlite_database_default():
+    settings = load_settings_env(
+        DJANGO_DEBUG="1",
+        SECRET_KEY="dev-secret",
+    )
+
+    database = settings["DATABASES"]["default"]
+
+    assert database["ENGINE"] == "django.db.backends.sqlite3"
+    assert database["NAME"] == (
+        Path(settings["BASE_DIR"]) / "db.sqlite3"
+    )
+
+
+@pytest.mark.parametrize(
+    "missing_variable",
+    [
+        "DB_NAME",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_HOST",
+        "DB_PORT",
+    ],
+)
+def test_production_requires_database_configuration(missing_variable):
+    env = production_base_env()
+    del env[missing_variable]
+
+    with pytest.raises(RuntimeError, match=missing_variable):
+        load_settings_env(**env)
+
+
+def test_rejects_unsupported_database_engine():
+    with pytest.raises(RuntimeError, match="Unsupported DB_ENGINE"):
+        load_settings_env(
+            **production_base_env(
+                DB_ENGINE="mysql",
+            )
+        )

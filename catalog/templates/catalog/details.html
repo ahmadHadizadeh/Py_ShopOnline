@@ -3,6 +3,11 @@
 
 {% block title %}{{ product.name }} | جزئیات محصول{% endblock %}
 
+{% block extra_head %}
+<link rel="canonical" href="https://codeamoz.com{{ product.get_absolute_url }}">
+<meta property="og:url" content="https://codeamoz.com{{ product.get_absolute_url }}">
+{% endblock %}
+
 {% block content %}
 <div class="container mx-auto px-4 py-8">
     {% if messages %}
