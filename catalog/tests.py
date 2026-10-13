@@ -98,3 +98,10 @@ class OtpCsrfIntegrationTests(TestCase):
 
         self.assertEqual(otp_response.status_code, 200)
         self.assertEqual(otp_response.json().get("status"), "success")
+
+
+class CategoryRootValidationRegressionTests(TestCase):
+    def test_new_root_category_without_parent_validates(self):
+        category = Category(name="Regression root", slug="regression-root")
+        category.full_clean()
+        self.assertIsNone(category.parent_id)

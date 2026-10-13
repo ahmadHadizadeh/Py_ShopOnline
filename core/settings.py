@@ -189,6 +189,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.sitemaps",
     "django.contrib.humanize",
     # MyApp
     "catalog",
@@ -231,15 +232,45 @@ WSGI_APPLICATION = "core.wsgi.application"
 
 # -------------------------------------------------------------------------
 # Database
-# NOTE: Database hardening/migration to production DB belongs to phase 3.7.6.
 # -------------------------------------------------------------------------
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+DB_ENGINE = os.getenv(
+    "DB_ENGINE",
+    "sqlite3" if DEBUG else "postgresql",
+).strip().lower()
+
+if DB_ENGINE in {"sqlite", "sqlite3"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+
+elif DB_ENGINE in {"postgres", "postgresql"}:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": _required_env("DB_NAME"),
+            "USER": _required_env("DB_USER"),
+            "PASSWORD": _required_env("DB_PASSWORD"),
+            "HOST": _required_env("DB_HOST"),
+            "PORT": _required_env("DB_PORT"),
+            "TEST": {
+                "NAME": os.getenv(
+                    "DB_TEST_NAME",
+                    "pyshop_test_db",
+                ).strip()
+                or "pyshop_test_db",
+            },
+        }
+    }
+
+else:
+    raise RuntimeError(
+        f"Unsupported DB_ENGINE: {DB_ENGINE!r}. "
+        "Use 'sqlite3' or 'postgresql'."
+    )
 
 
 # -------------------------------------------------------------------------
