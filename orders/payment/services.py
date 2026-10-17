@@ -211,6 +211,14 @@ class PaymentService:
             )
 
             reference_id = result.reference_id
+            if (
+                result.success
+                and gateway.name == "zarinpal"
+                and not str(reference_id or "").strip()
+            ):
+                raise GatewayVerificationError(
+                    "تأیید زرین‌پال بدون شناسه رهگیری واقعی پذیرفته نمی‌شود."
+                )
             if result.success and not reference_id:
                 reference_id = f"REF-{locked_payment.pk}-{uuid4().hex[:12].upper()}"
 
