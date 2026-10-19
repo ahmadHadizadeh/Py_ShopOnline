@@ -379,6 +379,13 @@ class ZarinPalGateway:
 
         success = code in {100, 101}
         reference_id = data_response.get("ref_id")
+        if success and (
+            reference_id is None or not str(reference_id).strip()
+        ):
+            raise GatewayVerificationError(
+                "شناسه رهگیری واقعی از تأیید زرین‌پال دریافت نشد."
+            )
+
         safe_response = self._safe_response(data_response)
         safe_response["authority"] = authority
 
