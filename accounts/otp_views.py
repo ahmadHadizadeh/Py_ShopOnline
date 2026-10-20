@@ -71,7 +71,7 @@ def send_otp_view(request):
     try:
         success, message, ttl = SMSIRService.send_otp(phone)
     except Exception:
-        logger.exception("[Send OTP] Unexpected error for phone=%s", phone)
+        logger.exception("[Send OTP] Unexpected error")
         return JsonResponse(
             {
                 "status": "error",
@@ -173,7 +173,7 @@ def verify_otp_view(request):
         login(request, user)
 
     except Exception:
-        logger.exception("[Verify OTP] Login error for phone=%s", phone)
+        logger.exception("[Verify OTP] Login error")
         return JsonResponse(
             {
                 "status": "error",
