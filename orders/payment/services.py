@@ -211,8 +211,17 @@ class PaymentService:
             )
 
             reference_id = result.reference_id
+            if reference_id is not None:
+                reference_id = str(reference_id).strip() or None
+
             if result.success and not reference_id:
-                reference_id = f"REF-{locked_payment.pk}-{uuid4().hex[:12].upper()}"
+                if gateway.name == "zarinpal":
+                    raise GatewayVerificationError(
+                        "زرین‌پال پرداخت موفق را بدون شناسه مرجع معتبر برگرداند."
+                    )
+                reference_id = (
+                    f"REF-{locked_payment.pk}-{uuid4().hex[:12].upper()}"
+                )
 
             new_status = (
                 Payment.Status.SUCCESS

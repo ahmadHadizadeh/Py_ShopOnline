@@ -28,6 +28,7 @@ from orders.services import OrderService
 User = get_user_model()
 
 
+@override_settings(DEBUG=True)
 class PaymentCallbackSecurityTests(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -483,6 +484,82 @@ class PaymentCallbackSecurityTests(TestCase):
         self.assertIsNotNone(self.order.paid_at)
 
 
+    def test_zarinpal_callback_persists_only_real_provider_reference(self):
+        from orders.payment.gateways import (
+            GatewayCallbackResult,
+            PaymentGatewayRegistry,
+        )
+
+        authority = "A000000000000000000000000000001234"
+        self.payment.gateway_name = "zarinpal"
+        self.payment.transaction_code = authority
+        self.payment.save(update_fields=["gateway_name", "transaction_code"])
+        gateway = PaymentGatewayRegistry.get("zarinpal")
+        verified_result = GatewayCallbackResult(
+            transaction_id=authority,
+            success=True,
+            amount=Decimal("50000000"),
+            reference_id="987654321",
+            raw_response={"code": 100, "ref_id": "987654321"},
+        )
+        callback_url = reverse(
+            "orders:gateway_payment_callback",
+            kwargs={"gateway_name": "zarinpal"},
+        )
+
+        with patch.object(gateway, "verify_callback", return_value=verified_result):
+            response = self.client1.get(
+                callback_url,
+                {"Authority": authority, "Status": "OK"},
+            )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "orders:payment_success",
+                kwargs={"order_number": self.order.order_number},
+            ),
+        )
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
+        self.assertEqual(self.payment.reference_code, "987654321")
+
+    def test_zarinpal_callback_without_real_reference_does_not_mark_payment_success(self):
+        from orders.payment.gateways import (
+            GatewayCallbackResult,
+            GatewayVerificationError,
+            PaymentGatewayRegistry,
+        )
+
+        authority = "A000000000000000000000000000001235"
+        self.payment.gateway_name = "zarinpal"
+        self.payment.transaction_code = authority
+        self.payment.save(update_fields=["gateway_name", "transaction_code"])
+        gateway = PaymentGatewayRegistry.get("zarinpal")
+        unreferenced_result = GatewayCallbackResult(
+            transaction_id=authority,
+            success=True,
+            amount=Decimal("50000000"),
+            reference_id=None,
+            raw_response={"code": 100},
+        )
+
+        with patch.object(
+            gateway,
+            "verify_callback",
+            return_value=unreferenced_result,
+        ):
+            with self.assertRaises(GatewayVerificationError):
+                PaymentService.handle_callback(
+                    gateway_name="zarinpal",
+                    data={"Authority": authority, "Status": "OK"},
+                )
+
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.PENDING)
+        self.assertIsNone(self.payment.reference_code)
+
+
 @override_settings(PAYMENT_DEFAULT_GATEWAY="mock_gateway")
 class PaymentServiceTests(TestCase):
     @classmethod
@@ -629,6 +706,53 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
             user=self.user,
             order_number=self.order.order_number,
         )
+
+    def test_zarinpal_success_without_reference_id_is_rejected(self):
+        from unittest.mock import patch
+        from orders.payment.gateways import (
+            GatewayCallbackResult,
+            GatewayVerificationError,
+            PaymentGatewayRegistry,
+        )
+
+        payment = self.payment
+        payment.gateway_name = "zarinpal"
+        payment.save(update_fields=["gateway_name"])
+        transaction_id = payment.transaction_code
+
+        class MissingReferenceGateway:
+            name = "zarinpal"
+
+            def extract_transaction_id(self, *, data):
+                return transaction_id
+
+            def verify_callback(self, *, payment, data):
+                return GatewayCallbackResult(
+                    transaction_id=transaction_id,
+                    success=True,
+                    amount=payment.amount,
+                    reference_id=current_reference,
+                    raw_response={"code": 100},
+                )
+
+        gateway = MissingReferenceGateway()
+
+        for current_reference in (None, "", "   "):
+            with self.subTest(reference_id=current_reference):
+                with patch.object(
+                    PaymentGatewayRegistry, "get", return_value=gateway
+                ):
+                    with self.assertRaises(GatewayVerificationError):
+                        PaymentService.handle_callback(
+                            gateway_name="zarinpal",
+                            data={"Authority": "TEST-AUTHORITY", "Status": "OK"},
+                        )
+
+                payment.refresh_from_db()
+                payment.order.refresh_from_db()
+                self.assertEqual(payment.status, Payment.Status.PENDING)
+                self.assertEqual(payment.order.status, Order.Status.PENDING)
+                self.assertFalse(payment.reference_code)
 
     def test_service_handles_mock_callback(self):
         from orders.payment.gateways import PaymentGatewayRegistry
@@ -887,7 +1011,7 @@ class PaymentCallbackTransactionBoundaryTests(TransactionTestCase):
         self.assertFalse(observed_atomic_state["value"])
 
 
-@override_settings(PAYMENT_DEFAULT_GATEWAY="mock_gateway")
+@override_settings(DEBUG=True, PAYMENT_DEFAULT_GATEWAY="mock_gateway")
 class ProcessPaymentViewTests(TestCase):
     @classmethod
     def setUpClass(cls):

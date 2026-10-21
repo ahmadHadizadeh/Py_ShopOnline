@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -11,7 +12,10 @@ from django.views.generic import TemplateView
 
 from orders.models.orders import Order
 from orders.models.payment import Payment
-from orders.payment.gateways import GatewayVerificationError
+from orders.payment.gateways import (
+    GatewayVerificationError,
+    build_mock_callback_signature,
+)
 from orders.payment.services import (
     PaymentService,
     get_default_gateway_name,
@@ -30,6 +34,25 @@ class ProcessPaymentView(LoginRequiredMixin, View):
         return self._start_payment(request, order_number)
 
     def _start_payment(self, request, order_number):
+        if (
+            not settings.DEBUG
+            and get_default_gateway_name() == "zarinpal"
+            and getattr(settings, "ZARINPAL_ENVIRONMENT", "production") == "sandbox"
+            and not request.user.is_staff
+        ):
+            messages.error(
+                request,
+                "درگاه پرداخت در حالت آزمایشی است و فقط برای آزمون مجاز است.",
+            )
+            return redirect("cart:detail")
+
+        if not settings.DEBUG and get_default_gateway_name() == "mock_gateway":
+            messages.error(
+                request,
+                "درگاه پرداخت واقعی هنوز برای محیط تولید پیکربندی نشده است.",
+            )
+            return redirect("cart:detail")
+
         try:
             payment, order, initiation = PaymentService.initiate(
                 user=request.user,
@@ -68,6 +91,9 @@ class PaymentCallbackView(View):
             or request.GET.get("gateway")
             or get_default_gateway_name()
         )
+
+        if gateway_name == "mock_gateway" and not settings.DEBUG:
+            raise Http404
 
         data = {
             **request.GET.dict(),
@@ -126,18 +152,36 @@ class PaymentFailedView(LoginRequiredMixin, TemplateView):
 
 
 def mock_payment_gateway_view(request):
+    if not settings.DEBUG or not request.user.is_authenticated:
+        raise Http404
+
     trxid = request.GET.get("trxid")
     order_number = request.GET.get("order")
-    amount = request.GET.get("amount")
 
-    if not trxid or not order_number or not amount:
+    if not trxid or not order_number:
         messages.error(request, "اطلاعات تراکنش نامعتبر است.")
         return redirect("cart:detail")
 
+    payment = get_object_or_404(
+        Payment.objects.select_related("order"),
+        transaction_code=trxid,
+        order__order_number=order_number,
+        order__user=request.user,
+        gateway_name="mock_gateway",
+        status=Payment.Status.PENDING,
+    )
+
+    if payment.order.status not in {Order.Status.PENDING, Order.Status.PLACED}:
+        raise Http404
+
     context = {
-        "trxid": trxid,
-        "order_number": order_number,
-        "amount": amount,
+        "trxid": payment.transaction_code,
+        "order_number": payment.order.order_number,
+        "amount": payment.amount,
+        "signature": build_mock_callback_signature(
+            transaction_id=payment.transaction_code,
+            amount=payment.amount,
+        ),
         "callback_url": reverse(
             "orders:gateway_payment_callback",
             kwargs={"gateway_name": "mock_gateway"},
