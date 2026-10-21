@@ -162,3 +162,23 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, active_low_stock.name)
         self.assertNotContains(response, out_of_stock.name)
         self.assertNotContains(response, inactive_low_stock.name)
+
+
+    def test_quick_links_only_offer_supported_add_actions(self):
+        admin_user = User.objects.create_superuser(
+            username="store-dashboard-actions-admin",
+            email="actions-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "افزودن محصول")
+        self.assertContains(response, "افزودن دسته‌بندی")
+        self.assertContains(response, "افزودن روش ارسال")
+        self.assertNotContains(response, 'href="/admin/orders/order/add/"')
+        self.assertNotContains(response, 'href="/admin/orders/payment/add/"')
+        self.assertNotContains(response, 'href="/admin/catalog/review/add/"')
+        self.assertNotContains(response, 'href="/admin/cart/cart/add/"')

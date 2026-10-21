@@ -27,9 +27,11 @@ def _add_quick_link(
     model_name: str,
     label: str,
     description: str,
+    allow_add: bool = False,
+    add_label: str = "افزودن مورد",
 ) -> None:
     can_view = _can_view_model(user, app_label, model_name)
-    can_add = bool(
+    can_add = allow_add and bool(
         user
         and user.is_authenticated
         and user.is_staff
@@ -49,7 +51,7 @@ def _add_quick_link(
             "description": description,
             "url": changelist_url if can_view else add_url,
             "add_url": add_url if can_view else None,
-            "add_label": "افزودن مورد",
+            "add_label": add_label,
         }
     )
 
@@ -113,11 +115,15 @@ def store_admin_dashboard_data(user):
         user, data["quick_links"], app_label="catalog", model_name="product",
         label="محصولات",
         description="ثبت محصول، قیمت‌گذاری و کنترل موجودی",
+        allow_add=True,
+        add_label="افزودن محصول",
     )
     _add_quick_link(
         user, data["quick_links"], app_label="catalog", model_name="category",
         label="دسته‌بندی‌ها",
         description="سازمان‌دهی محصولات فروشگاه",
+        allow_add=True,
+        add_label="افزودن دسته‌بندی",
     )
     _add_quick_link(
         user, data["quick_links"], app_label="catalog", model_name="review",
@@ -133,6 +139,8 @@ def store_admin_dashboard_data(user):
         user, data["quick_links"], app_label="orders", model_name="shippingmethod",
         label="روش‌های ارسال",
         description="مدیریت هزینه و زمان ارسال",
+        allow_add=True,
+        add_label="افزودن روش ارسال",
     )
     _add_quick_link(
         user, data["quick_links"], app_label="cart", model_name="cart",
