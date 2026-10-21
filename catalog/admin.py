@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Q
 from .models.category import Category
 from .models.product import Product
 from .models.review import Review
@@ -8,18 +9,40 @@ from .models.product_media import ProductImage, ProductSpecification
 
 
 # فیلتر سفارشی برای وضعیت موجودی
+LOW_STOCK_THRESHOLD = 5
+
+
 class AvailabilityFilter(admin.SimpleListFilter):
     title = "وضعیت موجودی"
     parameter_name = "availability"
 
     def lookups(self, request, model_admin):
-        return [("available", "موجود"), ("unavailable", "ناموجود")]
+        return [
+            ("available", "موجود"),
+            ("unavailable", "ناموجود"),
+            ("low_stock", f"کم‌موجودی (۱ تا {LOW_STOCK_THRESHOLD})"),
+        ]
 
     def queryset(self, request, queryset):
         if self.value() == "available":
-            return queryset.filter(stock__gt=0)
+            return queryset.filter(
+                is_active=True,
+                is_available_status=True,
+                stock__gt=0,
+            )
         if self.value() == "unavailable":
-            return queryset.filter(stock=0)
+            return queryset.filter(
+                Q(is_active=False)
+                | Q(is_available_status=False)
+                | Q(stock=0)
+            )
+        if self.value() == "low_stock":
+            return queryset.filter(
+                is_active=True,
+                is_available_status=True,
+                stock__gt=0,
+                stock__lte=LOW_STOCK_THRESHOLD,
+            )
         return queryset
 
 

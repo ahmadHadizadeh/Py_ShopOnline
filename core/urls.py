@@ -23,6 +23,10 @@ from django.contrib.sitemaps.views import sitemap
 from catalog.sitemaps import sitemaps
 from core.seo import robots_txt
 
+admin.site.site_header = "مدیریت فروشگاه"
+admin.site.site_title = "پنل مدیریت فروشگاه"
+admin.site.index_title = "نمای کلی عملیات فروشگاه"
+
 # from .views import home,product_details
 
 # 🚦 Police Traffic 🚦
