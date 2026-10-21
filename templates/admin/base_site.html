@@ -1,0 +1,19 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | پنل مدیریت فروشگاه{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'css/admin_dashboard.css' %}">
+{% endblock %}
+
+{% block branding %}
+    <h1 id="site-name">
+        <a href="{% url 'admin:index' %}">مدیریت فروشگاه</a>
+    </h1>
+{% endblock %}
+
+{% block nav-global %}
+    <a class="store-admin-top-link" href="{% url 'admin:index' %}">نمای کلی فروشگاه</a>
+{% endblock %}
