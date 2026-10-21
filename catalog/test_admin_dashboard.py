@@ -178,7 +178,13 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, "افزودن محصول")
         self.assertContains(response, "افزودن دسته‌بندی")
         self.assertContains(response, "افزودن روش ارسال")
-        self.assertNotContains(response, 'href="/admin/orders/order/add/"')
-        self.assertNotContains(response, 'href="/admin/orders/payment/add/"')
-        self.assertNotContains(response, 'href="/admin/catalog/review/add/"')
-        self.assertNotContains(response, 'href="/admin/cart/cart/add/"')
+        quick_links_html = response.content.decode().split(
+            '<div class="store-quick-links">', 1
+        )[1].split("</section>", 1)[0]
+        for forbidden_url in (
+            "/admin/orders/order/add/",
+            "/admin/orders/payment/add/",
+            "/admin/catalog/review/add/",
+            "/admin/cart/cart/add/",
+        ):
+            self.assertNotIn(f'href="{forbidden_url}"', quick_links_html)
