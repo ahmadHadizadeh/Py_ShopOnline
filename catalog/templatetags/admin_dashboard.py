@@ -72,6 +72,7 @@ def store_admin_dashboard_data(user):
         "active_products": 0,
         "low_stock_products": 0,
         "pending_payments": 0,
+        "successful_payments_on_cancelled_orders": 0,
         "recent_orders": [],
         "quick_links": [],
     }
@@ -105,6 +106,19 @@ def store_admin_dashboard_data(user):
             status=Payment.Status.PENDING
         ).count()
         data["payments_url"] = reverse("admin:orders_payment_changelist")
+
+    # A successful payment attached to a cancelled order is a reconciliation
+    # exception: the provider result must be recorded, but the order must not
+    # be fulfilled automatically. Only expose this metric when both models are
+    # visible to the current staff user.
+    if can_view_orders and can_view_payments:
+        data["successful_payments_on_cancelled_orders"] = Payment.objects.filter(
+            status=Payment.Status.SUCCESS,
+            order__status=Order.Status.CANCELLED,
+        ).count()
+        data["successful_cancelled_payment_url"] = (
+            f"{data['orders_url']}?status__exact=cancelled&payment__status__exact=success"
+        )
 
     _add_quick_link(
         user, data["quick_links"], app_label="orders", model_name="order",

@@ -334,7 +334,6 @@ class PaymentCallbackSecurityTests(TestCase):
         )
         self.assertEqual(self.order.status, Order.Status.CANCELLED)
 
-
     def test_callback_idempotency_on_already_successful_payment(self):
         self.payment.status = Payment.Status.SUCCESS
         self.payment.reference_code = "REF-EXISTING-123"
@@ -483,7 +482,6 @@ class PaymentCallbackSecurityTests(TestCase):
 
         self.assertIsNotNone(self.order.paid_at)
 
-
     def test_zarinpal_callback_persists_only_real_provider_reference(self):
         from orders.payment.gateways import (
             GatewayCallbackResult,
@@ -524,7 +522,9 @@ class PaymentCallbackSecurityTests(TestCase):
         self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
         self.assertEqual(self.payment.reference_code, "987654321")
 
-    def test_zarinpal_callback_without_real_reference_does_not_mark_payment_success(self):
+    def test_zarinpal_callback_without_real_reference_does_not_mark_payment_success(
+        self,
+    ):
         from orders.payment.gateways import (
             GatewayCallbackResult,
             GatewayVerificationError,
@@ -558,6 +558,25 @@ class PaymentCallbackSecurityTests(TestCase):
         self.payment.refresh_from_db()
         self.assertEqual(self.payment.status, Payment.Status.PENDING)
         self.assertIsNone(self.payment.reference_code)
+
+    def test_reduce_item_stock_does_nothing_for_cancelled_order(self):
+        OrderService.transition_status(
+            order_id=self.order.pk,
+            new_status=Order.Status.CANCELLED,
+        )
+
+        initial_stock = self.product.stock
+
+        self.order.refresh_from_db()
+        self.order.reduce_item_stock()
+
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertFalse(self.order.stock_reduced)
+        self.assertIsNone(self.order.paid_at)
+        self.assertEqual(self.product.stock, initial_stock)
 
 
 @override_settings(PAYMENT_DEFAULT_GATEWAY="mock_gateway")
@@ -687,14 +706,18 @@ class PaymentServiceTests(TestCase):
         )
         gateway = PaymentGatewayRegistry.get("mock_gateway")
 
-        with patch.object(gateway, "initiate", wraps=gateway.initiate) as mocked_initiate:
+        with patch.object(
+            gateway, "initiate", wraps=gateway.initiate
+        ) as mocked_initiate:
             second_payment, _, second_initiation = PaymentService.initiate(
                 user=self.user,
                 order_number=self.order.order_number,
             )
 
         self.assertEqual(first_payment.pk, second_payment.pk)
-        self.assertEqual(first_initiation.transaction_id, second_initiation.transaction_id)
+        self.assertEqual(
+            first_initiation.transaction_id, second_initiation.transaction_id
+        )
         self.assertEqual(first_initiation.redirect_url, second_initiation.redirect_url)
         mocked_initiate.assert_not_called()
 
@@ -739,9 +762,7 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
 
         for current_reference in (None, "", "   "):
             with self.subTest(reference_id=current_reference):
-                with patch.object(
-                    PaymentGatewayRegistry, "get", return_value=gateway
-                ):
+                with patch.object(PaymentGatewayRegistry, "get", return_value=gateway):
                     with self.assertRaises(GatewayVerificationError):
                         PaymentService.handle_callback(
                             gateway_name="zarinpal",
@@ -756,6 +777,7 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
 
     def test_service_handles_mock_callback(self):
         from orders.payment.gateways import PaymentGatewayRegistry
+
         gateway = PaymentGatewayRegistry.get("mock_gateway")
         signature = hmac.new(
             settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
@@ -793,15 +815,11 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
             "signature": signature,
         }
 
-        first = PaymentService.handle_callback(
-            gateway_name="mock_gateway", data=data
-        )
+        first = PaymentService.handle_callback(gateway_name="mock_gateway", data=data)
         self.payment.refresh_from_db()
         reference = self.payment.reference_code
 
-        second = PaymentService.handle_callback(
-            gateway_name="mock_gateway", data=data
-        )
+        second = PaymentService.handle_callback(gateway_name="mock_gateway", data=data)
         self.payment.refresh_from_db()
 
         self.assertTrue(first.success)
@@ -844,6 +862,43 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
         self.assertEqual(first_stock, initial_stock - 1)
         self.assertEqual(self.product.stock, first_stock)
 
+    def test_success_callback_for_cancelled_order_records_payment_without_fulfillment(
+        self,
+    ):
+        OrderService.transition_status(
+            order_id=self.order.pk,
+            new_status=Order.Status.CANCELLED,
+        )
+        initial_stock = self.product.stock
+        signature = hmac.new(
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            f"{self.payment.transaction_code}:{self.payment.amount}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        outcome = PaymentService.handle_callback(
+            gateway_name="mock_gateway",
+            data={
+                "trxid": self.payment.transaction_code,
+                "status": "success",
+                "amount": str(self.payment.amount),
+                "signature": signature,
+            },
+        )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+
+        self.assertTrue(outcome.success)
+        self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
+        self.assertTrue(self.payment.reference_code)
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertFalse(self.order.stock_reduced)
+        self.assertIsNone(self.order.paid_at)
+        self.assertEqual(self.product.stock, initial_stock)
+
     def test_callback_db_failure_rolls_back_payment_transition(self):
         signature = hmac.new(
             settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
@@ -879,7 +934,10 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
         self.assertEqual(self.order.status, Order.Status.PENDING)
 
     def test_callback_rejects_amount_drift_after_gateway_verification(self):
-        from orders.payment.gateways import GatewayCallbackResult, PaymentGatewayRegistry
+        from orders.payment.gateways import (
+            GatewayCallbackResult,
+            PaymentGatewayRegistry,
+        )
 
         gateway_name = "drift_test_gateway"
         transaction_id = "DRIFT-TEST-001"
@@ -898,9 +956,7 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
                 # Simulate a concurrent order/payment change while provider
                 # verification is in flight. Final DB validation must use the
                 # freshly locked Payment row.
-                Payment.objects.filter(pk=payment.pk).update(
-                    amount=Decimal("60000000")
-                )
+                Payment.objects.filter(pk=payment.pk).update(amount=Decimal("60000000"))
                 return GatewayCallbackResult(
                     transaction_id=transaction_id,
                     success=True,
@@ -932,7 +988,10 @@ class PaymentCallbackTransactionBoundaryTests(TransactionTestCase):
     reset_sequences = True
 
     def test_gateway_verification_runs_outside_database_transaction(self):
-        from orders.payment.gateways import GatewayCallbackResult, PaymentGatewayRegistry
+        from orders.payment.gateways import (
+            GatewayCallbackResult,
+            PaymentGatewayRegistry,
+        )
 
         user = User.objects.create_user(username="boundary-user")
         profile = Profile.objects.get(user=user)
@@ -1232,9 +1291,7 @@ class AdminOperationalTests(TestCase):
         self.assertIn("transaction_code", payment_admin.readonly_fields)
 
     def test_order_admin_changelist_is_operational(self):
-        response = self.client.get(
-            reverse("admin:orders_order_changelist")
-        )
+        response = self.client.get(reverse("admin:orders_order_changelist"))
 
         self.assertEqual(response.status_code, 200)
 
@@ -1243,9 +1300,7 @@ class AdminOperationalTests(TestCase):
         self.assertIn("در انتظار پرداخت", content)
 
     def test_payment_admin_changelist_is_operational(self):
-        response = self.client.get(
-            reverse("admin:orders_payment_changelist")
-        )
+        response = self.client.get(reverse("admin:orders_payment_changelist"))
 
         self.assertEqual(response.status_code, 200)
 
@@ -1514,6 +1569,30 @@ class PaymentPresentationContractTests(TestCase):
         self.assertIn(self.payment.transaction_code, content)
         self.assertNotIn("کد رهگیری تراکنش:", content)
 
+    def test_success_receipt_flags_payment_for_cancelled_order(self):
+        self.order.status = Order.Status.CANCELLED
+        self.order.save(update_fields=["status"])
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.reference_code = "LATE-SUCCESS-REF"
+        self.payment.save(update_fields=["status", "reference_code"])
+
+        response = self.client.get(
+            reverse(
+                "orders:payment_success",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "پرداخت در درگاه موفق بوده، اما سفارش قبلاً لغو شده است.",
+        )
+        self.assertNotContains(
+            response,
+            "سفارش شما با موفقیت ثبت شد و در مرحله پردازش قرار گرفت.",
+        )
+
 
 class AdminOrderedCartProtectionTests(TestCase):
     def setUp(self):
@@ -1557,9 +1636,7 @@ class AdminOrderedCartProtectionTests(TestCase):
             cart_admin.get_readonly_fields(self.request, self.ordered_cart)
         )
 
-        self.assertTrue(
-            {"user", "session_key", "status"}.issubset(readonly_fields)
-        )
+        self.assertTrue({"user", "session_key", "status"}.issubset(readonly_fields))
 
         delete_url = reverse(
             "admin:cart_cart_delete",
@@ -1568,9 +1645,7 @@ class AdminOrderedCartProtectionTests(TestCase):
         response = self.client.post(delete_url)
 
         self.assertEqual(response.status_code, 403)
-        self.assertTrue(
-            Cart.objects.filter(pk=self.ordered_cart.pk).exists()
-        )
+        self.assertTrue(Cart.objects.filter(pk=self.ordered_cart.pk).exists())
 
     def test_ordered_cart_item_is_readonly_and_cannot_be_deleted(self):
         cart_item_admin = admin.site._registry[CartItem]
@@ -1597,9 +1672,7 @@ class AdminOrderedCartProtectionTests(TestCase):
         response = self.client.post(delete_url)
 
         self.assertEqual(response.status_code, 403)
-        self.assertTrue(
-            CartItem.objects.filter(pk=self.cart_item.pk).exists()
-        )
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
 
     def test_ordered_cart_inline_is_readonly_and_cannot_delete_items(self):
         cart_admin = admin.site._registry[Cart]
@@ -1613,9 +1686,7 @@ class AdminOrderedCartProtectionTests(TestCase):
         )
 
         self.assertTrue(
-            {"product", "variant", "quantity", "status"}.issubset(
-                readonly_fields
-            )
+            {"product", "variant", "quantity", "status"}.issubset(readonly_fields)
         )
         self.assertFalse(
             inline_admin.has_delete_permission(
@@ -1639,9 +1710,7 @@ class AdminOrderedCartProtectionTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
-        self.assertTrue(
-            CartItem.objects.filter(pk=self.cart_item.pk).exists()
-        )
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
 
     def test_product_with_only_order_history_remains_deletable(self):
         product_admin = admin.site._registry[Product]
@@ -1687,9 +1756,7 @@ class AdminOrderedCartProtectionTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(
-            Product.objects.filter(pk=historical_product.pk).exists()
-        )
+        self.assertFalse(Product.objects.filter(pk=historical_product.pk).exists())
         order_item.refresh_from_db()
         self.assertIsNone(order_item.product_id)
         self.assertEqual(order_item.product_name, "Historical Product")
@@ -1706,9 +1773,7 @@ class AdminOrderedCartProtectionTests(TestCase):
         self.cart_item.save(update_fields=["variant", "unit_price_snapshot", "updated"])
 
         variant_admin = admin.site._registry[ProductVariant]
-        self.assertFalse(
-            variant_admin.has_delete_permission(self.request, variant)
-        )
+        self.assertFalse(variant_admin.has_delete_permission(self.request, variant))
 
         delete_url = reverse(
             "admin:catalog_productvariant_delete",
@@ -1731,9 +1796,7 @@ class AdminOrderedCartProtectionTests(TestCase):
         )
 
         cart_admin = admin.site._registry[Cart]
-        cart_readonly = set(
-            cart_admin.get_readonly_fields(self.request, active_cart)
-        )
+        cart_readonly = set(cart_admin.get_readonly_fields(self.request, active_cart))
         self.assertNotIn("status", cart_readonly)
         self.assertTrue(cart_admin.has_delete_permission(self.request, active_cart))
 
@@ -1770,8 +1833,7 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
         raw_connection = sqlite3.connect(":memory:")
         raw_connection.execute("PRAGMA foreign_keys = ON")
 
-        raw_connection.executescript(
-            """
+        raw_connection.executescript("""
             CREATE TABLE "catalog_product" (
                 "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
                 "name" varchar(250) NOT NULL
@@ -1804,8 +1866,7 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
 
             CREATE INDEX "orders_orde_variant_164791_idx"
             ON "orders_orderitem" ("variant_id");
-            """
-        )
+            """)
 
         raw_connection.execute(
             'INSERT INTO "catalog_product" ("name") VALUES (?)',
@@ -1902,9 +1963,7 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
             in_atomic_block = False
 
             def cursor(self):
-                return CursorContext(
-                    DebugCursor(raw_connection.cursor())
-                )
+                return CursorContext(DebugCursor(raw_connection.cursor()))
 
         class SchemaEditorAdapter:
             connection = ConnectionAdapter()
@@ -1919,9 +1978,7 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
         columns = raw_connection.execute(
             'PRAGMA table_info("orders_orderitem")'
         ).fetchall()
-        product_column = next(
-            column for column in columns if column[1] == "product_id"
-        )
+        product_column = next(column for column in columns if column[1] == "product_id")
 
         self.assertEqual(product_column[3], 0)
 
@@ -1939,13 +1996,11 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
             )
         )
 
-        rows = raw_connection.execute(
-            """
+        rows = raw_connection.execute("""
             SELECT "id", "product_id", "product_name", "quantity", "subtotal_price"
             FROM "orders_orderitem"
             ORDER BY "id"
-            """
-        ).fetchall()
+            """).fetchall()
 
         self.assertEqual(
             rows,
@@ -1955,16 +2010,14 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
             ],
         )
 
-        indexes = raw_connection.execute(
-            """
+        indexes = raw_connection.execute("""
             SELECT "name"
             FROM sqlite_master
             WHERE "type" = 'index'
               AND "tbl_name" = 'orders_orderitem'
               AND "sql" IS NOT NULL
             ORDER BY "name"
-            """
-        ).fetchall()
+            """).fetchall()
 
         self.assertEqual(
             indexes,

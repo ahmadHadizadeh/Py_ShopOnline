@@ -64,6 +64,15 @@
                         <span class="store-metric-help">مشاهده جزئیات و وضعیت پرداخت‌ها</span>
                     </a>
                 {% endif %}
+
+                {% if dashboard.can_view_orders and dashboard.can_view_payments %}
+                    <a class="store-metric-card store-metric-card--payments"
+                       href="{{ dashboard.successful_cancelled_payment_url }}">
+                        <span class="store-metric-label">پرداخت‌های موفق برای سفارش لغوشده</span>
+                        <strong class="store-metric-value">{{ dashboard.successful_payments_on_cancelled_orders|intcomma }}</strong>
+                        <span class="store-metric-help">پرداخت تأیید شده، اما سفارش لغو شده؛ نیازمند بررسی مالی</span>
+                    </a>
+                {% endif %}
             </div>
         </section>
 

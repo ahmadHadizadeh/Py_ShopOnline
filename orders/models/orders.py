@@ -123,9 +123,9 @@ class Order(models.Model):
 
     @property
     def jalali_created(self):
-        return jdatetime.datetime.fromgregorian(
-            datetime=self.created
-        ).strftime("%Y/%m/%d - %H:%M")
+        return jdatetime.datetime.fromgregorian(datetime=self.created).strftime(
+            "%Y/%m/%d - %H:%M"
+        )
 
     def save(self, *args, **kwargs):
         if not self.order_number:
@@ -142,20 +142,25 @@ class Order(models.Model):
 
     @transaction.atomic
     def reduce_item_stock(self):
-        if self.stock_reduced:
+        locked_order = Order.objects.select_for_update().get(pk=self.pk)
+
+        self.status = locked_order.status
+        self.stock_reduced = locked_order.stock_reduced
+
+        if self.stock_reduced or self.status == Order.Status.CANCELLED:
             return
-    
+
         order_items = list(
             self.items.select_related("product").select_for_update(of=("self",))
         )
-    
+
         if not order_items:
             Order.objects.filter(pk=self.pk).update(
                 stock_reduced=True,
             )
             self.stock_reduced = True
             return
-    
+
         # ابتدا تمام موجودی‌ها را قبل از کوچک‌ترین تغییر بررسی می‌کنیم.
         # بنابراین در صورت کمبود موجودی هیچ محصولی نصفه‌نیمه کاهش پیدا نمی‌کند.
         # مجموع quantity هر Product را محاسبه می‌کنیم؛ یک Product ممکن است به‌دلیل
@@ -175,8 +180,8 @@ class Order(models.Model):
             sample_item = next(
                 item for item in order_items if item.product_id == product_id
             )
-            product = type(sample_item.product).objects.select_for_update().get(
-                pk=product_id
+            product = (
+                type(sample_item.product).objects.select_for_update().get(pk=product_id)
             )
             locked_products[product_id] = product
 
@@ -206,16 +211,16 @@ class Order(models.Model):
             Order.Status.PLACED,
         ):
             self.status = Order.Status.PAID
-    
+
             if not self.paid_at:
                 self.paid_at = timezone.now()
-    
+
         Order.objects.filter(pk=self.pk).update(
             stock_reduced=True,
             status=self.status,
             paid_at=self.paid_at,
         )
-    
+
         self.stock_reduced = True
 
     @staticmethod

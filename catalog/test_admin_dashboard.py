@@ -4,6 +4,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
+from django.contrib import admin
+from django.test import RequestFactory
 
 from catalog.models.category import Category
 from catalog.models.product import Product
@@ -93,6 +95,7 @@ class StoreAdminDashboardTests(TestCase):
         self.assertNotContains(response, "سفارش‌های آماده پردازش")
         self.assertNotContains(response, "محصولات کم‌موجودی")
         self.assertNotContains(response, "پرداخت‌های در انتظار")
+        self.assertNotContains(response, "پرداخت‌های موفق برای سفارش لغوشده")
         self.assertNotContains(response, self.order.order_number)
 
     def test_unavailable_filter_includes_inactive_product_with_positive_stock(self):
@@ -163,7 +166,6 @@ class StoreAdminDashboardTests(TestCase):
         self.assertNotContains(response, out_of_stock.name)
         self.assertNotContains(response, inactive_low_stock.name)
 
-
     def test_quick_links_only_offer_supported_add_actions(self):
         admin_user = User.objects.create_superuser(
             username="store-dashboard-actions-admin",
@@ -178,9 +180,11 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, "افزودن محصول")
         self.assertContains(response, "افزودن دسته‌بندی")
         self.assertContains(response, "افزودن روش ارسال")
-        quick_links_html = response.content.decode().split(
-            '<div class="store-quick-links">', 1
-        )[1].split("</section>", 1)[0]
+        quick_links_html = (
+            response.content.decode()
+            .split('<div class="store-quick-links">', 1)[1]
+            .split("</section>", 1)[0]
+        )
         for forbidden_url in (
             "/admin/orders/order/add/",
             "/admin/orders/payment/add/",
@@ -188,3 +192,113 @@ class StoreAdminDashboardTests(TestCase):
             "/admin/cart/cart/add/",
         ):
             self.assertNotIn(f'href="{forbidden_url}"', quick_links_html)
+
+    def test_change_only_permission_allows_order_dashboard_and_changelist(self):
+        self.grant(self.staff, "orders", "change_order")
+        self.client.force_login(self.staff)
+
+        dashboard_response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(dashboard_response.status_code, 200)
+        self.assertContains(dashboard_response, "سفارش‌های آماده پردازش")
+        self.assertContains(dashboard_response, self.order.order_number)
+        self.assertNotContains(dashboard_response, "پرداخت‌های در انتظار")
+
+        changelist_response = self.client.get(reverse("admin:orders_order_changelist"))
+        self.assertEqual(changelist_response.status_code, 200)
+
+    def test_add_only_permission_shows_only_supported_product_add_link(self):
+        self.grant(self.staff, "catalog", "add_product")
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+
+        quick_links_html = (
+            response.content.decode()
+            .split('<div class="store-quick-links">', 1)[1]
+            .split("</section>", 1)[0]
+        )
+
+        # self.assertIn("افزودن محصول", quick_links_html)
+        self.assertIn("محصولات", quick_links_html)
+
+        self.assertIn(
+            f'href="{reverse("admin:catalog_product_add")}"',
+            quick_links_html,
+        )
+        self.assertNotIn(
+            f'href="{reverse("admin:catalog_product_changelist")}"',
+            quick_links_html,
+        )
+        self.assertNotContains(response, "محصولات کم‌موجودی")
+        self.assertNotContains(response, self.order.order_number)
+
+        add_response = self.client.get(reverse("admin:catalog_product_add"))
+        self.assertEqual(add_response.status_code, 200)
+
+    def test_staff_without_product_permission_cannot_open_product_changelist(self):
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse("admin:catalog_product_changelist"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_order_and_payment_add_pages_remain_forbidden(self):
+        admin_user = User.objects.create_superuser(
+            username="store-dashboard-no-add-admin",
+            email="no-add-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        for url_name in (
+            "admin:orders_order_add",
+            "admin:orders_payment_add",
+        ):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 403)
+
+    def test_order_admin_exposes_only_registered_operational_actions(self):
+        admin_user = User.objects.create_superuser(
+            username="store-dashboard-actions-check",
+            email="actions-check@example.test",
+            password="TestPassword123!",
+        )
+        request = RequestFactory().get(reverse("admin:orders_order_changelist"))
+        request.user = admin_user
+
+        order_admin = admin.site._registry[Order]
+        actions = order_admin.get_actions(request)
+
+        expected_actions = {
+            "move_paid_orders_to_processing",
+            "move_processing_orders_to_completed",
+            "cancel_unpaid_orders",
+        }
+        self.assertTrue(expected_actions.issubset(actions.keys()))
+
+    def test_dashboard_flags_successful_payments_for_cancelled_orders(self):
+        self.order.status = Order.Status.CANCELLED
+        self.order.save(update_fields=["status"])
+
+        # Explicitly create the state this dashboard metric is meant to detect.
+        payment = Payment.objects.get(order=self.order)
+        payment.status = Payment.Status.SUCCESS
+        payment.reference_code = "DASHBOARD-CANCELLED-REF"
+        payment.save(update_fields=["status", "reference_code"])
+        self.grant(self.staff, "orders", "view_order")
+        self.grant(self.staff, "orders", "view_payment")
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            response.content.decode("utf-8"),
+            r"پرداخت‌های موفق برای سفارش لغوشده</span>\s*<strong[^>]*>1</strong>",
+        )
+        self.assertContains(
+            response,
+            "status__exact=cancelled&amp;payment__status__exact=success",
+        )

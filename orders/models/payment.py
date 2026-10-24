@@ -100,7 +100,10 @@ class Payment(models.Model):
 
         self.status = new_status
 
-        if new_status == self.Status.SUCCESS:
+        if (
+            new_status == self.Status.SUCCESS
+            and self.order.status != Order.Status.CANCELLED
+        ):
             try:
                 self.order.reduce_item_stock()
             except ValueError as exc:
