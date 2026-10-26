@@ -28,6 +28,12 @@
             <div class="store-metrics-grid">
                 {% if dashboard.can_view_orders %}
                     <a class="store-metric-card store-metric-card--orders"
+                       href="{{ dashboard.orders_url }}">
+                        <span class="store-metric-label">کل سفارش‌ها</span>
+                        <strong class="store-metric-value">{{ dashboard.total_orders|intcomma }}</strong>
+                        <span class="store-metric-help">مشاهده همه سفارش‌های ثبت‌شده در فروشگاه</span>
+                    </a>
+                    <a class="store-metric-card store-metric-card--orders"
                        href="{{ dashboard.orders_url }}?status__exact=paid">
                         <span class="store-metric-label">سفارش‌های آماده پردازش</span>
                         <strong class="store-metric-value">{{ dashboard.orders_to_process|intcomma }}</strong>

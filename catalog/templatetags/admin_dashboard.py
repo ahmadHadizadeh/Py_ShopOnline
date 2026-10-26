@@ -67,6 +67,7 @@ def store_admin_dashboard_data(user):
         "can_view_orders": can_view_orders,
         "can_view_products": can_view_products,
         "can_view_payments": can_view_payments,
+        "total_orders": 0,
         "orders_to_process": 0,
         "orders_processing": 0,
         "active_products": 0,
@@ -81,6 +82,7 @@ def store_admin_dashboard_data(user):
 
     if can_view_orders:
         order_queryset = Order.objects.all()
+        data["total_orders"] = order_queryset.count()
         data["orders_to_process"] = order_queryset.filter(
             status=Order.Status.PAID
         ).count()

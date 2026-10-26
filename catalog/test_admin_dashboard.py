@@ -111,6 +111,20 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "availability=low_stock")
 
+    def test_dashboard_shows_total_order_count_and_all_orders_link(self):
+        self.grant(self.staff, "orders", "view_order")
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "کل سفارش‌ها")
+        self.assertEqual(response.context["dashboard"]["total_orders"], 2)
+        self.assertContains(
+            response,
+            f'href="{reverse("admin:orders_order_changelist")}"',
+        )
+
     def test_staff_without_model_permissions_does_not_see_business_metrics(self):
         self.client.force_login(self.staff)
 
