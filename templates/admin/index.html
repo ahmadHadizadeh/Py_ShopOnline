@@ -54,6 +54,12 @@
                         <strong class="store-metric-value">{{ dashboard.low_stock_products|intcomma }}</strong>
                         <span class="store-metric-help">دارای موجودی بین ۱ تا ۵ عدد</span>
                     </a>
+                    <a class="store-metric-card store-metric-card--stock"
+                       href="{{ dashboard.out_of_stock_url }}">
+                        <span class="store-metric-label">محصولات اتمام‌موجودی</span>
+                        <strong class="store-metric-value">{{ dashboard.out_of_stock_products|intcomma }}</strong>
+                        <span class="store-metric-help">محصولات فعال که موجودی آن‌ها صفر شده است</span>
+                    </a>
                 {% endif %}
 
                 {% if dashboard.can_view_payments %}
