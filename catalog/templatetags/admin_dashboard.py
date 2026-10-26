@@ -72,6 +72,7 @@ def store_admin_dashboard_data(user):
         "active_products": 0,
         "low_stock_products": 0,
         "pending_payments": 0,
+        "failed_payments": 0,
         "successful_payments_on_cancelled_orders": 0,
         "recent_orders": [],
         "quick_links": [],
@@ -102,8 +103,12 @@ def store_admin_dashboard_data(user):
         data["low_stock_url"] = f"{data['products_url']}?availability=low_stock"
 
     if can_view_payments:
-        data["pending_payments"] = Payment.objects.filter(
+        payment_queryset = Payment.objects.all()
+        data["pending_payments"] = payment_queryset.filter(
             status=Payment.Status.PENDING
+        ).count()
+        data["failed_payments"] = payment_queryset.filter(
+            status=Payment.Status.FAILED
         ).count()
         data["payments_url"] = reverse("admin:orders_payment_changelist")
 
