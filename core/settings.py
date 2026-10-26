@@ -510,7 +510,7 @@ else:
             (
                 "ZARINPAL_STARTPAY_URL",
                 ZARINPAL_STARTPAY_URL,
-                "www.zarinpal.com",
+                ("payment.zarinpal.com", "www.zarinpal.com"),
                 "/pg/StartPay",
             ),
         ):
