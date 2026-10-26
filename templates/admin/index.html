@@ -63,6 +63,12 @@
                         <strong class="store-metric-value">{{ dashboard.pending_payments|intcomma }}</strong>
                         <span class="store-metric-help">مشاهده جزئیات و وضعیت پرداخت‌ها</span>
                     </a>
+                    <a class="store-metric-card store-metric-card--payments"
+                       href="{{ dashboard.payments_url }}?status__exact=failed">
+                        <span class="store-metric-label">پرداخت‌های ناموفق</span>
+                        <strong class="store-metric-value">{{ dashboard.failed_payments|intcomma }}</strong>
+                        <span class="store-metric-help">بررسی تراکنش‌های ناموفق</span>
+                    </a>
                 {% endif %}
 
                 {% if dashboard.can_view_orders and dashboard.can_view_payments %}
