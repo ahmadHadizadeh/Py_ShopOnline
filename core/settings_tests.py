@@ -382,6 +382,19 @@ def _canonical_zarinpal_production_env():
     )
 
 
+
+def test_production_accepts_official_sdk_startpay_host():
+    env = _canonical_zarinpal_production_env()
+    env["ZARINPAL_STARTPAY_URL"] = (
+        "https://payment.zarinpal.com/pg/StartPay"
+    )
+
+    settings = load_settings_env(**env)
+
+    assert settings["ZARINPAL_STARTPAY_URL"] == (
+        "https://payment.zarinpal.com/pg/StartPay"
+    )
+
 def test_production_rejects_noncanonical_zarinpal_endpoints():
     cases = (
         (
