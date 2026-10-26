@@ -71,6 +71,7 @@ def store_admin_dashboard_data(user):
         "orders_processing": 0,
         "active_products": 0,
         "low_stock_products": 0,
+        "out_of_stock_products": 0,
         "pending_payments": 0,
         "failed_payments": 0,
         "successful_payments_on_cancelled_orders": 0,
@@ -99,8 +100,13 @@ def store_admin_dashboard_data(user):
             stock__gt=0,
             stock__lte=LOW_STOCK_THRESHOLD,
         ).count()
+        data["out_of_stock_products"] = Product.objects.filter(
+            is_active=True,
+            stock=0,
+        ).count()
         data["products_url"] = reverse("admin:catalog_product_changelist")
         data["low_stock_url"] = f"{data['products_url']}?availability=low_stock"
+        data["out_of_stock_url"] = f"{data['products_url']}?availability=out_of_stock"
 
     if can_view_payments:
         payment_queryset = Payment.objects.all()
