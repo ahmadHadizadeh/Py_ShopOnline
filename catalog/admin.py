@@ -75,6 +75,37 @@ class ProductAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     inlines = [ProductImageInline, ProductSpecificationInline]
     ordering = ["-updated"]
+    readonly_fields = ("is_available_status", "created", "updated")
+    fieldsets = (
+        (
+            "اطلاعات اصلی محصول",
+            {"fields": ("name", "name_en", "brand", "category", "image")},
+        ),
+        (
+            "قیمت و موجودی",
+            {
+                "fields": (
+                    "price",
+                    "old_price",
+                    "stock",
+                    "is_active",
+                    "is_available_status",
+                )
+            },
+        ),
+        (
+            "محتوای صفحه محصول",
+            {"fields": ("description", "highlights", "review")},
+        ),
+        (
+            "ارسال و گارانتی",
+            {"fields": ("guarantee", "delivery_info")},
+        ),
+        (
+            "تنظیمات تکمیلی",
+            {"fields": ("slug", "related_products", "created", "updated")},
+        ),
+    )
 
     # متد برای نمایش آیکون در لیست
     @admin.display(description="موجودی", boolean=True)
