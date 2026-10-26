@@ -567,7 +567,9 @@ class PaymentCallbackSecurityTests(TestCase):
 
         initial_stock = self.product.stock
 
-        self.order.refresh_from_db()
+        # Keep the original in-memory order stale: the database transition above
+        # must still prevent stock reduction when reduce_item_stock() reloads it.
+        self.assertNotEqual(self.order.status, Order.Status.CANCELLED)
         self.order.reduce_item_stock()
 
         self.order.refresh_from_db()
