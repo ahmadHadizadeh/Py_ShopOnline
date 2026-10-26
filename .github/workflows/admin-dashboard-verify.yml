@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - phase-3-8-admin-dashboard-ux
+      - phase-3-8-dashboard-payment-integration
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
