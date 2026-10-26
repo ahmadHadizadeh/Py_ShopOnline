@@ -19,7 +19,8 @@ class AvailabilityFilter(admin.SimpleListFilter):
     def lookups(self, request, model_admin):
         return [
             ("available", "موجود"),
-            ("unavailable", "ناموجود"),
+            ("unavailable", "ناموجود یا غیرفعال"),
+            ("out_of_stock", "اتمام موجودی (محصولات فعال)"),
             ("low_stock", f"کم‌موجودی (۱ تا {LOW_STOCK_THRESHOLD})"),
         ]
 
@@ -36,6 +37,8 @@ class AvailabilityFilter(admin.SimpleListFilter):
                 | Q(is_available_status=False)
                 | Q(stock=0)
             )
+        if self.value() == "out_of_stock":
+            return queryset.filter(is_active=True, stock=0)
         if self.value() == "low_stock":
             return queryset.filter(
                 is_active=True,
@@ -105,5 +108,4 @@ class ReviewAdmin(admin.ModelAdmin):
     list_editable = ["is_approved"]
     search_fields = ["product__name", "user__username", "comment"]
     ordering = ["-created"]
-
 
