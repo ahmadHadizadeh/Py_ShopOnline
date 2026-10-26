@@ -1,5 +1,6 @@
 # فایل: catalog/tests.py
 from django.test import TestCase, Client
+from django.contrib import admin
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from catalog.models.product import Product
@@ -105,3 +106,54 @@ class CategoryRootValidationRegressionTests(TestCase):
         category = Category(name="Regression root", slug="regression-root")
         category.full_clean()
         self.assertIsNone(category.parent_id)
+
+
+
+class ProductAdminUsabilityTests(TestCase):
+    def test_product_fields_are_grouped_and_derived_status_is_read_only(self):
+        product_admin = admin.site._registry[Product]
+
+        self.assertEqual(
+            tuple(product_admin.readonly_fields),
+            ("is_available_status", "created", "updated"),
+        )
+        self.assertEqual(
+            tuple(title for title, _options in product_admin.fieldsets),
+            (
+                "اطلاعات اصلی محصول",
+                "قیمت و موجودی",
+                "محتوای صفحه محصول",
+                "ارسال و گارانتی",
+                "تنظیمات تکمیلی",
+            ),
+        )
+
+        configured_fields = {
+            field
+            for _title, options in product_admin.fieldsets
+            for field in options["fields"]
+        }
+        self.assertSetEqual(
+            configured_fields,
+            {
+                "name",
+                "name_en",
+                "brand",
+                "category",
+                "image",
+                "price",
+                "old_price",
+                "stock",
+                "is_active",
+                "is_available_status",
+                "description",
+                "highlights",
+                "review",
+                "guarantee",
+                "delivery_info",
+                "slug",
+                "related_products",
+                "created",
+                "updated",
+            },
+        )
