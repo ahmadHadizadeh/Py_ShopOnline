@@ -87,6 +87,14 @@ class StoreAdminDashboardTests(TestCase):
             gateway_name="zarinpal",
             transaction_code="DASHBOARD-FAILED-TRX",
         )
+        Product.objects.create(
+            category=self.category,
+            name="Dashboard Out Of Stock Product",
+            slug="dashboard-out-of-stock-product",
+            price=Decimal("25000"),
+            stock=0,
+            is_active=True,
+        )
         self.client.force_login(self.staff)
 
         response = self.client.get(reverse("admin:index"))
@@ -95,6 +103,8 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, "داشبورد مدیریت فروشگاه")
         self.assertContains(response, "سفارش‌های آماده پردازش")
         self.assertContains(response, "محصولات کم‌موجودی")
+        self.assertContains(response, "محصولات اتمام‌موجودی")
+        self.assertContains(response, "availability=out_of_stock")
         self.assertContains(response, "پرداخت‌های در انتظار")
         self.assertContains(response, "پرداخت‌های ناموفق")
         self.assertContains(response, "status__exact=failed")
@@ -181,6 +191,15 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, active_low_stock.name)
         self.assertNotContains(response, out_of_stock.name)
         self.assertNotContains(response, inactive_low_stock.name)
+
+        out_of_stock_response = self.client.get(
+            reverse("admin:catalog_product_changelist"),
+            {"availability": "out_of_stock"},
+        )
+
+        self.assertEqual(out_of_stock_response.status_code, 200)
+        self.assertContains(out_of_stock_response, out_of_stock.name)
+        self.assertNotContains(out_of_stock_response, inactive_low_stock.name)
 
     def test_quick_links_only_offer_supported_add_actions(self):
         admin_user = User.objects.create_superuser(
