@@ -9,6 +9,7 @@ from django.test import RequestFactory
 
 from catalog.models.category import Category
 from catalog.models.product import Product
+from catalog.templatetags.admin_dashboard import store_admin_dashboard_data
 from orders.models import Order, Payment
 
 User = get_user_model()
@@ -119,7 +120,8 @@ class StoreAdminDashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "کل سفارش‌ها")
-        self.assertEqual(response.context["dashboard"]["total_orders"], 2)
+        dashboard = store_admin_dashboard_data(self.staff)
+        self.assertEqual(dashboard["total_orders"], 2)
         self.assertContains(
             response,
             f'href="{reverse("admin:orders_order_changelist")}"',
