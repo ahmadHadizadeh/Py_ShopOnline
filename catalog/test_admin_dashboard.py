@@ -73,6 +73,20 @@ class StoreAdminDashboardTests(TestCase):
         self.grant(self.staff, "orders", "view_order")
         self.grant(self.staff, "catalog", "view_product")
         self.grant(self.staff, "orders", "view_payment")
+        failed_order = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.PENDING,
+            subtotal_amount=Decimal("45000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=failed_order,
+            amount=failed_order.final_amount,
+            status=Payment.Status.FAILED,
+            gateway_name="zarinpal",
+            transaction_code="DASHBOARD-FAILED-TRX",
+        )
         self.client.force_login(self.staff)
 
         response = self.client.get(reverse("admin:index"))
@@ -82,6 +96,8 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, "سفارش‌های آماده پردازش")
         self.assertContains(response, "محصولات کم‌موجودی")
         self.assertContains(response, "پرداخت‌های در انتظار")
+        self.assertContains(response, "پرداخت‌های ناموفق")
+        self.assertContains(response, "status__exact=failed")
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "availability=low_stock")
 
