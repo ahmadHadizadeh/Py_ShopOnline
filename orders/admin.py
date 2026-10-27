@@ -261,7 +261,8 @@ class OrderAdmin(admin.ModelAdmin):
             payment = obj.payment
         except Payment.DoesNotExist:
             return format_html(
-                '<span class="store-status-pill store-status-pill--muted">بدون پرداخت</span>'
+                '<span class="store-status-pill store-status-pill--muted">{}</span>',
+                "بدون پرداخت",
             )
 
         return format_html(

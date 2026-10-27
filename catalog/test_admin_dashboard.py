@@ -541,6 +541,13 @@ class StoreAdminDashboardTests(TestCase):
             email="order-status-badges-admin@example.test",
             password="TestPassword123!",
         )
+        Order.objects.create(
+            user=admin_user,
+            status=Order.Status.PENDING,
+            subtotal_amount=Decimal("50000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
         self.client.force_login(admin_user)
 
         order_response = self.client.get(reverse("admin:orders_order_changelist"))
@@ -549,6 +556,7 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(order_response, "store-status-pill--payment-success")
         self.assertContains(order_response, "پرداخت شده")
         self.assertContains(order_response, "پرداخت موفق")
+        self.assertContains(order_response, "بدون پرداخت")
 
         payment_response = self.client.get(
             reverse("admin:orders_payment_changelist")
