@@ -600,6 +600,35 @@ class StoreAdminDashboardTests(TestCase):
         self.assertIn("phone_number", address_admin.search_fields)
         self.assertIn("user__username", address_admin.search_fields)
 
+    def test_all_store_admin_changelists_render_for_authorized_admin(self):
+        admin_user = User.objects.create_superuser(
+            username="admin-changelist-smoke-test",
+            email="admin-changelist-smoke-test@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        changelist_names = (
+            "admin:catalog_product_changelist",
+            "admin:catalog_category_changelist",
+            "admin:catalog_productvariant_changelist",
+            "admin:catalog_review_changelist",
+            "admin:orders_order_changelist",
+            "admin:orders_orderitem_changelist",
+            "admin:orders_payment_changelist",
+            "admin:orders_orderaddresssnapshot_changelist",
+            "admin:orders_shippingmethod_changelist",
+            "admin:cart_cart_changelist",
+            "admin:cart_cartitem_changelist",
+            "admin:accounts_address_changelist",
+            "admin:accounts_profile_changelist",
+        )
+
+        for url_name in changelist_names:
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200, url_name)
+
     def test_profile_admin_shows_customer_verification_but_never_otp_secrets(self):
         admin_user = User.objects.create_superuser(
             username="profile-privacy-admin",
