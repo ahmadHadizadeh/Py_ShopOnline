@@ -678,6 +678,11 @@ class StoreAdminDashboardTests(TestCase):
         response_without_permission = self.client.get(reverse("admin:index"))
         self.assertNotContains(response_without_permission, "پروفایل و تأیید مشتریان")
 
+        forbidden_profile_list = self.client.get(
+            reverse("admin:accounts_profile_changelist")
+        )
+        self.assertEqual(forbidden_profile_list.status_code, 403)
+
         self.grant(self.staff, "accounts", "view_profile")
         response_with_permission = self.client.get(reverse("admin:index"))
         self.assertContains(response_with_permission, "پروفایل و تأیید مشتریان")
