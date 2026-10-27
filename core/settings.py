@@ -207,6 +207,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "core.admin_locale.AdminLocaleMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -302,7 +303,7 @@ LOGOUT_REDIRECT_URL = "catalog:home"
 # Internationalization
 # -------------------------------------------------------------------------
 
-LANGUAGE_CODE = "fa-ir"
+LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
