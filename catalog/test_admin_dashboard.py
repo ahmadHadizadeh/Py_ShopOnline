@@ -10,7 +10,7 @@ from django.test import RequestFactory
 from catalog.models.category import Category
 from catalog.models.product import Product
 from catalog.templatetags.admin_dashboard import store_admin_dashboard_data
-from orders.models import Order, Payment
+from orders.models import Order, OrderAddressSnapshot, Payment
 
 User = get_user_model()
 
@@ -353,3 +353,35 @@ class StoreAdminDashboardTests(TestCase):
             response,
             "status__exact=cancelled&amp;payment__status__exact=success",
         )
+
+    def test_order_changelist_shows_and_searches_snapshot_recipient_details(self):
+        admin_user = User.objects.create_superuser(
+            username="order-recipient-search-admin",
+            email="recipient-search-admin@example.test",
+            password="TestPassword123!",
+        )
+        OrderAddressSnapshot.objects.create(
+            order=self.order,
+            recipient_name="مریم رضایی",
+            recipient_mobile="09125550123",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="خیابان نمونه، پلاک ۱۲",
+        )
+        self.client.force_login(admin_user)
+
+        changelist_url = reverse("admin:orders_order_changelist")
+        response = self.client.get(changelist_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "مریم رضایی")
+        self.assertContains(response, "09125550123")
+
+        search_response = self.client.get(changelist_url, {"q": "09125550123"})
+
+        self.assertEqual(search_response.status_code, 200)
+        self.assertContains(search_response, self.order.order_number)
+        self.assertContains(search_response, "مریم رضایی")
+        self.assertNotContains(search_response, self.pending_order.order_number)
+
