@@ -7,8 +7,14 @@ from cart.models import Cart, CartItem
 class CartItemInline(admin.TabularInline):
     model = CartItem
     extra = 0
-    readonly_fields = ("unit_price_snapshot", "subtotal", "created", "updated")
+    readonly_fields = ("unit_price_snapshot", "subtotal_display", "created", "updated")
     autocomplete_fields = ("product", "variant")
+
+    @admin.display(description="جمع ردیف (تومان)")
+    def subtotal_display(self, obj):
+        if obj.unit_price_snapshot is None or not obj.quantity:
+            return "—"
+        return f"{intcomma(int(obj.subtotal))} تومان"
 
     def get_readonly_fields(self, request, obj=None):
         if obj and obj.status == Cart.STATUS_ORDERED:
@@ -90,7 +96,7 @@ class CartItemAdmin(admin.ModelAdmin):
     list_per_page = 25
     date_hierarchy = "created"
     autocomplete_fields = ("cart", "product", "variant")
-    readonly_fields = ("subtotal", "created", "updated")
+    readonly_fields = ("subtotal_display", "created", "updated")
 
     @admin.display(description="قیمت هر عدد (تومان)", ordering="unit_price_snapshot")
     def unit_price_display(self, obj):
@@ -98,6 +104,8 @@ class CartItemAdmin(admin.ModelAdmin):
 
     @admin.display(description="جمع ردیف (تومان)")
     def subtotal_display(self, obj):
+        if obj.unit_price_snapshot is None or not obj.quantity:
+            return "—"
         return f"{intcomma(int(obj.subtotal))} تومان"
 
     def get_readonly_fields(self, request, obj=None):
