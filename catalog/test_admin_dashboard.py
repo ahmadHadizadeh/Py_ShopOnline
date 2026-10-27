@@ -598,7 +598,7 @@ class StoreAdminDashboardTests(TestCase):
         profile.phone_number = "09127770001"
         profile.is_verified = False
         profile.otp_code = "731642"
-        profile.save(update_fields=["phone_number", "is_verified", "otp_code", "updated"])
+        profile.save(update_fields=["phone_number", "is_verified", "otp_code", "updated_at"])
 
         self.client.force_login(admin_user)
         list_response = self.client.get(reverse("admin:accounts_profile_changelist"))
