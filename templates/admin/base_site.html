@@ -163,7 +163,7 @@
         </div>
 
         <div class="store-sidebar-footer">
-            <a href="{% url 'catalog:home' %}">
+            <a href="{{ site_url|default:'/' }}">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v6H4V5h6"/></svg>
                 <span>مشاهده فروشگاه</span>
                 <span class="store-sidebar-external" aria-hidden="true">↗</span>
