@@ -1,4 +1,5 @@
 from django import template
+from django.db.models import Count
 from django.urls import reverse
 
 from catalog.models.product import Product
@@ -17,6 +18,30 @@ def _can_view_model(user, app_label: str, model_name: str) -> bool:
         or user.has_perm(f"{app_label}.view_{model_name}")
         or user.has_perm(f"{app_label}.change_{model_name}")
     )
+
+
+
+def _status_breakdown(queryset, choices: tuple) -> list[dict]:
+    """Build a compact chart from the actual status values stored in the database."""
+    counts = dict(
+        queryset.order_by()
+        .values("status")
+        .annotate(total=Count("pk"))
+        .values_list("status", "total")
+    )
+    total = sum(counts.values())
+    if not total:
+        return []
+
+    return [
+        {
+            "key": key,
+            "label": label,
+            "count": counts.get(key, 0),
+            "percentage": round(counts.get(key, 0) * 100 / total),
+        }
+        for key, label in choices
+    ]
 
 
 def _add_quick_link(
@@ -77,6 +102,12 @@ def store_admin_dashboard_data(user):
         "failed_payments": 0,
         "successful_payments_on_cancelled_orders": 0,
         "recent_orders": [],
+        "order_status_breakdown": [],
+        "payment_status_breakdown": [],
+        "operational_alerts": [],
+        "can_view_operational_alerts": (
+            can_view_orders or can_view_products or can_view_payments
+        ),
         "quick_links": [],
     }
 
@@ -93,6 +124,9 @@ def store_admin_dashboard_data(user):
             "-created"
         )[:6]
         data["orders_url"] = reverse("admin:orders_order_changelist")
+        data["order_status_breakdown"] = _status_breakdown(
+            order_queryset, Order.Status.choices
+        )
 
     if can_view_products:
         data["active_products"] = Product.objects.filter(is_active=True).count()
@@ -119,6 +153,9 @@ def store_admin_dashboard_data(user):
             status=Payment.Status.FAILED
         ).count()
         data["payments_url"] = reverse("admin:orders_payment_changelist")
+        data["payment_status_breakdown"] = _status_breakdown(
+            payment_queryset, Payment.Status.choices
+        )
 
     # A successful payment attached to a cancelled order is a reconciliation
     # exception: the provider result must be recorded, but the order must not
@@ -132,6 +169,76 @@ def store_admin_dashboard_data(user):
         data["successful_cancelled_payment_url"] = (
             f"{data['orders_url']}?status__exact=cancelled&payment__status__exact=success"
         )
+
+
+    # Actionable alerts are derived only from metrics the current staff member
+    # is allowed to see, and each one links directly to the relevant admin list.
+    if can_view_orders and data["successful_payments_on_cancelled_orders"]:
+        data["operational_alerts"].append(
+            {
+                "tone": "danger",
+                "title": "پرداخت موفق برای سفارش لغوشده",
+                "description": "وضعیت سفارش و نتیجه پرداخت باید با دقت بررسی شوند.",
+                "count": data["successful_payments_on_cancelled_orders"],
+                "url": data["successful_cancelled_payment_url"],
+            }
+        )
+
+    if can_view_payments and data["failed_payments"]:
+        data["operational_alerts"].append(
+            {
+                "tone": "danger",
+                "title": "پرداخت‌های ناموفق",
+                "description": "جزئیات تراکنش‌های ناموفق را بررسی کنید.",
+                "count": data["failed_payments"],
+                "url": f'{data["payments_url"]}?status__exact=failed',
+            }
+        )
+
+    if can_view_orders and data["orders_to_process"]:
+        data["operational_alerts"].append(
+            {
+                "tone": "warning",
+                "title": "سفارش‌های آماده پردازش",
+                "description": "پرداخت موفق بوده و سفارش منتظر شروع آماده‌سازی است.",
+                "count": data["orders_to_process"],
+                "url": f'{data["orders_url"]}?status__exact=paid',
+            }
+        )
+
+    if can_view_payments and data["pending_payments"]:
+        data["operational_alerts"].append(
+            {
+                "tone": "warning",
+                "title": "پرداخت‌های در انتظار",
+                "description": "وضعیت تراکنش‌ها را از فهرست پرداخت‌ها پیگیری کنید.",
+                "count": data["pending_payments"],
+                "url": f'{data["payments_url"]}?status__exact=pending',
+            }
+        )
+
+    if can_view_products and data["out_of_stock_products"]:
+        data["operational_alerts"].append(
+            {
+                "tone": "warning",
+                "title": "محصولات اتمام‌موجودی",
+                "description": "این محصولات فعال هستند اما موجودی قابل فروش ندارند.",
+                "count": data["out_of_stock_products"],
+                "url": data["out_of_stock_url"],
+            }
+        )
+
+    if can_view_products and data["low_stock_products"]:
+        data["operational_alerts"].append(
+            {
+                "tone": "info",
+                "title": "محصولات کم‌موجودی",
+                "description": "موجودی این محصولات به پنج عدد یا کمتر رسیده است.",
+                "count": data["low_stock_products"],
+                "url": data["low_stock_url"],
+            }
+        )
+
 
     _add_quick_link(
         user, data["quick_links"], app_label="orders", model_name="order",
