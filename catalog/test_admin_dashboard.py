@@ -531,7 +531,7 @@ class StoreAdminDashboardTests(TestCase):
         self.assertIn("is_active", category_admin.list_display)
         self.assertIn("is_active", category_admin.list_filter)
         self.assertIn("parent", category_admin.list_filter)
-        self.assertContains(category_response, "وضعیت")
+        self.assertContains(category_response, "مادر")
         self.assertContains(category_response, "فعال")
 
     def test_order_and_payment_lists_show_readable_status_badges(self):
