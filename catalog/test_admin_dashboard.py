@@ -7,6 +7,9 @@ from django.urls import reverse
 from django.contrib import admin
 from django.test import RequestFactory
 
+from accounts.models.address import Address
+from cart.models import Cart
+
 from catalog.models.category import Category
 from catalog.models.product import Product
 from catalog.templatetags.admin_dashboard import store_admin_dashboard_data
@@ -497,3 +500,90 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, "محصولات کم‌موجودی")
         self.assertContains(response, "status__exact=paid")
         self.assertContains(response, "status__exact=pending")
+
+    def test_product_and_category_lists_surface_business_controls(self):
+        admin_user = User.objects.create_superuser(
+            username="catalog-operations-admin",
+            email="catalog-operations-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        product_response = self.client.get(reverse("admin:catalog_product_changelist"))
+        self.assertEqual(product_response.status_code, 200)
+        self.assertContains(product_response, "وضعیت فروش")
+        self.assertContains(product_response, "قابل فروش")
+        self.assertContains(product_response, "کم‌موجودی")
+
+        product_admin = admin.site._registry[Product]
+        self.assertIn("brand", product_admin.search_fields)
+        self.assertIn("is_active", product_admin.list_filter)
+        self.assertIn("availability_label", product_admin.list_display)
+        self.assertIn("stock", product_admin.list_editable)
+        self.assertEqual(product_admin.list_per_page, 25)
+
+        category_response = self.client.get(
+            reverse("admin:catalog_category_changelist")
+        )
+        self.assertEqual(category_response.status_code, 200)
+        category_admin = admin.site._registry[Category]
+        self.assertIn("parent", category_admin.list_display)
+        self.assertIn("is_active", category_admin.list_display)
+        self.assertIn("is_active", category_admin.list_filter)
+        self.assertIn("parent", category_admin.list_filter)
+        self.assertContains(category_response, "وضعیت")
+        self.assertContains(category_response, "فعال")
+
+    def test_order_and_payment_lists_show_readable_status_badges(self):
+        admin_user = User.objects.create_superuser(
+            username="order-status-badges-admin",
+            email="order-status-badges-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        order_response = self.client.get(reverse("admin:orders_order_changelist"))
+        self.assertEqual(order_response.status_code, 200)
+        self.assertContains(order_response, "store-status-pill--order-paid")
+        self.assertContains(order_response, "store-status-pill--payment-success")
+        self.assertContains(order_response, "پرداخت شده")
+        self.assertContains(order_response, "پرداخت موفق")
+
+        payment_response = self.client.get(
+            reverse("admin:orders_payment_changelist")
+        )
+        self.assertEqual(payment_response.status_code, 200)
+        self.assertContains(payment_response, "store-status-pill--payment-success")
+
+        payment_admin = admin.site._registry[Payment]
+        self.assertIn("status_badge", payment_admin.list_display)
+        self.assertEqual(payment_admin.list_per_page, 25)
+
+    def test_cart_and_address_lists_prioritize_human_searchable_details(self):
+        admin_user = User.objects.create_superuser(
+            username="customer-operations-admin",
+            email="customer-operations-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        guest_cart = Cart.objects.create(
+            session_key="guest-cart-session-test",
+            status=Cart.STATUS_ABANDONED,
+        )
+        cart_response = self.client.get(reverse("admin:cart_cart_changelist"))
+        self.assertEqual(cart_response.status_code, 200)
+        self.assertContains(cart_response, "مهمان")
+        self.assertNotContains(cart_response, "guest-cart-session-test")
+
+        cart_admin = admin.site._registry[Cart]
+        self.assertNotIn("session_key", cart_admin.list_display)
+        self.assertIn("session_key", cart_admin.search_fields)
+        self.assertIn("user_display", cart_admin.list_display)
+        self.assertEqual(cart_admin.list_per_page, 25)
+
+        address_admin = admin.site._registry[Address]
+        self.assertIn("province", address_admin.list_display)
+        self.assertIn("phone_number", address_admin.search_fields)
+        self.assertIn("user__username", address_admin.search_fields)
+

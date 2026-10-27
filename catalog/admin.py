@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.db.models import Q
+from django.utils.html import format_html
 from .models.category import Category
 from .models.product import Product
 from .models.review import Review
@@ -66,15 +67,27 @@ class ProductAdmin(admin.ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
-    # 'is_available' را از لیست‌ها حذف کردیم چون متد است
-    list_display = ["name", "category", "price", "stock", "status_icon", "updated"]
-    list_editable = ["price", "stock"]
-    # استفاده از فیلتر سفارشی به جای فیلد ناموجود
-    list_filter = ["category", "brand", AvailabilityFilter]
-    search_fields = ["name", "name_en"]
+    # Keep common stock/pricing controls visible in the list; availability itself is derived.
+    list_display = (
+        "name",
+        "category",
+        "brand",
+        "price",
+        "stock",
+        "availability_label",
+        "is_active",
+        "updated",
+    )
+    list_editable = ("price", "stock")
+    list_filter = ("is_active", "category", "brand", AvailabilityFilter)
+    search_fields = ("name", "name_en", "brand", "slug")
+    list_select_related = ("category",)
+    list_per_page = 25
+    list_max_show_all = 200
+    date_hierarchy = "updated"
     prepopulated_fields = {"slug": ("name",)}
     inlines = [ProductImageInline, ProductSpecificationInline]
-    ordering = ["-updated"]
+    ordering = ("-updated",)
     readonly_fields = ("is_available_status", "created", "updated")
     fieldsets = (
         (
@@ -107,10 +120,22 @@ class ProductAdmin(admin.ModelAdmin):
         ),
     )
 
-    # متد برای نمایش آیکون در لیست
-    @admin.display(description="موجودی", boolean=True)
-    def status_icon(self, obj):
-        return obj.is_available
+    @admin.display(description="وضعیت فروش", ordering="is_available_status")
+    def availability_label(self, obj):
+        if not obj.is_active:
+            tone, label = "muted", "غیرفعال"
+        elif obj.is_available:
+            tone, label = "success", "قابل فروش"
+        elif obj.stock == 0:
+            tone, label = "danger", "اتمام موجودی"
+        else:
+            tone, label = "warning", "ناموجود"
+
+        return format_html(
+            '<span class="store-status-pill store-status-pill--{}">{}</span>',
+            tone,
+            label,
+        )
 
 
 @admin.register(ProductVariant)
@@ -120,23 +145,48 @@ class ProductVariantAdmin(admin.ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
-    list_display = ["product", "name", "value", "price_adjustment"]
-    list_filter = ["name"]
-    search_fields = ["product__name", "name", "value"]
-    autocomplete_fields = ["product"]
+    list_display = ("product", "name", "value", "price_adjustment")
+    list_filter = ("name",)
+    search_fields = ("product__name", "name", "value")
+    list_select_related = ("product",)
+    list_per_page = 25
+    autocomplete_fields = ("product",)
 
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug"]
+    list_display = ("name", "parent", "is_active", "slug")
+    list_filter = ("is_active", "parent")
+    search_fields = ("name", "slug")
+    list_select_related = ("parent",)
+    list_per_page = 25
     prepopulated_fields = {"slug": ("name",)}
+    fieldsets = (
+        (
+            "اطلاعات دسته‌بندی",
+            {"fields": ("name", "parent", "is_active")},
+        ),
+        (
+            "نشانی دسته‌بندی",
+            {
+                "fields": ("slug",),
+                "description": "نشانی از نام دسته‌بندی ساخته می‌شود؛ در صورت نیاز می‌توانید آن را اصلاح کنید.",
+            },
+        ),
+    )
 
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
-    list_display = ["product", "user", "rating", "is_approved", "created"]
-    list_filter = ["is_approved", "created"]
-    list_editable = ["is_approved"]
-    search_fields = ["product__name", "user__username", "comment"]
-    ordering = ["-created"]
+    list_display = ("product", "user", "rating", "is_approved", "created_display")
+    list_filter = ("is_approved", "created")
+    list_editable = ("is_approved",)
+    search_fields = ("product__name", "user__username", "user__email", "comment")
+    list_select_related = ("product", "user")
+    list_per_page = 25
+    ordering = ("-created",)
+
+    @admin.display(description="تاریخ ثبت", ordering="created")
+    def created_display(self, obj):
+        return obj.created.strftime("%Y/%m/%d %H:%M")
 

@@ -1245,3 +1245,447 @@ div.breadcrumbs a {
         padding-left: 0.15rem;
     }
 }
+
+
+/* -------------------------------------------------------------------------
+   Consistent, task-focused styling for Django Admin model lists and forms.
+   ------------------------------------------------------------------------- */
+.store-status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    padding: 0.24rem 0.62rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.65;
+    white-space: nowrap;
+}
+
+.store-status-pill--success,
+.store-status-pill--payment-success,
+.store-status-pill--order-paid,
+.store-status-pill--order-completed {
+    border-color: #bbf7d0;
+    background: #dcfce7;
+    color: #166534;
+}
+
+.store-status-pill--warning,
+.store-status-pill--payment-pending,
+.store-status-pill--order-pending,
+.store-status-pill--order-placed,
+.store-status-pill--stock-warning {
+    border-color: #fde68a;
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.store-status-pill--danger,
+.store-status-pill--payment-failed,
+.store-status-pill--order-cancelled,
+.store-status-pill--stock-danger {
+    border-color: #fecdd3;
+    background: #ffe4e6;
+    color: #9f1239;
+}
+
+.store-status-pill--info,
+.store-status-pill--payment-refunded,
+.store-status-pill--order-processing {
+    border-color: #ddd6fe;
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.store-status-pill--muted,
+.store-status-pill--payment-cancelled {
+    border-color: #e2e8f0;
+    background: #f1f5f9;
+    color: #475569;
+}
+
+body.change-list #content-main > .object-tools {
+    margin: 0.25rem 0 1rem;
+}
+
+body.change-list #content-main > .object-tools a {
+    min-height: 2.45rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 0.65rem;
+    background: #5d43d8;
+    box-shadow: 0 5px 14px rgb(93 67 216 / 14%);
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+body.change-list #content-main > .object-tools a:hover,
+body.change-list #content-main > .object-tools a:focus-visible {
+    background: #4b32bf;
+}
+
+body.change-list #changelist {
+    overflow: visible;
+    border: 1px solid #e1e6f1;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+body.change-list #changelist .changelist-form-container {
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 0.85rem;
+}
+
+body.change-list #changelist table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+body.change-list #changelist table thead th {
+    padding: 0.8rem 0.75rem;
+    border-bottom: 1px solid #e0e6f2;
+    background: #f4f6fc;
+    color: #46516b;
+    font-size: 0.76rem;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
+body.change-list #changelist table thead th:first-child {
+    border-top-right-radius: 0.55rem;
+}
+
+body.change-list #changelist table thead th:last-child {
+    border-top-left-radius: 0.55rem;
+}
+
+body.change-list #changelist table tbody th,
+body.change-list #changelist table tbody td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #edf0f6;
+    color: #34405a;
+    font-size: 0.77rem;
+    line-height: 1.8;
+    vertical-align: middle;
+}
+
+body.change-list #changelist table tbody tr:last-child th,
+body.change-list #changelist table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+body.change-list #changelist table tbody tr:hover th,
+body.change-list #changelist table tbody tr:hover td {
+    background: #f8f9ff;
+}
+
+body.change-list #changelist table tbody th a,
+body.change-list #changelist table tbody td a {
+    color: #4b36b5;
+    font-weight: 700;
+}
+
+body.change-list #changelist table tbody th a:hover,
+body.change-list #changelist table tbody td a:hover {
+    color: #32218b;
+}
+
+body.change-list #changelist-search,
+body.change-list #toolbar {
+    margin-bottom: 0.85rem;
+    padding: 0.8rem;
+    border: 1px solid #e1e6f1;
+    border-radius: 0.8rem;
+    background: #fff;
+}
+
+body.change-list #changelist-search form,
+body.change-list #toolbar form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+body.change-list #changelist-search #searchbar,
+body.change-list #toolbar #searchbar {
+    box-sizing: border-box;
+    min-width: min(18rem, 100%);
+    min-height: 2.55rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #cbd4e5;
+    border-radius: 0.6rem;
+    background: #fff;
+    color: #172033;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.78rem;
+}
+
+body.change-list #changelist-search #searchbar:focus,
+body.change-list #toolbar #searchbar:focus {
+    border-color: #8068ed;
+    outline: 3px solid rgb(128 104 237 / 14%);
+}
+
+body.change-list #changelist-search input[type="submit"],
+body.change-list #toolbar form input[type="submit"] {
+    min-height: 2.5rem;
+    padding: 0.5rem 0.9rem;
+    border: 0;
+    border-radius: 0.6rem;
+    background: #5d43d8;
+    color: #fff;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+body.change-list #changelist-filter {
+    box-sizing: border-box;
+    flex: 0 0 225px;
+    width: 225px;
+    max-width: 100%;
+    padding: 0.7rem;
+    border: 1px solid #e1e6f1;
+    border-radius: 0.85rem;
+    background: #fbfcff;
+}
+
+body.change-list #changelist-filter h2 {
+    padding: 0.75rem 0.8rem;
+    border-radius: 0.6rem;
+    background: #f0edff;
+    color: #4b36b5;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.83rem;
+}
+
+body.change-list #changelist-filter h3 {
+    margin: 0.7rem 0 0.35rem;
+    padding: 0.35rem 0.65rem;
+    color: #53617c;
+    font-size: 0.73rem;
+    font-weight: 700;
+}
+
+body.change-list #changelist-filter ul {
+    margin: 0 0 0.65rem;
+}
+
+body.change-list #changelist-filter li {
+    margin: 0.12rem 0;
+    border-radius: 0.45rem;
+}
+
+body.change-list #changelist-filter li a {
+    display: block;
+    padding: 0.35rem 0.6rem;
+    border-radius: 0.45rem;
+    color: #57627b;
+    font-size: 0.72rem;
+    line-height: 1.8;
+}
+
+body.change-list #changelist-filter li.selected a {
+    background: #e9e5ff;
+    color: #4b36b5;
+    font-weight: 700;
+}
+
+body.change-list #changelist .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid #e8ecf4;
+    background: #fafbff;
+}
+
+body.change-list #changelist .actions select {
+    box-sizing: border-box;
+    min-height: 2.4rem;
+    max-width: 100%;
+    border: 1px solid #cbd4e5;
+    border-radius: 0.55rem;
+    background: #fff;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.74rem;
+}
+
+body.change-list #changelist .actions .button {
+    min-height: 2.4rem;
+    margin: 0;
+    border: 1px solid #d7dced;
+    border-radius: 0.55rem;
+    background: #fff;
+    color: #4b36b5;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+body.change-list #changelist .changelist-footer {
+    padding: 0.8rem;
+    border-top: 1px solid #e8ecf4;
+    background: #fafbff;
+}
+
+body.change-list #changelist .paginator {
+    color: #63708a;
+    font-size: 0.75rem;
+}
+
+body.change-form #content-main > form {
+    margin-top: 1rem;
+    padding: clamp(0.85rem, 2vw, 1.4rem);
+    border: 1px solid #e1e6f1;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+}
+
+body.change-form fieldset.module,
+body.change-form .inline-group {
+    margin-bottom: 1.1rem;
+    overflow: visible;
+    border: 1px solid #e1e6f1;
+    border-radius: 0.8rem;
+    background: #fff;
+}
+
+body.change-form fieldset.module h2,
+body.change-form .inline-group > h2 {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #e1e6f1;
+    border-radius: 0.75rem 0.75rem 0 0;
+    background: #f4f2ff;
+    color: #47349e;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+body.change-form .form-row {
+    padding: 0.9rem 1rem;
+}
+
+body.change-form .form-row:not(:last-child) {
+    border-bottom: 1px solid #f0f2f8;
+}
+
+body.change-form .form-row label {
+    color: #34405a;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-weight: 700;
+    line-height: 1.8;
+}
+
+body.change-form input[type="text"],
+body.change-form input[type="url"],
+body.change-form input[type="number"],
+body.change-form input[type="email"],
+body.change-form input[type="password"],
+body.change-form input[type="tel"],
+body.change-form input[type="date"],
+body.change-form input[type="datetime-local"],
+body.change-form textarea,
+body.change-form select {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-height: 2.55rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid #cbd4e5;
+    border-radius: 0.55rem;
+    background-color: #fff;
+    color: #172033;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.79rem;
+}
+
+body.change-form textarea {
+    min-height: 6rem;
+    line-height: 1.9;
+}
+
+body.change-form input:focus,
+body.change-form textarea:focus,
+body.change-form select:focus {
+    border-color: #8068ed;
+    outline: 3px solid rgb(128 104 237 / 13%);
+}
+
+body.change-form .help,
+body.change-form .help-tooltip {
+    color: #6d7890;
+    font-size: 0.72rem;
+    line-height: 1.9;
+}
+
+body.change-form .submit-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.9rem;
+    border: 1px solid #e1e6f1;
+    border-radius: 0.8rem;
+    background: #f8f9ff;
+}
+
+body.change-form .submit-row input,
+body.change-form .submit-row a {
+    margin: 0;
+    border-radius: 0.55rem;
+    font-family: "IRANSans", Tahoma, sans-serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+body.change-form .submit-row input.default {
+    background: #5d43d8;
+}
+
+body.change-form .inline-group table {
+    min-width: 42rem;
+}
+
+body.change-form .inline-group {
+    overflow-x: auto;
+}
+
+@media (max-width: 767px) {
+    body.change-list #changelist .changelist-form-container {
+        padding: 0.55rem;
+    }
+
+    body.change-list #changelist-filter {
+        flex-basis: 100%;
+        width: 100%;
+    }
+
+    body.change-list #changelist table thead th,
+    body.change-list #changelist table tbody th,
+    body.change-list #changelist table tbody td {
+        padding: 0.55rem 0.45rem;
+        font-size: 0.7rem;
+    }
+
+    body.change-form #content-main > form {
+        padding: 0.65rem;
+    }
+
+    body.change-form .form-row {
+        padding: 0.75rem;
+    }
+
+    body.change-form .inline-group table {
+        min-width: 38rem;
+    }
+}

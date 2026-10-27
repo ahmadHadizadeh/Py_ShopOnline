@@ -4,25 +4,33 @@ from .models.address import Address
 @admin.register(Address)
 class AddressAdmin(admin.ModelAdmin):
     list_display = (
-        'recipient_name', 
-        'user_email', 
-        'city', 
-        'is_default', 
-        'phone_number'
+        "recipient_name",
+        "user_email",
+        "phone_number",
+        "province",
+        "city",
+        "is_default",
+        "updated",
     )
-    list_filter = ('is_default', 'province', 'created')
-    search_fields = ('recipient_name', 'phone_number', 'postal_code', 'user__email')
-    list_editable = ('is_default',)
-    readonly_fields = ('created', 'updated')
-    
-    # بهینه‌سازی برای جلوگیری از کوئری‌های اضافی
-    list_select_related = ('user',)
+    list_filter = ("is_default", "province", "created")
+    search_fields = (
+        "recipient_name",
+        "phone_number",
+        "postal_code",
+        "province",
+        "city",
+        "user__email",
+        "user__username",
+    )
+    list_editable = ("is_default",)
+    list_per_page = 25
+    date_hierarchy = "updated"
+    readonly_fields = ("created", "updated")
+    list_select_related = ("user",)
 
+    @admin.display(description="کاربر", ordering="user__email")
     def user_email(self, obj):
-        return obj.user.email
-    
-    user_email.short_description = 'ایمیل کاربر'
-    user_email.admin_order_field = 'user__email'
+        return obj.user.email or obj.user.get_username()
 
     # فیلدست برای دسته‌بندی بهتر در صفحه ویرایش تکی
     fieldsets = (

@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib import messages
 from django.contrib.humanize.templatetags.humanize import intcomma
+from django.utils.html import format_html
 
 from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
 from .services import OrderService
@@ -120,6 +121,8 @@ cancel_unpaid_orders.short_description = "لغو سفارش‌های پرداخ�
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
+    list_per_page = 25
+    date_hierarchy = "created"
     list_display = (
         "order_number",
         "recipient_name_display",
@@ -242,7 +245,11 @@ class OrderAdmin(admin.ModelAdmin):
 
     @admin.display(description="وضعیت سفارش", ordering="status")
     def get_status_display_value(self, obj):
-        return obj.get_status_display()
+        return format_html(
+            '<span class="store-status-pill store-status-pill--order-{}">{}</span>',
+            obj.status,
+            obj.get_status_display(),
+        )
 
     @admin.display(description="مبلغ نهایی", ordering="final_amount")
     def get_final_amount_display(self, obj):
@@ -251,9 +258,17 @@ class OrderAdmin(admin.ModelAdmin):
     @admin.display(description="وضعیت پرداخت", ordering="payment__status")
     def get_payment_status_display(self, obj):
         try:
-            return obj.payment.get_status_display()
+            payment = obj.payment
         except Payment.DoesNotExist:
-            return "بدون پرداخت"
+            return format_html(
+                '<span class="store-status-pill store-status-pill--muted">بدون پرداخت</span>'
+            )
+
+        return format_html(
+            '<span class="store-status-pill store-status-pill--payment-{}">{}</span>',
+            payment.status,
+            payment.get_status_display(),
+        )
 
     def has_add_permission(self, request):
         return False
@@ -264,6 +279,7 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
+    list_per_page = 25
     list_display = (
         "order",
         "product_name",
@@ -304,11 +320,13 @@ class OrderItemAdmin(admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
+    list_per_page = 25
+    date_hierarchy = "created"
     list_display = (
         "order",
         "user",
         "amount_display",
-        "status",
+        "status_badge",
         "gateway_name",
         "transaction_code",
         "reference_code",
@@ -376,6 +394,14 @@ class PaymentAdmin(admin.ModelAdmin):
     def amount_display(self, obj):
         return f"{intcomma(int(obj.amount))} تومان"
 
+    @admin.display(description="وضعیت پرداخت", ordering="status")
+    def status_badge(self, obj):
+        return format_html(
+            '<span class="store-status-pill store-status-pill--payment-{}">{}</span>',
+            obj.status,
+            obj.get_status_display(),
+        )
+
     def has_add_permission(self, request):
         return False
 
@@ -385,6 +411,8 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(OrderAddressSnapshot)
 class OrderAddressSnapshotAdmin(admin.ModelAdmin):
+    list_per_page = 25
+    date_hierarchy = "created"
     list_display = (
         "order",
         "recipient_name",
@@ -423,6 +451,8 @@ class OrderAddressSnapshotAdmin(admin.ModelAdmin):
 
 @admin.register(ShippingMethod)
 class ShippingMethodAdmin(admin.ModelAdmin):
+    list_per_page = 25
+    date_hierarchy = "updated"
     list_display = (
         "name",
         "get_cost_display",

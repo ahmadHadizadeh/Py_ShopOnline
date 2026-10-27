@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.humanize.templatetags.humanize import intcomma
 
 from cart.models import Cart, CartItem
 
@@ -22,11 +23,35 @@ class CartItemInline(admin.TabularInline):
 
 @admin.register(Cart)
 class CartAdmin(admin.ModelAdmin):
-    list_display = ("id", "user", "session_key", "status", "total_items", "total_price", "created", "updated")
+    list_display = (
+        "id",
+        "user_display",
+        "status",
+        "total_items_display",
+        "total_price_display",
+        "updated",
+    )
     list_filter = ("status", "created", "updated")
     search_fields = ("user__username", "user__email", "session_key")
+    list_select_related = ("user",)
+    list_per_page = 25
+    date_hierarchy = "updated"
     readonly_fields = ("created", "updated", "total_items", "total_price")
     inlines = (CartItemInline,)
+
+    @admin.display(description="کاربر", ordering="user__username")
+    def user_display(self, obj):
+        if not obj.user_id:
+            return "مهمان"
+        return obj.user.get_full_name() or obj.user.email or obj.user.get_username()
+
+    @admin.display(description="تعداد کالا")
+    def total_items_display(self, obj):
+        return intcomma(obj.total_items)
+
+    @admin.display(description="مبلغ سبد فعال (تومان)")
+    def total_price_display(self, obj):
+        return f"{intcomma(int(obj.total_price))} تومان"
 
     def get_readonly_fields(self, request, obj=None):
         if obj and obj.status == Cart.STATUS_ORDERED:
@@ -41,11 +66,39 @@ class CartAdmin(admin.ModelAdmin):
 
 @admin.register(CartItem)
 class CartItemAdmin(admin.ModelAdmin):
-    list_display = ("id", "cart", "product", "variant", "quantity", "unit_price_snapshot", "subtotal", "created")
-    list_filter = ("created", "updated")
-    search_fields = ("product__name", "variant__name", "variant__value", "product__slug", "cart__session_key", "cart__user__username")
+    list_display = (
+        "cart",
+        "product",
+        "variant",
+        "quantity",
+        "unit_price_display",
+        "subtotal_display",
+        "status",
+        "created",
+    )
+    list_filter = ("status", "created", "updated")
+    search_fields = (
+        "product__name",
+        "variant__name",
+        "variant__value",
+        "product__slug",
+        "cart__session_key",
+        "cart__user__username",
+        "cart__user__email",
+    )
+    list_select_related = ("cart", "cart__user", "product", "variant")
+    list_per_page = 25
+    date_hierarchy = "created"
     autocomplete_fields = ("cart", "product", "variant")
     readonly_fields = ("subtotal", "created", "updated")
+
+    @admin.display(description="قیمت هر عدد (تومان)", ordering="unit_price_snapshot")
+    def unit_price_display(self, obj):
+        return f"{intcomma(int(obj.unit_price_snapshot))} تومان"
+
+    @admin.display(description="جمع ردیف (تومان)")
+    def subtotal_display(self, obj):
+        return f"{intcomma(int(obj.subtotal))} تومان"
 
     def get_readonly_fields(self, request, obj=None):
         if obj and obj.cart_id and obj.cart.status == Cart.STATUS_ORDERED:
