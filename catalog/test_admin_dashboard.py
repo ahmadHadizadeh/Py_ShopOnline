@@ -276,8 +276,7 @@ class StoreAdminDashboardTests(TestCase):
             .split("</section>", 1)[0]
         )
 
-        # self.assertIn("افزودن محصول", quick_links_html)
-        self.assertIn("محصولات", quick_links_html)
+        self.assertIn("افزودن محصول", quick_links_html)
 
         self.assertIn(
             f'href="{reverse("admin:catalog_product_add")}"',
