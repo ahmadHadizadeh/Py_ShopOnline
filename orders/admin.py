@@ -122,6 +122,8 @@ cancel_unpaid_orders.short_description = "لغو سفارش‌های پرداخ�
 class OrderAdmin(admin.ModelAdmin):
     list_display = (
         "order_number",
+        "recipient_name_display",
+        "recipient_mobile_display",
         "user_display",
         "get_status_display_value",
         "get_final_amount_display",
@@ -140,11 +142,13 @@ class OrderAdmin(admin.ModelAdmin):
         "order_number",
         "user__username",
         "user__email",
+        "address_snapshot__recipient_name",
+        "address_snapshot__recipient_mobile",
         "payment__transaction_code",
         "payment__reference_code",
     )
     ordering = ("-created",)
-    list_select_related = ("user", "shipping_method", "payment")
+    list_select_related = ("user", "shipping_method", "payment", "address_snapshot")
     readonly_fields = (
         "order_number",
         "user",
@@ -217,6 +221,20 @@ class OrderAdmin(admin.ModelAdmin):
         move_processing_orders_to_completed,
         cancel_unpaid_orders,
     )
+
+    @admin.display(description="نام گیرنده", ordering="address_snapshot__recipient_name")
+    def recipient_name_display(self, obj):
+        try:
+            return obj.address_snapshot.recipient_name
+        except OrderAddressSnapshot.DoesNotExist:
+            return "—"
+
+    @admin.display(description="موبایل گیرنده", ordering="address_snapshot__recipient_mobile")
+    def recipient_mobile_display(self, obj):
+        try:
+            return obj.address_snapshot.recipient_mobile
+        except OrderAddressSnapshot.DoesNotExist:
+            return "—"
 
     @admin.display(description="کاربر", ordering="user__email")
     def user_display(self, obj):
