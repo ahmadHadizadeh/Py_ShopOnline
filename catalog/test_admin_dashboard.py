@@ -385,3 +385,110 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(search_response, "مریم رضایی")
         self.assertNotContains(search_response, self.pending_order.order_number)
 
+
+    def test_persian_sidebar_exposes_real_admin_sections_and_registered_routes(self):
+        admin_user = User.objects.create_superuser(
+            username="seller-sidebar-admin",
+            email="seller-sidebar-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="nav-sidebar"')
+        self.assertContains(response, "جست‌وجو در منوها")
+        self.assertContains(response, "فروش و سفارش‌ها")
+        self.assertContains(response, "محصولات و موجودی")
+        self.assertContains(response, "مشتریان و کاربران")
+        self.assertContains(response, "ارسال و تحویل")
+        self.assertContains(
+            response,
+            f'href="{reverse("admin:orders_order_changelist")}"',
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("admin:catalog_product_changelist")}"',
+        )
+        self.assertContains(
+            response,
+            f'href="{reverse("admin:accounts_address_changelist")}"',
+        )
+
+    def test_sidebar_hides_model_links_without_matching_permissions(self):
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "نمای کلی فروشگاه")
+        self.assertNotContains(
+            response,
+            f'href="{reverse("admin:orders_order_changelist")}"',
+        )
+        self.assertNotContains(
+            response,
+            f'href="{reverse("admin:catalog_product_changelist")}"',
+        )
+
+    def test_sidebar_only_shows_business_links_allowed_for_staff_user(self):
+        self.grant(self.staff, "catalog", "view_product")
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="{reverse("admin:catalog_product_changelist")}"',
+        )
+        self.assertNotContains(
+            response,
+            f'href="{reverse("admin:orders_order_changelist")}"',
+        )
+        self.assertNotContains(
+            response,
+            f'href="{reverse("admin:orders_payment_changelist")}"',
+        )
+
+    def test_dashboard_charts_and_attention_items_use_real_status_counts(self):
+        self.grant(self.staff, "orders", "view_order")
+        self.grant(self.staff, "orders", "view_payment")
+        self.grant(self.staff, "catalog", "view_product")
+        self.client.force_login(self.staff)
+
+        dashboard = store_admin_dashboard_data(self.staff)
+        order_counts = {
+            item["key"]: item["count"]
+            for item in dashboard["order_status_breakdown"]
+        }
+        payment_counts = {
+            item["key"]: item["count"]
+            for item in dashboard["payment_status_breakdown"]
+        }
+
+        self.assertEqual(order_counts[Order.Status.PAID], 1)
+        self.assertEqual(order_counts[Order.Status.PENDING], 1)
+        self.assertEqual(payment_counts[Payment.Status.SUCCESS], 1)
+        self.assertEqual(payment_counts[Payment.Status.PENDING], 1)
+        self.assertEqual(
+            sum(item["count"] for item in dashboard["order_status_breakdown"]),
+            2,
+        )
+        self.assertEqual(
+            sum(item["count"] for item in dashboard["payment_status_breakdown"]),
+            2,
+        )
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ترکیب وضعیت سفارش‌ها")
+        self.assertContains(response, "ترکیب وضعیت پرداخت‌ها")
+        self.assertContains(response, "موارد نیازمند رسیدگی")
+        self.assertContains(response, "سفارش‌های آماده پردازش")
+        self.assertContains(response, "پرداخت‌های در انتظار")
+        self.assertContains(response, "محصولات کم‌موجودی")
+        self.assertContains(response, "status__exact=paid")
+        self.assertContains(response, "status__exact=pending")
