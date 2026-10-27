@@ -49,7 +49,7 @@ class CartAdmin(admin.ModelAdmin):
     def total_items_display(self, obj):
         return intcomma(obj.total_items)
 
-    @admin.display(description="مبلغ سبد فعال (تومان)")
+    @admin.display(description="جمع اقلام فعال (تومان)")
     def total_price_display(self, obj):
         return f"{intcomma(int(obj.total_price))} تومان"
 

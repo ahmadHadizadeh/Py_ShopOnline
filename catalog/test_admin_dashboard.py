@@ -582,6 +582,10 @@ class StoreAdminDashboardTests(TestCase):
         self.assertIn("session_key", cart_admin.search_fields)
         self.assertIn("user_display", cart_admin.list_display)
         self.assertEqual(cart_admin.list_per_page, 25)
+        self.assertEqual(
+            cart_admin.total_price_display.short_description,
+            "جمع اقلام فعال (تومان)",
+        )
 
         address_admin = admin.site._registry[Address]
         self.assertIn("province", address_admin.list_display)
@@ -661,4 +665,25 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, 'id="nav-filter-no-results"')
         self.assertContains(response, 'role="status"')
         self.assertContains(response, '/static/js/admin_sidebar.js')
+
+    def test_sidebar_shows_add_only_variant_link_when_product_lookup_is_allowed(self):
+        self.grant(self.staff, "catalog", "add_productvariant")
+        self.grant(self.staff, "catalog", "view_product")
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="{reverse("admin:catalog_productvariant_add")}"',
+        )
+        self.assertNotContains(
+            response,
+            f'href="{reverse("admin:catalog_productvariant_changelist")}"',
+        )
+        add_response = self.client.get(
+            reverse("admin:catalog_productvariant_add")
+        )
+        self.assertEqual(add_response.status_code, 200)
 

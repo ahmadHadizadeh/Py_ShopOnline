@@ -91,7 +91,7 @@
             </table>
             {% endif %}
 
-            {% if perms.catalog.view_product or perms.catalog.change_product or perms.catalog.add_product or perms.catalog.view_category or perms.catalog.change_category or perms.catalog.add_category or perms.catalog.view_productvariant or perms.catalog.change_productvariant or perms.catalog.view_review or perms.catalog.change_review %}
+            {% if perms.catalog.view_product or perms.catalog.change_product or perms.catalog.add_product or perms.catalog.view_category or perms.catalog.change_category or perms.catalog.add_category or perms.catalog.view_productvariant or perms.catalog.change_productvariant or perms.catalog.add_productvariant and perms.catalog.view_product or perms.catalog.add_productvariant and perms.catalog.change_product or perms.catalog.view_review or perms.catalog.change_review %}
             <table class="module store-nav-module">
                 <caption>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>
@@ -110,6 +110,8 @@
                     {% endif %}
                     {% if perms.catalog.view_productvariant or perms.catalog.change_productvariant %}
                     <tr><th scope="row"><a href="{% url 'admin:catalog_productvariant_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'catalog_productvariant_changelist' or request.resolver_match.url_name == 'catalog_productvariant_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/></svg><span>تنوع‌ها و مشخصات محصول</span></a></th></tr>
+                    {% elif perms.catalog.add_productvariant and perms.catalog.view_product or perms.catalog.add_productvariant and perms.catalog.change_product %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_productvariant_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M12 8v8M8 12h8"/></svg><span>افزودن تنوع محصول</span></a></th></tr>
                     {% endif %}
                     {% if perms.catalog.view_review or perms.catalog.change_review %}
                     <tr><th scope="row"><a href="{% url 'admin:catalog_review_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'catalog_review_changelist' or request.resolver_match.url_name == 'catalog_review_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.8 8.8 0 0 1-4-.9L3 20l1.5-4A7 7 0 0 1 4 12c0-4.1 3.6-7 8-7s8 2.4 8 6.5Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg><span>دیدگاه‌های مشتریان</span></a></th></tr>
