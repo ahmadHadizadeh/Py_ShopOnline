@@ -397,8 +397,13 @@ class StoreAdminDashboardTests(TestCase):
         response = self.client.get(reverse("admin:index"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<html lang="fa-ir" dir="rtl">')
+        self.assertContains(response, "شروع")
         self.assertContains(response, 'id="nav-sidebar"')
         self.assertContains(response, "جست‌وجو در منوها")
+        self.assertContains(response, "محصولات و محتوا")
+        self.assertContains(response, "سبدهای خرید")
+        self.assertContains(response, "فروش و سفارش‌ها")
         self.assertContains(response, "فروش و سفارش‌ها")
         self.assertContains(response, "محصولات و موجودی")
         self.assertContains(response, "مشتریان و کاربران")
