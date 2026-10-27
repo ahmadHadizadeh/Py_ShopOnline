@@ -661,4 +661,4 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, 'id="nav-filter-no-results"')
         self.assertContains(response, 'role="status"')
         self.assertContains(response, '/static/js/admin_sidebar.js')
-\n
+
