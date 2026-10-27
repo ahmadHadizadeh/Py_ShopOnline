@@ -718,6 +718,11 @@ class StoreAdminDashboardTests(TestCase):
                 response = self.client.get(reverse(url_name, args=[object_id]))
                 self.assertEqual(response.status_code, 200, url_name)
 
+        cart_item_add_response = self.client.get(
+            reverse("admin:cart_cartitem_add")
+        )
+        self.assertEqual(cart_item_add_response.status_code, 200)
+        self.assertContains(cart_item_add_response, "جمع ردیف")
     def test_profile_admin_shows_customer_verification_but_never_otp_secrets(self):
         admin_user = User.objects.create_superuser(
             username="profile-privacy-admin",
