@@ -644,3 +644,21 @@ class StoreAdminDashboardTests(TestCase):
         profile_list = self.client.get(reverse("admin:accounts_profile_changelist"))
         self.assertEqual(profile_list.status_code, 200)
 
+    def test_sidebar_search_loads_filter_script_and_accessible_empty_state(self):
+        admin_user = User.objects.create_superuser(
+            username="sidebar-search-admin",
+            email="sidebar-search-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(admin_user)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="nav-filter"')
+        self.assertContains(response, 'aria-controls="store-sidebar-menu"')
+        self.assertContains(response, 'id="store-sidebar-menu"')
+        self.assertContains(response, 'id="nav-filter-no-results"')
+        self.assertContains(response, 'role="status"')
+        self.assertContains(response, '/static/js/admin_sidebar.js')
+\n

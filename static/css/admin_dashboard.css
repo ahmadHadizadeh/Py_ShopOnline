@@ -645,6 +645,17 @@ div.breadcrumbs a {
     box-shadow: 0 0 0 3px rgb(109 74 255 / 18%);
 }
 
+#nav-sidebar [hidden] {
+    display: none !important;
+}
+
+.store-sidebar-no-results {
+    margin: 0.55rem 0 0;
+    color: #fda4af;
+    font-size: 0.7rem;
+    line-height: 1.8;
+}
+
 #nav-sidebar #nav-filter.no-results {
     border-color: #e35d79;
     background: #2a1528;

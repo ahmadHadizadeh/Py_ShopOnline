@@ -1,6 +1,11 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
+{% block extrahead %}
+    {{ block.super }}
+    <script src="{% static 'js/admin_sidebar.js' %}" defer></script>
+{% endblock %}
+
 {% block title %}{{ title }} | پنل مدیریت فروشگاه{% endblock %}
 
 {% block extrastyle %}
@@ -35,10 +40,15 @@
             <label for="nav-filter">جست‌وجو در منوها</label>
             <input type="search" id="nav-filter"
                    placeholder="مثلاً سفارش، محصول، مشتری…"
-                   aria-label="جست‌وجو در بخش‌های مدیریتی">
+                   aria-label="جست‌وجو در بخش‌های مدیریتی"
+                   aria-controls="store-sidebar-menu">
+            <p id="nav-filter-no-results" class="store-sidebar-no-results"
+               role="status" aria-live="polite" hidden>
+                هیچ بخشی با این عبارت پیدا نشد.
+            </p>
         </div>
 
-        <div class="store-sidebar-menu">
+        <div class="store-sidebar-menu" id="store-sidebar-menu">
             <table class="module store-nav-module">
                 <caption>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
