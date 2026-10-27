@@ -477,11 +477,11 @@ def test_sandbox_rejects_noncanonical_endpoint_path():
     ):
         load_settings_env(**env)
 
-def test_default_language_is_persian_for_store_ui():
+def test_default_language_preserves_public_storefront_locale():
     settings = load_settings_env(
         DJANGO_DEBUG="1",
         SECRET_KEY="dev-secret",
     )
 
-    assert settings["LANGUAGE_CODE"] == "fa-ir"
+    assert settings["LANGUAGE_CODE"] == "en-us"
 
