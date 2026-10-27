@@ -260,6 +260,11 @@ def store_admin_dashboard_data(user):
         add_label="افزودن دسته‌بندی",
     )
     _add_quick_link(
+        user, data["quick_links"], app_label="accounts", model_name="profile",
+        label="پروفایل و تأیید مشتریان",
+        description="بررسی وضعیت تأیید شماره همراه؛ کدهای تأیید در پنل نمایش داده نمی‌شوند",
+    )
+    _add_quick_link(
         user, data["quick_links"], app_label="catalog", model_name="review",
         label="دیدگاه‌های مشتریان",
         description="بررسی و انتشار دیدگاه‌ها",

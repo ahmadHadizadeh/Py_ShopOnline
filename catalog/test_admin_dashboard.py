@@ -8,6 +8,7 @@ from django.contrib import admin
 from django.test import RequestFactory
 
 from accounts.models.address import Address
+from accounts.models.profile import Profile
 from cart.models import Cart
 
 from catalog.models.category import Category
@@ -586,4 +587,60 @@ class StoreAdminDashboardTests(TestCase):
         self.assertIn("province", address_admin.list_display)
         self.assertIn("phone_number", address_admin.search_fields)
         self.assertIn("user__username", address_admin.search_fields)
+
+    def test_profile_admin_shows_customer_verification_but_never_otp_secrets(self):
+        admin_user = User.objects.create_superuser(
+            username="profile-privacy-admin",
+            email="profile-privacy-admin@example.test",
+            password="TestPassword123!",
+        )
+        profile, _created = Profile.objects.get_or_create(user=self.staff)
+        profile.phone_number = "09127770001"
+        profile.is_verified = False
+        profile.otp_code = "731642"
+        profile.save(update_fields=["phone_number", "is_verified", "otp_code", "updated"])
+
+        self.client.force_login(admin_user)
+        list_response = self.client.get(reverse("admin:accounts_profile_changelist"))
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "09127770001")
+        self.assertContains(list_response, "تأیید نشده")
+        self.assertNotContains(list_response, "731642")
+        self.assertNotContains(list_response, "otp_code")
+        self.assertNotContains(list_response, "otp_created_at")
+
+        change_response = self.client.get(
+            reverse("admin:accounts_profile_change", args=[profile.pk])
+        )
+        self.assertEqual(change_response.status_code, 200)
+        self.assertContains(change_response, "09127770001")
+        self.assertNotContains(change_response, "731642")
+        self.assertNotContains(change_response, "otp_code")
+        self.assertNotContains(change_response, "otp_created_at")
+
+        profile_admin = admin.site._registry[Profile]
+        request = RequestFactory().get(
+            reverse("admin:accounts_profile_change", args=[profile.pk])
+        )
+        request.user = admin_user
+        visible_fields = set(profile_admin.get_fields(request, profile))
+        self.assertIn("phone_number", visible_fields)
+        self.assertIn("is_verified", visible_fields)
+        self.assertNotIn("otp_code", visible_fields)
+        self.assertNotIn("otp_created_at", visible_fields)
+        self.assertFalse(profile_admin.has_add_permission(request))
+        self.assertFalse(profile_admin.has_delete_permission(request, profile))
+
+    def test_profile_admin_navigation_requires_profile_view_permission(self):
+        self.client.force_login(self.staff)
+        response_without_permission = self.client.get(reverse("admin:index"))
+        self.assertNotContains(response_without_permission, "پروفایل و تأیید مشتریان")
+
+        self.grant(self.staff, "accounts", "view_profile")
+        response_with_permission = self.client.get(reverse("admin:index"))
+        self.assertContains(response_with_permission, "پروفایل و تأیید مشتریان")
+
+        profile_list = self.client.get(reverse("admin:accounts_profile_changelist"))
+        self.assertEqual(profile_list.status_code, 200)
 
