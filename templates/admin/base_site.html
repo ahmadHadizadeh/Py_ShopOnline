@@ -17,3 +17,160 @@
 {% block nav-global %}
     <a class="store-admin-top-link" href="{% url 'admin:index' %}">نمای کلی فروشگاه</a>
 {% endblock %}
+
+{% block nav-sidebar %}
+    <nav class="sticky store-admin-sidebar" id="nav-sidebar"
+         aria-label="منوی اصلی مدیریت" aria-expanded="false">
+        <div class="store-sidebar-brand">
+            <a href="{% url 'admin:index' %}" class="store-sidebar-brand-link">
+                <span class="store-sidebar-brand-mark" aria-hidden="true">Py</span>
+                <span class="store-sidebar-brand-copy">
+                    <strong>مدیریت فروشگاه</strong>
+                    <small>مرکز کنترل Py_ShopOnline</small>
+                </span>
+            </a>
+        </div>
+
+        <div class="store-sidebar-search">
+            <label for="nav-filter">جست‌وجو در منوها</label>
+            <input type="search" id="nav-filter"
+                   placeholder="مثلاً سفارش، محصول، مشتری…"
+                   aria-label="جست‌وجو در بخش‌های مدیریتی">
+        </div>
+
+        <div class="store-sidebar-menu">
+            <table class="module store-nav-module">
+                <caption>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+                    <span>مرکز مدیریت</span>
+                </caption>
+                <tbody>
+                    <tr><th scope="row">
+                        <a href="{% url 'admin:index' %}"
+                           class="store-sidebar-link{% if request.resolver_match.url_name == 'index' %} is-active{% endif %}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9M9 20v-6h6v6"/></svg>
+                            <span>نمای کلی فروشگاه</span>
+                        </a>
+                    </th></tr>
+                </tbody>
+            </table>
+
+            {% if perms.orders.view_order or perms.orders.change_order or perms.orders.view_orderitem or perms.orders.change_orderitem or perms.orders.view_payment or perms.orders.change_payment or perms.cart.view_cart or perms.cart.change_cart or perms.cart.view_cartitem or perms.cart.change_cartitem %}
+            <table class="module store-nav-module">
+                <caption>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+                    <span>فروش و سفارش‌ها</span>
+                </caption>
+                <tbody>
+                    {% if perms.orders.view_order or perms.orders.change_order %}
+                    <tr><th scope="row"><a href="{% url 'admin:orders_order_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'orders_order_changelist' or request.resolver_match.url_name == 'orders_order_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span>سفارش‌ها</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.orders.view_payment or perms.orders.change_payment %}
+                    <tr><th scope="row"><a href="{% url 'admin:orders_payment_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'orders_payment_changelist' or request.resolver_match.url_name == 'orders_payment_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg><span>پرداخت‌ها و تراکنش‌ها</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.orders.view_orderitem or perms.orders.change_orderitem %}
+                    <tr><th scope="row"><a href="{% url 'admin:orders_orderitem_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'orders_orderitem_changelist' or request.resolver_match.url_name == 'orders_orderitem_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v17H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>اقلام سفارش</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.cart.view_cart or perms.cart.change_cart %}
+                    <tr><th scope="row"><a href="{% url 'admin:cart_cart_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'cart_cart_changelist' or request.resolver_match.url_name == 'cart_cart_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 11h10.9l2-8H6"/><circle cx="9" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/></svg><span>سبدهای خرید</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.cart.view_cartitem or perms.cart.change_cartitem %}
+                    <tr><th scope="row"><a href="{% url 'admin:cart_cartitem_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'cart_cartitem_changelist' or request.resolver_match.url_name == 'cart_cartitem_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h4"/></svg><span>اقلام سبد خرید</span></a></th></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if perms.catalog.view_product or perms.catalog.change_product or perms.catalog.add_product or perms.catalog.view_category or perms.catalog.change_category or perms.catalog.add_category or perms.catalog.view_productvariant or perms.catalog.change_productvariant or perms.catalog.view_review or perms.catalog.change_review %}
+            <table class="module store-nav-module">
+                <caption>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>
+                    <span>محصولات و موجودی</span>
+                </caption>
+                <tbody>
+                    {% if perms.catalog.view_product or perms.catalog.change_product %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_product_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'catalog_product_changelist' or request.resolver_match.url_name == 'catalog_product_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z"/><path d="m3 8 9 5 9-5M12 13v8M8 5l9 5"/></svg><span>محصولات</span></a></th></tr>
+                    {% elif perms.catalog.add_product %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_product_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z"/><path d="M12 8v8M8 12h8"/></svg><span>افزودن محصول</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.catalog.view_category or perms.catalog.change_category %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_category_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'catalog_category_changelist' or request.resolver_match.url_name == 'catalog_category_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg><span>دسته‌بندی‌ها</span></a></th></tr>
+                    {% elif perms.catalog.add_category %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_category_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><path d="M7 13v8M3 17h8"/></svg><span>افزودن دسته‌بندی</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.catalog.view_productvariant or perms.catalog.change_productvariant %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_productvariant_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'catalog_productvariant_changelist' or request.resolver_match.url_name == 'catalog_productvariant_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/></svg><span>تنوع‌ها و مشخصات محصول</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.catalog.view_review or perms.catalog.change_review %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_review_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'catalog_review_changelist' or request.resolver_match.url_name == 'catalog_review_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.8 8.8 0 0 1-4-.9L3 20l1.5-4A7 7 0 0 1 4 12c0-4.1 3.6-7 8-7s8 2.4 8 6.5Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/></svg><span>دیدگاه‌های مشتریان</span></a></th></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if perms.auth.view_user or perms.auth.change_user or perms.auth.add_user or perms.accounts.view_address or perms.accounts.change_address or perms.accounts.add_address %}
+            <table class="module store-nav-module">
+                <caption>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a4.5 4.5 0 0 0-4.5-4.5h-3A4.5 4.5 0 0 0 4 18.5V20"/><circle cx="10" cy="7" r="4"/><path d="M16 4.5a4 4 0 0 1 0 7.5M18 14a4 4 0 0 1 2 3.5V20"/></svg>
+                    <span>مشتریان و کاربران</span>
+                </caption>
+                <tbody>
+                    {% if perms.auth.view_user or perms.auth.change_user %}
+                    <tr><th scope="row"><a href="{% url 'admin:auth_user_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'auth_user_changelist' or request.resolver_match.url_name == 'auth_user_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2.5 21v-2a6.5 6.5 0 0 1 13 0v2M17 5.5a3.5 3.5 0 0 1 0 6.5M19 15a4 4 0 0 1 2.5 3.7V21"/></svg><span>حساب‌های کاربری</span></a></th></tr>
+                    {% elif perms.auth.add_user %}
+                    <tr><th scope="row"><a href="{% url 'admin:auth_user_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2.5 21v-2a6.5 6.5 0 0 1 13 0v2M19 8v6M16 11h6"/></svg><span>افزودن کاربر</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.accounts.view_address or perms.accounts.change_address %}
+                    <tr><th scope="row"><a href="{% url 'admin:accounts_address_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'accounts_address_changelist' or request.resolver_match.url_name == 'accounts_address_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>نشانی‌های ثبت‌شده</span></a></th></tr>
+                    {% elif perms.accounts.add_address %}
+                    <tr><th scope="row"><a href="{% url 'admin:accounts_address_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><path d="M12 7v6M9 10h6"/></svg><span>افزودن نشانی</span></a></th></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if perms.orders.view_shippingmethod or perms.orders.change_shippingmethod or perms.orders.add_shippingmethod %}
+            <table class="module store-nav-module">
+                <caption>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg>
+                    <span>ارسال و تحویل</span>
+                </caption>
+                <tbody>
+                    {% if perms.orders.view_shippingmethod or perms.orders.change_shippingmethod %}
+                    <tr><th scope="row"><a href="{% url 'admin:orders_shippingmethod_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'orders_shippingmethod_changelist' or request.resolver_match.url_name == 'orders_shippingmethod_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></svg><span>روش‌های ارسال</span></a></th></tr>
+                    {% elif perms.orders.add_shippingmethod %}
+                    <tr><th scope="row"><a href="{% url 'admin:orders_shippingmethod_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z"/><circle cx="7" cy="19" r="2"/><path d="M19 7v4M17 9h4"/></svg><span>افزودن روش ارسال</span></a></th></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if perms.auth.view_group or perms.auth.change_group or perms.auth.add_group %}
+            <table class="module store-nav-module">
+                <caption>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span>دسترسی و امنیت</span>
+                </caption>
+                <tbody>
+                    {% if perms.auth.view_group or perms.auth.change_group %}
+                    <tr><th scope="row"><a href="{% url 'admin:auth_group_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'auth_group_changelist' or request.resolver_match.url_name == 'auth_group_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M15 15a5 5 0 0 1 6.5 5"/></svg><span>گروه‌های دسترسی</span></a></th></tr>
+                    {% elif perms.auth.add_group %}
+                    <tr><th scope="row"><a href="{% url 'admin:auth_group_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 7v6M16 10h6"/></svg><span>افزودن گروه دسترسی</span></a></th></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+            {% endif %}
+        </div>
+
+        <div class="store-sidebar-footer">
+            <a href="{% url 'catalog:home' %}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v6H4V5h6"/></svg>
+                <span>مشاهده فروشگاه</span>
+                <span class="store-sidebar-external" aria-hidden="true">↗</span>
+            </a>
+        </div>
+    </nav>
+    <button class="sticky toggle-nav-sidebar store-sidebar-toggle" id="toggle-nav-sidebar"
+            type="button" aria-label="باز یا بسته کردن منوی مدیریت"
+            title="باز یا بسته کردن منوی مدیریت"></button>
+{% endblock %}
