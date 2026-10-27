@@ -629,6 +629,95 @@ class StoreAdminDashboardTests(TestCase):
                 response = self.client.get(reverse(url_name))
                 self.assertEqual(response.status_code, 200, url_name)
 
+    def test_operational_filter_links_open_the_expected_filtered_lists(self):
+        admin_user = User.objects.create_superuser(
+            username="operational-filter-links-admin",
+            email="operational-filter-links-admin@example.test",
+            password="TestPassword123!",
+        )
+        out_of_stock_product = Product.objects.create(
+            category=self.category,
+            name="Dashboard Out Of Stock Product",
+            slug="dashboard-out-of-stock-product",
+            price=Decimal("90000"),
+            stock=0,
+            is_active=True,
+        )
+        cancelled_order = Order.objects.create(
+            user=admin_user,
+            status=Order.Status.CANCELLED,
+            subtotal_amount=Decimal("40000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=cancelled_order,
+            amount=cancelled_order.final_amount,
+            status=Payment.Status.SUCCESS,
+            gateway_name="zarinpal",
+            reference_code="CANCELLED-ORDER-ADMIN-FILTER-REF",
+        )
+        self.client.force_login(admin_user)
+
+        low_stock_response = self.client.get(
+            reverse("admin:catalog_product_changelist"),
+            {"availability": "low_stock"},
+        )
+        self.assertEqual(low_stock_response.status_code, 200)
+        self.assertContains(low_stock_response, self.product.name)
+        self.assertNotContains(low_stock_response, out_of_stock_product.name)
+
+        out_of_stock_response = self.client.get(
+            reverse("admin:catalog_product_changelist"),
+            {"availability": "out_of_stock"},
+        )
+        self.assertEqual(out_of_stock_response.status_code, 200)
+        self.assertContains(out_of_stock_response, out_of_stock_product.name)
+        self.assertNotContains(out_of_stock_response, self.product.name)
+
+        cancelled_success_response = self.client.get(
+            reverse("admin:orders_order_changelist"),
+            {
+                "status__exact": Order.Status.CANCELLED,
+                "payment__status__exact": Payment.Status.SUCCESS,
+            },
+        )
+        self.assertEqual(cancelled_success_response.status_code, 200)
+        self.assertContains(cancelled_success_response, cancelled_order.order_number)
+        self.assertNotContains(cancelled_success_response, self.order.order_number)
+
+        successful_payments_response = self.client.get(
+            reverse("admin:orders_payment_changelist"),
+            {"status__exact": Payment.Status.SUCCESS},
+        )
+        self.assertEqual(successful_payments_response.status_code, 200)
+        self.assertContains(successful_payments_response, "CANCELLED-ORDER-ADMIN-FILTER-REF")
+        self.assertNotContains(successful_payments_response, "DASHBOARD-TRX-0001")
+
+    def test_primary_admin_change_forms_render_for_authorized_admin(self):
+        admin_user = User.objects.create_superuser(
+            username="admin-change-form-smoke-test",
+            email="admin-change-form-smoke-test@example.test",
+            password="TestPassword123!",
+        )
+        cart = Cart.objects.create(user=self.staff, status=Cart.STATUS_ACTIVE)
+        profile, _created = Profile.objects.get_or_create(user=self.staff)
+        payment = Payment.objects.get(order=self.order)
+        self.client.force_login(admin_user)
+
+        change_urls = (
+            ("admin:catalog_product_change", self.product.pk),
+            ("admin:catalog_category_change", self.category.pk),
+            ("admin:orders_order_change", self.order.pk),
+            ("admin:orders_payment_change", payment.pk),
+            ("admin:cart_cart_change", cart.pk),
+            ("admin:accounts_profile_change", profile.pk),
+        )
+        for url_name, object_id in change_urls:
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name, args=[object_id]))
+                self.assertEqual(response.status_code, 200, url_name)
+
     def test_profile_admin_shows_customer_verification_but_never_otp_secrets(self):
         admin_user = User.objects.create_superuser(
             username="profile-privacy-admin",
