@@ -1087,3 +1087,161 @@ div.breadcrumbs a {
         transition: none;
     }
 }
+
+
+.store-chart-grid .store-chart-section:only-child {
+    grid-column: 1 / -1;
+}
+
+.store-attention-section {
+    border-top: 3px solid #ede9fe;
+}
+
+.store-attention-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.store-attention-item {
+    display: grid;
+    grid-template-columns: 2.6rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+    padding: 0.8rem 0.85rem;
+    border: 1px solid #e8ebf4;
+    border-radius: 0.85rem;
+    background: #fff;
+    color: inherit !important;
+    text-decoration: none !important;
+    transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.store-attention-item:hover,
+.store-attention-item:focus-visible {
+    border-color: #d5cdfd;
+    background: #fbfaff;
+    transform: translateY(-1px);
+}
+
+.store-attention-icon {
+    display: inline-flex;
+    width: 2.5rem;
+    height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.75rem;
+    background: #fff7e6;
+    color: #b77909;
+}
+
+.store-attention-icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.store-attention-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.store-attention-copy strong {
+    color: #28334b;
+    font-size: 0.82rem;
+}
+
+.store-attention-copy > span {
+    color: #718096;
+    font-size: 0.73rem;
+    line-height: 1.8;
+}
+
+.store-attention-count {
+    display: inline-flex;
+    min-width: 2rem;
+    min-height: 2rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.5rem;
+    border-radius: 0.65rem;
+    background: #f3f0ff;
+    color: #5b3bd3;
+    font-size: 0.84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.store-attention-item--danger .store-attention-icon {
+    background: #fff0f2;
+    color: #c02650;
+}
+
+.store-attention-item--danger .store-attention-count {
+    background: #ffe4e9;
+    color: #a71942;
+}
+
+.store-attention-item--warning .store-attention-icon {
+    background: #fff7e6;
+    color: #b77909;
+}
+
+.store-attention-item--warning .store-attention-count {
+    background: #fef0c7;
+    color: #92400e;
+}
+
+.store-attention-item--info .store-attention-icon {
+    background: #e8f5ff;
+    color: #0369a1;
+}
+
+.store-attention-item--info .store-attention-count {
+    background: #dff2ff;
+    color: #075985;
+}
+
+.store-chart-fill--paid {
+    background: linear-gradient(90deg, #34d399, #0f766e);
+}
+
+.store-chart-fill--placed {
+    background: linear-gradient(90deg, #fbbf24, #d97706);
+}
+
+.store-chart-fill--refunded {
+    background: linear-gradient(90deg, #a5b4fc, #6366f1);
+}
+
+@media (max-width: 600px) {
+    .store-attention-item {
+        grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+        gap: 0.55rem;
+        padding: 0.7rem;
+    }
+
+    .store-attention-icon {
+        width: 2.35rem;
+        height: 2.35rem;
+    }
+
+    .store-attention-copy strong {
+        font-size: 0.76rem;
+    }
+
+    .store-attention-copy > span {
+        font-size: 0.68rem;
+    }
+
+    .store-chart-row {
+        padding-right: 0.15rem;
+        padding-left: 0.15rem;
+    }
+}
