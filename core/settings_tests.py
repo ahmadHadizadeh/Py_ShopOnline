@@ -476,3 +476,12 @@ def test_sandbox_rejects_noncanonical_endpoint_path():
         RuntimeError, match="ZARINPAL_VERIFY_URL"
     ):
         load_settings_env(**env)
+
+def test_default_language_is_persian_for_store_ui():
+    settings = load_settings_env(
+        DJANGO_DEBUG="1",
+        SECRET_KEY="dev-secret",
+    )
+
+    assert settings["LANGUAGE_CODE"] == "fa-ir"
+
