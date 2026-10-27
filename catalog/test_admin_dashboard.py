@@ -347,7 +347,7 @@ class StoreAdminDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertRegex(
             response.content.decode("utf-8"),
-            r"پرداخت‌های موفق برای سفارش لغوشده</span>\s*<strong[^>]*>1</strong>",
+            r"پرداخت‌های موفق برای سفارش لغوشده</span></div>\s*<strong[^>]*>1</strong>",
         )
         self.assertContains(
             response,
