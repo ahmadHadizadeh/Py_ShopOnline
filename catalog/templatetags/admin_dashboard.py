@@ -72,7 +72,7 @@ def _add_quick_link(
     add_url = reverse(f"admin:{app_label}_{model_name}_add") if can_add else None
     links.append(
         {
-            "label": label,
+            "label": label if can_view else add_label,
             "description": description,
             "url": changelist_url if can_view else add_url,
             "add_url": add_url if can_view else None,
