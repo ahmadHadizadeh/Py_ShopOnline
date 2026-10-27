@@ -1031,8 +1031,11 @@ div.breadcrumbs a {
 
     #main > #nav-sidebar.store-admin-sidebar {
         position: fixed;
+        right: calc(-1 * min(84vw, 280px));
+        width: min(84vw, 280px);
+        flex-basis: min(84vw, 280px);
         top: 0;
-        right: -min(84vw, 280px);
+        right: calc(-1 * min(84vw, 280px));
         width: min(84vw, 280px);
         height: 100vh;
         max-height: 100vh;
@@ -1042,7 +1045,7 @@ div.breadcrumbs a {
         transition: right 180ms ease, visibility 180ms ease;
     }
 
-    .main.shifted > #nav-sidebar.store-admin-sidebar {
+    #main.shifted > #nav-sidebar.store-admin-sidebar {
         right: 0;
         margin: 0;
         visibility: visible;
@@ -1071,7 +1074,7 @@ div.breadcrumbs a {
         width: 100%;
     }
 
-    .store-metric-grid {
+    .store-metrics-grid {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
     }
 }
