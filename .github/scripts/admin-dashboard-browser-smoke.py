@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-import re
+from urllib.parse import urlsplit
 import subprocess
 import sys
 import time
@@ -150,7 +150,7 @@ def main() -> None:
                 )
 
                 def capture_assets(response) -> None:
-                    path = response.url.split("?", 1)[0]
+                    path = urlsplit(response.url).path
                     if path.endswith(
                         ("/static/css/admin_dashboard.css", "/static/js/admin_sidebar.js")
                     ):
@@ -267,9 +267,12 @@ def main() -> None:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
+            report_path = ARTIFACTS / "browser-smoke-report.json"
+            report_path.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
-    report_path = ARTIFACTS / "browser-smoke-report.json"
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
