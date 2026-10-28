@@ -181,7 +181,7 @@ def main() -> None:
                     "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
                 )
                 report["viewport_checks"]["dashboard_desktop"] = desktop_dimensions
-                if desktop_dimensions["document"] > desktop_dimensions["viewport"] + 2:
+                if max(desktop_dimensions["document"], desktop_dimensions["body"]) > desktop_dimensions["viewport"]:
                     raise AssertionError(f"Desktop dashboard has horizontal overflow: {desktop_dimensions}")
                 desktop_screenshot = ARTIFACTS / "admin-dashboard-desktop.png"
                 page.screenshot(path=str(desktop_screenshot), full_page=True)
@@ -205,7 +205,7 @@ def main() -> None:
                     "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
                 )
                 report["viewport_checks"]["dashboard_mobile"] = mobile_dimensions
-                if mobile_dimensions["document"] > mobile_dimensions["viewport"] + 2:
+                if max(mobile_dimensions["document"], mobile_dimensions["body"]) > mobile_dimensions["viewport"]:
                     raise AssertionError(f"Mobile dashboard has horizontal overflow: {mobile_dimensions}")
                 mobile_screenshot = ARTIFACTS / "admin-dashboard-mobile.png"
                 page.screenshot(path=str(mobile_screenshot), full_page=True)
@@ -308,7 +308,7 @@ def main() -> None:
                 product_list_screenshot = ARTIFACTS / "admin-products-mobile.png"
                 page.screenshot(path=str(product_list_screenshot), full_page=True)
                 report["screenshots"].append(str(product_list_screenshot.relative_to(ROOT)))
-                if product_list_diagnostics["document"] > product_list_diagnostics["viewport"]:
+                if max(product_list_diagnostics["document"], product_list_diagnostics["body"]) > product_list_diagnostics["viewport"]:
                     raise AssertionError(
                         "Mobile product list has horizontal overflow; diagnostics: "
                         + json.dumps(product_list_diagnostics, ensure_ascii=False)
@@ -326,7 +326,7 @@ def main() -> None:
                     "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
                 )
                 report["viewport_checks"]["product_form_mobile"] = product_form_dimensions
-                if product_form_dimensions["document"] > product_form_dimensions["viewport"] + 2:
+                if max(product_form_dimensions["document"], product_form_dimensions["body"]) > product_form_dimensions["viewport"]:
                     raise AssertionError(f"Mobile product form has horizontal overflow: {product_form_dimensions}")
                 product_form_screenshot = ARTIFACTS / "admin-product-form-mobile.png"
                 page.screenshot(path=str(product_form_screenshot), full_page=True)
@@ -343,6 +343,8 @@ def main() -> None:
                         f"all_statuses={report['important_static_assets']}"
                     )
 
+                if report["console_errors"]:
+                    raise AssertionError(f"Browser console errors: {report['console_errors']}")
                 if report["page_errors"]:
                     raise AssertionError(f"Browser JavaScript errors: {report['page_errors']}")
 
