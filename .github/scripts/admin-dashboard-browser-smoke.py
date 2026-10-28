@@ -247,10 +247,59 @@ def main() -> None:
                             )
                             .sort((a, b) => b.right - a.right)
                             .slice(0, 40);
+                        const layoutSelectors = [
+                            "html",
+                            "body",
+                            "#main",
+                            "#main > .content",
+                            "#content",
+                            "#content-main",
+                            "#changelist",
+                            "#changelist .changelist-form-container",
+                            "#changelist-form",
+                            "#changelist-form .actions",
+                            "#changelist-form .results",
+                            "#changelist-filter",
+                            "#changelist .paginator",
+                        ];
+                        const layoutElements = layoutSelectors.map(selector => {
+                            const element = document.querySelector(selector);
+                            if (!element) {
+                                return {selector, missing: true};
+                            }
+                            const rect = element.getBoundingClientRect();
+                            const style = window.getComputedStyle(element);
+                            return {
+                                selector,
+                                tag: element.tagName.toLowerCase(),
+                                id: element.id || null,
+                                className: typeof element.className === "string" ? element.className : "",
+                                left: round(rect.left),
+                                right: round(rect.right),
+                                width: round(rect.width),
+                                scrollWidth: element.scrollWidth,
+                                clientWidth: element.clientWidth,
+                                cssWidth: style.width,
+                                maxWidth: style.maxWidth,
+                                boxSizing: style.boxSizing,
+                                overflowX: style.overflowX,
+                                marginLeft: style.marginLeft,
+                                marginRight: style.marginRight,
+                                paddingLeft: style.paddingLeft,
+                                paddingRight: style.paddingRight,
+                                borderLeftWidth: style.borderLeftWidth,
+                                borderRightWidth: style.borderRightWidth,
+                            };
+                        });
                         return {
                             viewport,
                             document: document.documentElement.scrollWidth,
+                            documentClient: document.documentElement.clientWidth,
+                            documentScrollLeft: document.documentElement.scrollLeft,
                             body: document.body.scrollWidth,
+                            bodyClient: document.body.clientWidth,
+                            windowScrollX: window.scrollX,
+                            layoutElements,
                             overflowingElements,
                         };
                     }"""
@@ -259,7 +308,7 @@ def main() -> None:
                 product_list_screenshot = ARTIFACTS / "admin-products-mobile.png"
                 page.screenshot(path=str(product_list_screenshot), full_page=True)
                 report["screenshots"].append(str(product_list_screenshot.relative_to(ROOT)))
-                if product_list_diagnostics["document"] > product_list_diagnostics["viewport"] + 2:
+                if product_list_diagnostics["document"] > product_list_diagnostics["viewport"]:
                     raise AssertionError(
                         "Mobile product list has horizontal overflow; diagnostics: "
                         + json.dumps(product_list_diagnostics, ensure_ascii=False)

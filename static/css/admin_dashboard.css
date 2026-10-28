@@ -1339,8 +1339,6 @@ body.change-list #content-main > .object-tools a:focus-visible {
 }
 
 body.change-list #changelist {
-    box-sizing: border-box;
-    max-width: 100%;
     overflow: visible;
     border: 1px solid #e1e6f1;
     border-radius: 1rem;
