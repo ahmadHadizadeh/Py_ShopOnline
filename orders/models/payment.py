@@ -133,6 +133,7 @@ class Payment(models.Model):
                 "transaction_code",
                 "reference_code",
                 "gateway_response",
+                "updated",
             ]
         )
         return self.status, True

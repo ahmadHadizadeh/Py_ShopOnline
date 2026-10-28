@@ -441,6 +441,7 @@ class PaymentCallbackSecurityTests(TestCase):
 
     def test_successful_payment_reduces_stock_and_marks_order_paid(self):
         initial_stock = self.product.stock
+        initial_payment_updated = self.payment.updated
 
         response = self.client1.post(
             self.callback_url,
@@ -480,6 +481,7 @@ class PaymentCallbackSecurityTests(TestCase):
             self.payment.status,
             Payment.Status.SUCCESS,
         )
+        self.assertGreater(self.payment.updated, initial_payment_updated)
 
         self.assertIsNotNone(self.order.paid_at)
 
