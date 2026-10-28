@@ -1957,6 +1957,34 @@ class PaymentPresentationContractTests(TestCase):
 
         self.assertRedirects(response, reverse("accounts:dashboard_orders"))
 
+    def test_success_receipt_message_matches_paid_processing_and_completed_states(self):
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.save(update_fields=["status", "updated"])
+        receipt_url = reverse(
+            "orders:payment_success",
+            kwargs={"order_number": self.order.order_number},
+        )
+        expected_messages = {
+            Order.Status.PAID: "سفارش در انتظار شروع پردازش است",
+            Order.Status.PROCESSING: "سفارش شما در حال پردازش است",
+            Order.Status.COMPLETED: "سفارش شما تکمیل شده است",
+        }
+
+        for status, expected_message in expected_messages.items():
+            with self.subTest(order_status=status):
+                Order.objects.filter(pk=self.order.pk).update(
+                    status=status,
+                    stock_reduced=True,
+                )
+                response = self.client.get(receipt_url)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, expected_message)
+                self.assertNotContains(
+                    response,
+                    "پرداخت در درگاه موفق ثبت شده، اما وضعیت سفارش یا ثبت کاهش موجودی",
+                )
+
     def test_success_receipt_flags_successful_payment_with_inconsistent_order_or_inventory(self):
         self.payment.status = Payment.Status.SUCCESS
         self.payment.reference_code = "RECONCILIATION-REQUIRED-REF"
