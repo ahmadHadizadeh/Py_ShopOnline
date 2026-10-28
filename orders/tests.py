@@ -1099,6 +1099,38 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
         self.assertEqual(self.product.stock, initial_stock)
         self.assertIn("بازپرداخت", self.order.admin_note)
 
+    def test_legacy_empty_order_with_stale_stock_flag_is_reconciled(self):
+        OrderItem.objects.filter(order=self.order).delete()
+        Order.objects.filter(pk=self.order.pk).update(stock_reduced=True)
+        initial_stock = self.product.stock
+        signature = hmac.new(
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            f"{self.payment.transaction_code}:{self.payment.amount}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        outcome = PaymentService.handle_callback(
+            gateway_name="mock_gateway",
+            data={
+                "trxid": self.payment.transaction_code,
+                "status": "success",
+                "amount": str(self.payment.amount),
+                "signature": signature,
+            },
+        )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertTrue(outcome.success)
+        self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertFalse(self.order.stock_reduced)
+        self.assertIsNone(self.order.paid_at)
+        self.assertEqual(self.product.stock, initial_stock)
+        self.assertIn("بازپرداخت", self.order.admin_note)
+
     def test_callback_db_failure_rolls_back_payment_transition(self):
         signature = hmac.new(
             settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),

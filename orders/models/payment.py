@@ -122,10 +122,15 @@ class Payment(models.Model):
                 self.order.admin_note = "\n\n".join(
                     note for note in (existing_note, reconciliation_note) if note
                 )
+                # An old empty-order bug could have set this flag without reducing
+                # any stock. Clear it only when the order is confirmed to have no items.
+                update_fields = ["status", "cancelled_at", "admin_note", "updated"]
+                if not self.order.items.exists():
+                    self.order.stock_reduced = False
+                    update_fields.append("stock_reduced")
+
                 # Keep the verified provider response on Payment.gateway_response.
-                self.order.save(
-                    update_fields=["status", "cancelled_at", "admin_note", "updated"]
-                )
+                self.order.save(update_fields=update_fields)
 
         self.save(
             update_fields=[

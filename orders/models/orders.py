@@ -147,7 +147,17 @@ class Order(models.Model):
         self.status = locked_order.status
         self.stock_reduced = locked_order.stock_reduced
 
-        if self.stock_reduced or self.status == Order.Status.CANCELLED:
+        if self.status == Order.Status.CANCELLED:
+            return
+
+        if self.stock_reduced:
+            if self.status in {
+                Order.Status.PENDING,
+                Order.Status.PLACED,
+            }:
+                raise ValueError(
+                    "پرچم کاهش موجودی با وضعیت پرداخت‌نشده سفارش سازگار نیست."
+                )
             return
 
         order_items = list(
