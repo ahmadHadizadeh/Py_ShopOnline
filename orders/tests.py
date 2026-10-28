@@ -483,6 +483,59 @@ class PaymentCallbackSecurityTests(TestCase):
 
         self.assertIsNotNone(self.order.paid_at)
 
+    def test_successful_callback_with_insufficient_stock_redirects_to_reconciliation_receipt(self):
+        OrderAddressSnapshot.objects.create(
+            order=self.order,
+            recipient_name="مشتری آزمایشی",
+            recipient_mobile="09120000000",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="نشانی آزمایشی",
+        )
+        Product.objects.filter(pk=self.product.pk).update(
+            stock=0,
+            is_available_status=False,
+        )
+
+        response = self.client1.post(
+            self.callback_url,
+            {
+                "trxid": self.payment.transaction_code,
+                "status": "success",
+                "amount": "50000000",
+                "signature": self.callback_signature(),
+            },
+        )
+        receipt_url = reverse(
+            "orders:payment_success",
+            kwargs={"order_number": self.order.order_number},
+        )
+        self.assertRedirects(response, receipt_url)
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
+        self.assertTrue(self.payment.reference_code)
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertFalse(self.order.stock_reduced)
+        self.assertIsNone(self.order.paid_at)
+        self.assertEqual(self.product.stock, 0)
+        self.assertIn("بازپرداخت", self.order.admin_note)
+
+        receipt_response = self.client1.get(receipt_url)
+        self.assertEqual(receipt_response.status_code, 200)
+        self.assertContains(
+            receipt_response,
+            "پرداخت در درگاه موفق بوده، اما سفارش در وضعیت لغوشده قرار دارد.",
+        )
+        self.assertNotContains(
+            receipt_response,
+            "سفارش شما با موفقیت ثبت شد و در مرحله پردازش قرار گرفت.",
+        )
+
     def test_zarinpal_callback_persists_only_real_provider_reference(self):
         from orders.payment.gateways import (
             GatewayCallbackResult,
