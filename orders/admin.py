@@ -452,6 +452,11 @@ class OrderAddressSnapshotAdmin(admin.ModelAdmin):
 
 @admin.register(ShippingMethod)
 class ShippingMethodAdmin(admin.ModelAdmin):
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.orders.exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
     list_per_page = 25
     date_hierarchy = "updated"
     list_display = (
@@ -468,7 +473,16 @@ class ShippingMethodAdmin(admin.ModelAdmin):
     ordering = ("cost",)
     readonly_fields = ("created", "updated")
     fieldsets = (
-        ("اطلاعات اصلی", {"fields": ("name", "description", "is_active")}),
+        (
+            "اطلاعات اصلی",
+            {
+                "fields": ("name", "description", "is_active"),
+                "description": (
+                    "روش ارسالِ استفاده‌شده در سفارش‌های ثبت‌شده قابل حذف نیست. "
+                    "برای متوقف‌کردن آن، وضعیت فعال را خاموش کنید."
+                ),
+            },
+        ),
         (
             "تنظیمات هزینه",
             {

@@ -157,3 +157,50 @@ class ProductAdminUsabilityTests(TestCase):
                 "updated",
             },
         )
+
+
+
+class CategoryAdminDeletionSafetyTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="category-delete-safety-admin",
+            email="category-delete-safety@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(self.admin_user)
+        self.category = Category.objects.create(
+            name="Category With Products",
+            slug="category-with-products",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Protected Category Product",
+            slug="protected-category-product",
+            price=Decimal("120000"),
+            stock=2,
+            is_active=True,
+        )
+
+    def test_category_with_products_cannot_be_deleted_from_admin(self):
+        response = self.client.post(
+            reverse("admin:catalog_category_delete", args=[self.category.pk]),
+            {"post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Category.objects.filter(pk=self.category.pk).exists())
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+
+    def test_empty_category_remains_deletable(self):
+        empty_category = Category.objects.create(
+            name="Empty Category",
+            slug="empty-category",
+        )
+
+        response = self.client.post(
+            reverse("admin:catalog_category_delete", args=[empty_category.pk]),
+            {"post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Category.objects.filter(pk=empty_category.pk).exists())

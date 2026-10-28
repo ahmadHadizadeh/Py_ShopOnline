@@ -156,6 +156,11 @@ class ProductVariantAdmin(admin.ModelAdmin):
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.products.exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
     list_display = ("name", "parent", "is_active", "slug")
     list_filter = ("is_active", "parent")
     search_fields = ("name", "slug")
@@ -165,7 +170,13 @@ class CategoryAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "اطلاعات دسته‌بندی",
-            {"fields": ("name", "parent", "is_active")},
+            {
+                "fields": ("name", "parent", "is_active"),
+                "description": (
+                    "دسته‌بندی دارای محصول قابل حذف نیست. برای توقف نمایش آن، "
+                    "وضعیت فعال را خاموش کنید یا ابتدا محصولات را به دسته دیگری منتقل کنید."
+                ),
+            },
         ),
         (
             "نشانی دسته‌بندی",

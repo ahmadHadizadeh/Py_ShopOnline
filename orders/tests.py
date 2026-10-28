@@ -22,6 +22,7 @@ from orders.models.orders import Order
 from orders.models.order_item import OrderItem
 from orders.models.order_address_snapshot import OrderAddressSnapshot
 from orders.models.payment import Payment
+from orders.models.shipping import ShippingMethod
 from orders.payment.services import PaymentService
 from orders.services import OrderService
 
@@ -2060,3 +2061,59 @@ class SQLiteOrderItemProductSchemaRepairTests(TestCase):
         )
 
         raw_connection.close()
+
+
+
+class ShippingMethodAdminDeletionSafetyTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="shipping-delete-safety-admin",
+            email="shipping-delete-safety@example.test",
+            password="TestPassword123!",
+        )
+        self.client.force_login(self.admin_user)
+        self.method = ShippingMethod.objects.create(
+            name="Historical Shipping Method",
+            description="Method preserved for historic orders",
+            cost=Decimal("50000"),
+            estimated_delivery_days=3,
+            is_active=True,
+        )
+        self.order = Order.objects.create(
+            user=self.admin_user,
+            shipping_method=self.method,
+            subtotal_amount=Decimal("120000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("50000"),
+            final_amount=Decimal("170000"),
+            status=Order.Status.PENDING,
+        )
+
+    def test_shipping_method_used_by_order_cannot_be_deleted(self):
+        response = self.client.post(
+            reverse("admin:orders_shippingmethod_delete", args=[self.method.pk]),
+            {"post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            ShippingMethod.objects.filter(pk=self.method.pk).exists()
+        )
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.shipping_method_id, self.method.pk)
+
+    def test_unused_shipping_method_remains_deletable(self):
+        unused_method = ShippingMethod.objects.create(
+            name="Unused Shipping Method",
+            cost=Decimal("30000"),
+            estimated_delivery_days=2,
+            is_active=True,
+        )
+
+        response = self.client.post(
+            reverse("admin:orders_shippingmethod_delete", args=[unused_method.pk]),
+            {"post": "yes"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ShippingMethod.objects.filter(pk=unused_method.pk).exists())
