@@ -219,4 +219,17 @@ class PaymentSuccessView(LoginRequiredMixin, TemplateView):
 
         context["order"] = order
         context["payment"] = payment_record
+        valid_fulfillment_state = (
+            order.status
+            in {
+                Order.Status.PAID,
+                Order.Status.PROCESSING,
+                Order.Status.COMPLETED,
+            }
+            and order.stock_reduced
+        )
+        context["payment_reconciliation_required"] = (
+            order.status != Order.Status.CANCELLED
+            and not valid_fulfillment_state
+        )
         return context

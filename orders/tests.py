@@ -1865,10 +1865,11 @@ class PaymentPresentationContractTests(TestCase):
 
     def test_confirmation_paid_order_redirects_to_success_page(self):
         self.order.status = Order.Status.PAID
-        self.order.save(update_fields=["status"])
+        self.order.stock_reduced = True
+        self.order.save(update_fields=["status", "stock_reduced", "updated"])
 
         self.payment.status = Payment.Status.SUCCESS
-        self.payment.save(update_fields=["status"])
+        self.payment.save(update_fields=["status", "updated"])
 
         response = self.client.get(
             reverse(
@@ -1887,10 +1888,11 @@ class PaymentPresentationContractTests(TestCase):
 
     def test_success_receipt_distinguishes_reference_and_transaction(self):
         self.order.status = Order.Status.PAID
-        self.order.save(update_fields=["status"])
+        self.order.stock_reduced = True
+        self.order.save(update_fields=["status", "stock_reduced", "updated"])
         self.payment.status = Payment.Status.SUCCESS
         self.payment.reference_code = "REF-PRESENT-001"
-        self.payment.save(update_fields=["status", "reference_code"])
+        self.payment.save(update_fields=["status", "reference_code", "updated"])
 
         response = self.client.get(
             reverse(
@@ -1926,6 +1928,56 @@ class PaymentPresentationContractTests(TestCase):
         self.assertIn("شناسه تراکنش درگاه:", content)
         self.assertIn(self.payment.transaction_code, content)
         self.assertNotIn("کد رهگیری تراکنش:", content)
+
+    def test_confirmation_paid_order_without_successful_payment_requires_reconciliation(self):
+        self.order.status = Order.Status.PAID
+        self.order.save(update_fields=["status", "updated"])
+
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertRedirects(response, reverse("accounts:dashboard_orders"))
+
+    def test_success_receipt_flags_successful_payment_with_inconsistent_order_or_inventory(self):
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.reference_code = "RECONCILIATION-REQUIRED-REF"
+        self.payment.save(update_fields=["status", "reference_code", "updated"])
+        receipt_url = reverse(
+            "orders:payment_success",
+            kwargs={"order_number": self.order.order_number},
+        )
+
+        inconsistent_states = (
+            Order.Status.PENDING,
+            Order.Status.PLACED,
+            Order.Status.PAID,
+            Order.Status.PROCESSING,
+            Order.Status.COMPLETED,
+        )
+        for status in inconsistent_states:
+            with self.subTest(order_status=status):
+                Order.objects.filter(pk=self.order.pk).update(
+                    status=status,
+                    stock_reduced=False,
+                )
+                response = self.client.get(receipt_url)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(
+                    response,
+                    "پرداخت در درگاه موفق ثبت شده، اما وضعیت سفارش یا ثبت کاهش موجودی",
+                )
+                self.assertNotContains(
+                    response,
+                    "سفارش شما با موفقیت ثبت شد و در مرحله پردازش قرار گرفت.",
+                )
+                persisted = Order.objects.get(pk=self.order.pk)
+                self.assertEqual(persisted.status, status)
+                self.assertFalse(persisted.stock_reduced)
 
     def test_success_receipt_flags_payment_for_cancelled_order(self):
         self.order.status = Order.Status.CANCELLED
