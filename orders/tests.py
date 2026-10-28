@@ -934,6 +934,43 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
         self.assertEqual(self.order.status, Order.Status.PAID)
         self.assertEqual(gateway.name, self.payment.gateway_name)
 
+    def test_callback_acquires_order_lock_before_payment_lock(self):
+        signature = hmac.new(
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            f"{self.payment.transaction_code}:{self.payment.amount}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        lock_sequence = []
+        order_manager = Order.objects
+        payment_manager = Payment.objects
+        original_order_select_for_update = order_manager.select_for_update
+        original_payment_select_for_update = payment_manager.select_for_update
+
+        def lock_order(*args, **kwargs):
+            lock_sequence.append("order")
+            return original_order_select_for_update(*args, **kwargs)
+
+        def lock_payment(*args, **kwargs):
+            lock_sequence.append("payment")
+            return original_payment_select_for_update(*args, **kwargs)
+
+        with (
+            patch.object(order_manager, "select_for_update", side_effect=lock_order),
+            patch.object(payment_manager, "select_for_update", side_effect=lock_payment),
+        ):
+            outcome = PaymentService.handle_callback(
+                gateway_name="mock_gateway",
+                data={
+                    "trxid": self.payment.transaction_code,
+                    "status": "success",
+                    "amount": str(self.payment.amount),
+                    "signature": signature,
+                },
+            )
+
+        self.assertTrue(outcome.success)
+        self.assertEqual(lock_sequence[:2], ["order", "payment"])
+
     def test_service_callback_is_idempotent(self):
         signature = hmac.new(
             settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
@@ -1438,26 +1475,40 @@ class ProcessPaymentViewTests(TestCase):
             Payment.Status.PENDING,
         )
 
-    def test_paid_order_cannot_start_new_payment(self):
+    def test_paid_order_without_successful_payment_is_sent_to_reconciliation_not_receipt(self):
         self.order.status = Order.Status.PAID
         self.order.save(update_fields=["status"])
 
         response = self.client.get(self.url)
 
-        self.assertEqual(
-            response.status_code,
-            302,
+        self.assertRedirects(response, reverse("accounts:dashboard_orders"))
+        self.assertFalse(Payment.objects.filter(order=self.order).exists())
+
+    def test_paid_order_with_successful_payment_redirects_to_receipt_without_recharging(self):
+        self.order.status = Order.Status.PAID
+        self.order.stock_reduced = True
+        self.order.save(update_fields=["status", "stock_reduced", "updated"])
+        payment = Payment.objects.create(
+            order=self.order,
+            amount=self.order.final_amount,
+            status=Payment.Status.SUCCESS,
+            gateway_name="mock_gateway",
+            transaction_code="PAID-ORDER-EXISTING-TRX",
+            reference_code="PAID-ORDER-EXISTING-REF",
         )
 
-        self.assertEqual(
-            response.url,
+        response = self.client.get(self.url)
+
+        self.assertRedirects(
+            response,
             reverse(
                 "orders:payment_success",
                 kwargs={"order_number": self.order.order_number},
             ),
         )
-
-        self.assertFalse(Payment.objects.filter(order=self.order).exists())
+        self.assertEqual(Payment.objects.filter(order=self.order).count(), 1)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.SUCCESS)
 
 
 class AdminOperationalTests(TestCase):
@@ -1569,6 +1620,11 @@ class OrderStatusTransitionTests(TestCase):
             shipping_amount=Decimal("0"),
             final_amount=Decimal("1000000"),
             status=status,
+            stock_reduced=status in {
+                Order.Status.PAID,
+                Order.Status.PROCESSING,
+                Order.Status.COMPLETED,
+            },
         )
         OrderItem.objects.create(
             order=order,
@@ -1603,6 +1659,34 @@ class OrderStatusTransitionTests(TestCase):
         self.assertEqual(result.status, Order.Status.PROCESSING)
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PROCESSING)
+
+    def test_paid_order_without_stock_reduction_cannot_move_to_processing(self):
+        order = self.create_order(Order.Status.PAID)
+        Order.objects.filter(pk=order.pk).update(stock_reduced=False)
+
+        with self.assertRaises(ValidationError):
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.PROCESSING,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)
+        self.assertFalse(order.stock_reduced)
+
+    def test_processing_order_without_stock_reduction_cannot_be_completed(self):
+        order = self.create_order(Order.Status.PROCESSING)
+        Order.objects.filter(pk=order.pk).update(stock_reduced=False)
+
+        with self.assertRaises(ValidationError):
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.COMPLETED,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PROCESSING)
+        self.assertFalse(order.stock_reduced)
 
     def test_processing_order_can_move_to_completed_and_sets_timestamp(self):
         order = self.create_order(Order.Status.PROCESSING)

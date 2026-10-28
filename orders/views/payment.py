@@ -17,6 +17,7 @@ from orders.payment.gateways import (
     build_mock_callback_signature,
 )
 from orders.payment.services import (
+    PaymentReconciliationRequired,
     PaymentService,
     get_default_gateway_name,
 )
@@ -58,6 +59,9 @@ class ProcessPaymentView(LoginRequiredMixin, View):
                 user=request.user,
                 order_number=order_number,
             )
+        except PaymentReconciliationRequired as exc:
+            messages.error(request, str(exc))
+            return redirect("accounts:dashboard_orders")
         except ValidationError as exc:
             messages.error(request, str(exc))
             return redirect(
