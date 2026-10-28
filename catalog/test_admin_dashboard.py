@@ -849,7 +849,7 @@ class StoreAdminDashboardTests(TestCase):
         list_response = self.client.get(reverse("admin:catalog_wishlist_changelist"))
         self.assertEqual(list_response.status_code, 200)
         self.assertContains(list_response, self.staff.username)
-        self.assertContains(list_response, self.product.name)
+        self.assertContains(list_response, "تعداد علاقه‌مندی‌ها")
 
         change_response = self.client.get(
             reverse("admin:catalog_wishlist_change", args=[wishlist.pk])
