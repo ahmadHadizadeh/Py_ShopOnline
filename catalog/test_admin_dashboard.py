@@ -13,6 +13,7 @@ from cart.models import Cart
 
 from catalog.models.category import Category
 from catalog.models.product import Product
+from catalog.models.wishlist import Wishlist
 from catalog.templatetags.admin_dashboard import store_admin_dashboard_data
 from orders.models import Order, OrderAddressSnapshot, Payment
 
@@ -822,3 +823,45 @@ class StoreAdminDashboardTests(TestCase):
         )
         self.assertEqual(add_response.status_code, 200)
 
+
+    def test_wishlist_admin_is_permission_gated_searchable_and_read_only(self):
+        wishlist = Wishlist.objects.create(user=self.staff)
+        wishlist.products.add(self.product)
+        self.client.force_login(self.staff)
+
+        dashboard_without_permission = self.client.get(reverse("admin:index"))
+        self.assertNotContains(
+            dashboard_without_permission,
+            "علاقه‌مندی‌های مشتریان",
+        )
+        denied_list = self.client.get(reverse("admin:catalog_wishlist_changelist"))
+        self.assertEqual(denied_list.status_code, 403)
+
+        self.grant(self.staff, "catalog", "view_wishlist")
+        dashboard_with_permission = self.client.get(reverse("admin:index"))
+        self.assertEqual(dashboard_with_permission.status_code, 200)
+        self.assertContains(dashboard_with_permission, "علاقه‌مندی‌های مشتریان")
+        self.assertContains(
+            dashboard_with_permission,
+            reverse("admin:catalog_wishlist_changelist"),
+        )
+
+        list_response = self.client.get(reverse("admin:catalog_wishlist_changelist"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, self.staff.username)
+        self.assertContains(list_response, self.product.name)
+
+        change_response = self.client.get(
+            reverse("admin:catalog_wishlist_change", args=[wishlist.pk])
+        )
+        self.assertEqual(change_response.status_code, 200)
+        self.assertContains(change_response, self.product.name)
+
+        wishlist_admin = admin.site._registry[Wishlist]
+        request = RequestFactory().get(
+            reverse("admin:catalog_wishlist_change", args=[wishlist.pk])
+        )
+        request.user = self.staff
+        self.assertFalse(wishlist_admin.has_add_permission(request))
+        self.assertFalse(wishlist_admin.has_change_permission(request, wishlist))
+        self.assertFalse(wishlist_admin.has_delete_permission(request, wishlist))

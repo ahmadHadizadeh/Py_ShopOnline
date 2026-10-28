@@ -1,10 +1,11 @@
 from django.contrib import admin
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils.html import format_html
 from .models.category import Category
 from .models.product import Product
 from .models.review import Review
 from .models.variant import ProductVariant
+from .models.wishlist import Wishlist
 
 from .models.product_media import ProductImage, ProductSpecification
 
@@ -190,3 +191,56 @@ class ReviewAdmin(admin.ModelAdmin):
     def created_display(self, obj):
         return obj.created.strftime("%Y/%m/%d %H:%M")
 
+
+
+@admin.register(Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ("user_display", "product_count")
+    list_display_links = ("user_display",)
+    search_fields = (
+        "user__username",
+        "user__email",
+        "user__first_name",
+        "user__last_name",
+        "products__name",
+    )
+    list_select_related = ("user",)
+    list_per_page = 25
+    fields = ("user", "products_display")
+    readonly_fields = fields
+    ordering = ("user__username",)
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("user")
+            .prefetch_related("products")
+            .annotate(_product_count=Count("products", distinct=True))
+        )
+
+    @admin.display(description="مشتری", ordering="user__username")
+    def user_display(self, obj):
+        return obj.user.get_full_name() or obj.user.email or obj.user.get_username()
+
+    @admin.display(description="تعداد علاقه‌مندی‌ها")
+    def product_count(self, obj):
+        return obj._product_count
+
+    @admin.display(description="محصولات مورد علاقه")
+    def products_display(self, obj):
+        products = list(obj.products.all())
+        names = [product.name for product in products[:30]]
+        remaining = len(products) - len(names)
+        if remaining:
+            names.append(f"… و {remaining} محصول دیگر")
+        return "، ".join(names) or "علاقه‌مندی ثبت نشده است"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

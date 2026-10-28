@@ -270,6 +270,11 @@ def store_admin_dashboard_data(user):
         description="بررسی و انتشار دیدگاه‌ها",
     )
     _add_quick_link(
+        user, data["quick_links"], app_label="catalog", model_name="wishlist",
+        label="علاقه‌مندی‌های مشتریان",
+        description="مشاهده محصولاتی که مشتریان ذخیره کرده‌اند",
+    )
+    _add_quick_link(
         user, data["quick_links"], app_label="orders", model_name="payment",
         label="پرداخت‌ها",
         description="بررسی وضعیت تراکنش‌ها و شناسه‌های پیگیری",

@@ -120,7 +120,7 @@
             </table>
             {% endif %}
 
-            {% if perms.auth.view_user or perms.auth.change_user or perms.auth.add_user or perms.accounts.view_address or perms.accounts.change_address or perms.accounts.add_address or perms.accounts.view_profile or perms.accounts.change_profile %}
+            {% if perms.auth.view_user or perms.auth.change_user or perms.auth.add_user or perms.accounts.view_address or perms.accounts.change_address or perms.accounts.add_address or perms.accounts.view_profile or perms.accounts.change_profile or perms.catalog.view_wishlist or perms.catalog.change_wishlist %}
             <table class="module store-nav-module">
                 <caption>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a4.5 4.5 0 0 0-4.5-4.5h-3A4.5 4.5 0 0 0 4 18.5V20"/><circle cx="10" cy="7" r="4"/><path d="M16 4.5a4 4 0 0 1 0 7.5M18 14a4 4 0 0 1 2 3.5V20"/></svg>
@@ -139,6 +139,9 @@
                     {% endif %}
                     {% if perms.accounts.view_profile or perms.accounts.change_profile %}
                     <tr><th scope="row"><a href="{% url 'admin:accounts_profile_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'accounts_profile_changelist' or request.resolver_match.url_name == 'accounts_profile_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2.5 21v-2a6.5 6.5 0 0 1 13 0v2"/><path d="m16 11 2 2 4-5"/></svg><span>پروفایل و تأیید مشتریان</span></a></th></tr>
+                    {% endif %}
+                    {% if perms.catalog.view_wishlist or perms.catalog.change_wishlist %}
+                    <tr><th scope="row"><a href="{% url 'admin:catalog_wishlist_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'catalog_wishlist_changelist' or request.resolver_match.url_name == 'catalog_wishlist_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/></svg><span>علاقه‌مندی‌های مشتریان</span></a></th></tr>
                     {% endif %}
                 </tbody>
             </table>
