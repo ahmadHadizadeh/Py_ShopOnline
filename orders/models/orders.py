@@ -155,11 +155,9 @@ class Order(models.Model):
         )
 
         if not order_items:
-            Order.objects.filter(pk=self.pk).update(
-                stock_reduced=True,
+            raise ValueError(
+                "سفارش فاقد آیتم قابل پردازش است؛ بررسی مالی و بازپرداخت لازم است."
             )
-            self.stock_reduced = True
-            return
 
         # ابتدا تمام موجودی‌ها را قبل از کوچک‌ترین تغییر بررسی می‌کنیم.
         # بنابراین در صورت کمبود موجودی هیچ محصولی نصفه‌نیمه کاهش پیدا نمی‌کند.
@@ -203,6 +201,7 @@ class Order(models.Model):
                 update_fields=[
                     "stock",
                     "is_available_status",
+                    "updated",
                 ]
             )
 
@@ -219,6 +218,7 @@ class Order(models.Model):
             stock_reduced=True,
             status=self.status,
             paid_at=self.paid_at,
+            updated=timezone.now(),
         )
 
         self.stock_reduced = True

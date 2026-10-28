@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from orders.models import Order, Payment
 from .gateways import (
@@ -77,13 +78,33 @@ class PaymentService:
 
         if order.status != Order.Status.PENDING:
             order.status = Order.Status.PENDING
-            order.save(update_fields=["status"])
+            order.save(update_fields=["status", "updated"])
 
         payment = (
             Payment.objects.select_for_update()
             .filter(order=order)
             .first()
         )
+
+        if payment is not None and payment.status == Payment.Status.SUCCESS:
+            # An inconsistent order/payment pair must never trigger a second charge.
+            # Quarantine the order for human reconciliation instead of attempting
+            # fulfillment or returning a misleading payment-failure receipt.
+            order.status = Order.Status.CANCELLED
+            order.cancelled_at = timezone.now()
+            reconciliation_note = (
+                "پرداخت این سفارش قبلاً موفق ثبت شده، اما وضعیت سفارش با پرداخت "
+                "سازگار نیست. سفارش برای جلوگیری از ارسال خودکار لغو شد؛ "
+                "بررسی مالی و موجودی/بازپرداخت لازم است."
+            )
+            existing_note = (order.admin_note or "").strip()
+            order.admin_note = "\n\n".join(
+                note for note in (existing_note, reconciliation_note) if note
+            )
+            order.save(
+                update_fields=["status", "cancelled_at", "admin_note", "updated"]
+            )
+            return None, order, None
 
         if payment is None:
             payment = Payment.objects.create(

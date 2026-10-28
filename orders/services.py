@@ -26,6 +26,26 @@ class OrderService:
                 f"تغییر وضعیت سفارش از {order.get_status_display()} به وضعیت انتخاب‌شده مجاز نیست."
             )
 
+        # Read only: callbacks lock Payment before Order, so acquiring a Payment
+        # row lock here would invert the lock order and risk deadlocks.
+        payment_status = Payment.objects.filter(order_id=order.pk).values_list(
+            "status", flat=True
+        ).first()
+        if (
+            new_status == Order.Status.PROCESSING
+            and payment_status != Payment.Status.SUCCESS
+        ):
+            raise ValidationError(
+                "سفارش بدون پرداخت موفق و تأییدشده قابل انتقال به مرحله پردازش نیست."
+            )
+        if (
+            new_status == Order.Status.CANCELLED
+            and payment_status == Payment.Status.SUCCESS
+        ):
+            raise ValidationError(
+                "پرداخت این سفارش موفق ثبت شده است؛ لغو آن به‌عنوان سفارش پرداخت‌نشده مجاز نیست."
+            )
+
         now = timezone.now()
         order.status = new_status
         update_fields = ["status", "updated"]

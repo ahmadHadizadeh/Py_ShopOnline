@@ -165,6 +165,15 @@ def verify_otp_view(request):
                 profile.phone_number = phone
                 profile.save(update_fields=["phone_number"])
 
+        if not user.is_active:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "این حساب کاربری غیرفعال است؛ برای پیگیری با پشتیبانی تماس بگیرید.",
+                },
+                status=403,
+            )
+
         merge_guest_cart_to_user(
             request,
             user=user,

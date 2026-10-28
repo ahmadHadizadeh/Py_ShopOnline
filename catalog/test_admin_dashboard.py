@@ -264,6 +264,18 @@ class StoreAdminDashboardTests(TestCase):
         changelist_response = self.client.get(reverse("admin:orders_order_changelist"))
         self.assertEqual(changelist_response.status_code, 200)
 
+    def test_view_only_order_permission_does_not_expose_state_changing_admin_actions(self):
+        self.grant(self.staff, "orders", "view_order")
+        request = RequestFactory().get(reverse("admin:orders_order_changelist"))
+        request.user = self.staff
+
+        order_admin = admin.site._registry[Order]
+        actions = order_admin.get_actions(request)
+
+        self.assertNotIn("move_paid_orders_to_processing", actions)
+        self.assertNotIn("move_processing_orders_to_completed", actions)
+        self.assertNotIn("cancel_unpaid_orders", actions)
+
     def test_add_only_permission_shows_only_supported_product_add_link(self):
         self.grant(self.staff, "catalog", "add_product")
         self.client.force_login(self.staff)

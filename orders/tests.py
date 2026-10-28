@@ -441,6 +441,8 @@ class PaymentCallbackSecurityTests(TestCase):
 
     def test_successful_payment_reduces_stock_and_marks_order_paid(self):
         initial_stock = self.product.stock
+        initial_product_updated = self.product.updated
+        initial_order_updated = self.order.updated
         initial_payment_updated = self.payment.updated
 
         response = self.client1.post(
@@ -482,6 +484,8 @@ class PaymentCallbackSecurityTests(TestCase):
             Payment.Status.SUCCESS,
         )
         self.assertGreater(self.payment.updated, initial_payment_updated)
+        self.assertGreater(self.order.updated, initial_order_updated)
+        self.assertGreater(self.product.updated, initial_product_updated)
 
         self.assertIsNotNone(self.order.paid_at)
 
@@ -735,6 +739,49 @@ class PaymentServiceTests(TestCase):
             retry_initiation.transaction_id,
             first_initiation.transaction_id,
         )
+
+    def test_successful_payment_on_pending_order_is_quarantined_without_second_charge(self):
+        from orders.payment.gateways import PaymentGatewayRegistry
+
+        payment, _, _ = PaymentService.initiate(
+            user=self.user,
+            order_number=self.order.order_number,
+        )
+        payment.status = Payment.Status.SUCCESS
+        payment.save(update_fields=["status", "updated"])
+        gateway = PaymentGatewayRegistry.get("mock_gateway")
+
+        with patch.object(gateway, "initiate") as mocked_initiate:
+            result_payment, result_order, initiation = PaymentService.initiate(
+                user=self.user,
+                order_number=self.order.order_number,
+            )
+
+        self.assertIsNone(result_payment)
+        self.assertIsNone(initiation)
+        self.assertEqual(result_order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(result_order.cancelled_at)
+        result_order.refresh_from_db()
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.SUCCESS)
+        self.assertEqual(result_order.status, Order.Status.CANCELLED)
+        self.assertIn("بررسی مالی", result_order.admin_note)
+        mocked_initiate.assert_not_called()
+
+    def test_placed_order_timestamp_updates_when_payment_is_initiated(self):
+        self.order.status = Order.Status.PLACED
+        self.order.save(update_fields=["status", "updated"])
+        self.order.refresh_from_db()
+        initial_updated = self.order.updated
+
+        PaymentService.initiate(
+            user=self.user,
+            order_number=self.order.order_number,
+        )
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertGreater(self.order.updated, initial_updated)
 
     def test_service_reuses_existing_one_to_one_payment(self):
         first_payment, _, _ = PaymentService.initiate(
@@ -993,6 +1040,37 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
         self.assertFalse(self.order.stock_reduced)
         self.assertIsNone(self.order.paid_at)
         self.assertEqual(self.product.stock, initial_stock)
+
+    def test_success_for_order_without_items_is_recorded_for_reconciliation(self):
+        OrderItem.objects.filter(order=self.order).delete()
+        initial_stock = self.product.stock
+        signature = hmac.new(
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            f"{self.payment.transaction_code}:{self.payment.amount}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        outcome = PaymentService.handle_callback(
+            gateway_name="mock_gateway",
+            data={
+                "trxid": self.payment.transaction_code,
+                "status": "success",
+                "amount": str(self.payment.amount),
+                "signature": signature,
+            },
+        )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertTrue(outcome.success)
+        self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertFalse(self.order.stock_reduced)
+        self.assertIsNone(self.order.paid_at)
+        self.assertEqual(self.product.stock, initial_stock)
+        self.assertIn("بازپرداخت", self.order.admin_note)
 
     def test_callback_db_failure_rolls_back_payment_transition(self):
         signature = hmac.new(
@@ -1443,6 +1521,18 @@ class OrderStatusTransitionTests(TestCase):
             unit_price=Decimal("1000000"),
             subtotal_price=Decimal("1000000"),
         )
+        Payment.objects.create(
+            order=order,
+            status=(
+                Payment.Status.SUCCESS
+                if status in {
+                    Order.Status.PAID,
+                    Order.Status.PROCESSING,
+                    Order.Status.COMPLETED,
+                }
+                else Payment.Status.PENDING
+            ),
+        )
         return order
 
     def test_paid_order_can_move_to_processing(self):
@@ -1476,6 +1566,36 @@ class OrderStatusTransitionTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.CANCELLED)
         self.assertIsNotNone(order.cancelled_at)
+
+    def test_paid_order_with_failed_payment_cannot_move_to_processing(self):
+        order = self.create_order(Order.Status.PAID)
+        payment = Payment.objects.get(order=order)
+        payment.status = Payment.Status.FAILED
+        payment.save(update_fields=["status", "updated"])
+
+        with self.assertRaises(ValidationError):
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.PROCESSING,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)
+
+    def test_successfully_paid_pending_order_cannot_be_cancelled_as_unpaid(self):
+        order = self.create_order(Order.Status.PENDING)
+        payment = Payment.objects.get(order=order)
+        payment.status = Payment.Status.SUCCESS
+        payment.save(update_fields=["status", "updated"])
+
+        with self.assertRaises(ValidationError):
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.CANCELLED,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
 
     def test_invalid_status_transition_is_rejected(self):
         order = self.create_order(Order.Status.PAID)
