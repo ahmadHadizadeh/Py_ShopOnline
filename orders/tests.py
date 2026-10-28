@@ -382,6 +382,27 @@ class PaymentCallbackSecurityTests(TestCase):
 
         self.assertTrue(Cart.objects.filter(pk=self.cart.pk).exists())
 
+    def test_unverified_duplicate_callback_cannot_quarantine_successful_payment_order(self):
+        self.payment.status = Payment.Status.SUCCESS
+        self.payment.reference_code = "REF-EXISTING-124"
+        self.payment.save(update_fields=["status", "reference_code"])
+
+        response = self.client1.post(
+            self.callback_url,
+            {
+                "trxid": self.payment.transaction_code,
+                "status": "success",
+                "amount": "50000000",
+                "signature": "invalid-signature",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertIsNone(self.order.cancelled_at)
+        self.assertFalse(self.order.stock_reduced)
+
     def test_successful_payment_keeps_order_cart_relationship(self):
         response = self.client1.post(
             self.callback_url,

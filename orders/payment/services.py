@@ -193,9 +193,28 @@ class PaymentService:
                 Order.Status.PENDING,
                 Order.Status.PLACED,
             }:
-                # Older/inconsistent rows may record payment success without the
-                # corresponding order transition. Reconcile without charging or
-                # reducing inventory again.
+                # A corrupt order/payment pair may need reconciliation, but do not
+                # mutate it based on an unauthenticated duplicate callback.
+                try:
+                    result = gateway.verify_callback(payment=payment, data=data)
+                except GatewayVerificationError:
+                    raise
+                except Exception as exc:
+                    raise GatewayVerificationError(
+                        "خطا در اعتبارسنجی پاسخ درگاه."
+                    ) from exc
+
+                if not result.success:
+                    return PaymentCallbackOutcome(
+                        payment=payment,
+                        order=payment.order,
+                        success=True,
+                    )
+                if result.transaction_id != payment.transaction_code:
+                    raise ValidationError("شناسه تراکنش با رکورد پرداخت مطابقت ندارد.")
+                if result.amount != payment.amount:
+                    raise ValidationError("مبلغ تراکنش با سفارش مطابقت ندارد.")
+
                 with transaction.atomic():
                     locked_payment = (
                         Payment.objects.select_related("order")
