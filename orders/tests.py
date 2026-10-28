@@ -1699,6 +1699,21 @@ class OrderStatusTransitionTests(TestCase):
         self.assertEqual(order.status, Order.Status.COMPLETED)
         self.assertIsNotNone(order.completed_at)
 
+    def test_unpaid_order_with_stock_reduced_flag_cannot_be_cancelled_without_reconciliation(self):
+        order = self.create_order(Order.Status.PENDING)
+        Order.objects.filter(pk=order.pk).update(stock_reduced=True)
+
+        with self.assertRaises(ValidationError):
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.CANCELLED,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+        self.assertTrue(order.stock_reduced)
+        self.assertIsNone(order.cancelled_at)
+
     def test_unpaid_order_can_be_cancelled_and_sets_timestamp(self):
         order = self.create_order(Order.Status.PENDING)
         result = OrderService.transition_status(

@@ -48,6 +48,15 @@ class OrderService:
             )
         if (
             new_status == Order.Status.CANCELLED
+            and order.stock_reduced
+            and payment_status != Payment.Status.SUCCESS
+        ):
+            raise ValidationError(
+                "پرچم کاهش موجودی با سابقه پرداخت‌نشده سازگار نیست؛ "
+                "لغو خودکار متوقف شد تا موجودی و سوابق پرداخت بررسی شوند."
+            )
+        if (
+            new_status == Order.Status.CANCELLED
             and payment_status == Payment.Status.SUCCESS
         ):
             raise ValidationError(
