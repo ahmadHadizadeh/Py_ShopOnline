@@ -1,6 +1,7 @@
 # orders/models/payment.py
 from django.conf import settings
 from django.db import models, transaction
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from .orders import Order
@@ -107,10 +108,24 @@ class Payment(models.Model):
             try:
                 self.order.reduce_item_stock()
             except ValueError as exc:
-                self.status = self.Status.FAILED
-                self.gateway_response = str(exc)
+                # The provider has already verified SUCCESS. Inventory failure is
+                # a fulfillment/reconciliation issue, not a failed payment.
                 self.order.status = Order.Status.CANCELLED
-                self.order.save(update_fields=["status"])
+                self.order.cancelled_at = timezone.now()
+                reconciliation_note = (
+                    "درگاه پرداخت را موفق تأیید کرد، اما کاهش موجودی سفارش ممکن نبود. "
+                    "سفارش برای جلوگیری از ارسال کالای ناموجود لغو شد؛ بررسی مالی و "
+                    "بازپرداخت لازم است. "
+                    f"جزئیات: {exc}"
+                )
+                existing_note = (self.order.admin_note or "").strip()
+                self.order.admin_note = "\n\n".join(
+                    note for note in (existing_note, reconciliation_note) if note
+                )
+                # Keep the verified provider response on Payment.gateway_response.
+                self.order.save(
+                    update_fields=["status", "cancelled_at", "admin_note", "updated"]
+                )
 
         self.save(
             update_fields=[

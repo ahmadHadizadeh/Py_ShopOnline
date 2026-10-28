@@ -865,6 +865,43 @@ class PaymentCallbackServiceTests(PaymentServiceTests):
         self.assertEqual(first_stock, initial_stock - 1)
         self.assertEqual(self.product.stock, first_stock)
 
+    def test_successful_payment_with_insufficient_stock_is_recorded_for_reconciliation(self):
+        # Inventory can change after checkout but before the provider callback.
+        Product.objects.filter(pk=self.product.pk).update(
+            stock=0,
+            is_available_status=False,
+        )
+        signature = hmac.new(
+            settings.PAYMENT_CALLBACK_SECRET.encode("utf-8"),
+            f"{self.payment.transaction_code}:{self.payment.amount}".encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        outcome = PaymentService.handle_callback(
+            gateway_name="mock_gateway",
+            data={
+                "trxid": self.payment.transaction_code,
+                "status": "success",
+                "amount": str(self.payment.amount),
+                "signature": signature,
+            },
+        )
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+
+        self.assertTrue(outcome.success)
+        self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
+        self.assertTrue(self.payment.reference_code)
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertFalse(self.order.stock_reduced)
+        self.assertIsNone(self.order.paid_at)
+        self.assertEqual(self.product.stock, 0)
+        self.assertIn("بازپرداخت", self.order.admin_note)
+        self.assertIn('"status": "success"', self.payment.gateway_response)
+
     def test_success_callback_for_cancelled_order_records_payment_without_fulfillment(
         self,
     ):
@@ -1589,7 +1626,7 @@ class PaymentPresentationContractTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "پرداخت در درگاه موفق بوده، اما سفارش قبلاً لغو شده است.",
+            "پرداخت در درگاه موفق بوده، اما سفارش در وضعیت لغوشده قرار دارد.",
         )
         self.assertNotContains(
             response,
