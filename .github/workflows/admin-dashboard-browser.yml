@@ -1,0 +1,57 @@
+name: Admin dashboard browser smoke
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [phase-3-8-dashboard-payment-integration]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install browser-smoke dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "Django==6.0.6" \
+            Pillow python-dotenv requests jdatetime \
+            playwright
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run desktop/mobile admin smoke test
+        env:
+          DJANGO_DEBUG: "1"
+          DB_ENGINE: sqlite3
+          PAYMENT_DEFAULT_GATEWAY: mock_gateway
+        run: python .github/scripts/admin-dashboard-browser-smoke.py
+
+      - name: Upload browser screenshots and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dashboard-browser-smoke
+          path: |
+            artifacts/admin-dashboard-desktop.png
+            artifacts/admin-dashboard-mobile.png
+            artifacts/admin-products-mobile.png
+            artifacts/admin-product-form-mobile.png
+            artifacts/browser-smoke-report.json
+          if-no-files-found: warn
+          retention-days: 5
