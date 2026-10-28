@@ -373,6 +373,12 @@ class PaymentCallbackSecurityTests(TestCase):
             self.payment.reference_code,
             "REF-EXISTING-123",
         )
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(self.order.cancelled_at)
+        self.assertFalse(self.order.stock_reduced)
+        self.assertIsNone(self.order.paid_at)
+        self.assertIn("بررسی مالی", self.order.admin_note)
 
         self.assertTrue(Cart.objects.filter(pk=self.cart.pk).exists())
 

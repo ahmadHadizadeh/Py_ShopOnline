@@ -23,6 +23,28 @@ def get_default_gateway_name() -> str:
     return str(value).strip() or "mock_gateway"
 
 
+def _quarantine_inconsistent_successful_payment_order(order) -> bool:
+    """Prevent fulfilment when a recorded successful payment has a payable order state."""
+    if order.status not in {Order.Status.PENDING, Order.Status.PLACED}:
+        return False
+
+    order.status = Order.Status.CANCELLED
+    order.cancelled_at = timezone.now()
+    reconciliation_note = (
+        "پرداخت این سفارش قبلاً موفق ثبت شده، اما وضعیت سفارش با پرداخت "
+        "سازگار نیست. سفارش برای جلوگیری از ارسال خودکار لغو شد؛ "
+        "بررسی مالی و موجودی/بازپرداخت لازم است."
+    )
+    existing_note = (order.admin_note or "").strip()
+    order.admin_note = "\n\n".join(
+        note for note in (existing_note, reconciliation_note) if note
+    )
+    order.save(
+        update_fields=["status", "cancelled_at", "admin_note", "updated"]
+    )
+    return True
+
+
 @dataclass(frozen=True)
 class PaymentCallbackOutcome:
     payment: Payment
@@ -87,23 +109,8 @@ class PaymentService:
         )
 
         if payment is not None and payment.status == Payment.Status.SUCCESS:
-            # An inconsistent order/payment pair must never trigger a second charge.
-            # Quarantine the order for human reconciliation instead of attempting
-            # fulfillment or returning a misleading payment-failure receipt.
-            order.status = Order.Status.CANCELLED
-            order.cancelled_at = timezone.now()
-            reconciliation_note = (
-                "پرداخت این سفارش قبلاً موفق ثبت شده، اما وضعیت سفارش با پرداخت "
-                "سازگار نیست. سفارش برای جلوگیری از ارسال خودکار لغو شد؛ "
-                "بررسی مالی و موجودی/بازپرداخت لازم است."
-            )
-            existing_note = (order.admin_note or "").strip()
-            order.admin_note = "\n\n".join(
-                note for note in (existing_note, reconciliation_note) if note
-            )
-            order.save(
-                update_fields=["status", "cancelled_at", "admin_note", "updated"]
-            )
+            # Never charge again when a successful payment has an inconsistent order state.
+            _quarantine_inconsistent_successful_payment_order(order)
             return None, order, None
 
         if payment is None:
@@ -182,11 +189,34 @@ class PaymentService:
             raise ValidationError("درگاه تراکنش با درگاه Callback مطابقت ندارد.")
 
         if payment.status == Payment.Status.SUCCESS:
-            return PaymentCallbackOutcome(
-                payment=payment,
-                order=payment.order,
-                success=True,
-            )
+            if payment.order.status in {
+                Order.Status.PENDING,
+                Order.Status.PLACED,
+            }:
+                # Older/inconsistent rows may record payment success without the
+                # corresponding order transition. Reconcile without charging or
+                # reducing inventory again.
+                with transaction.atomic():
+                    locked_payment = (
+                        Payment.objects.select_related("order")
+                        .select_for_update()
+                        .get(pk=payment.pk)
+                    )
+                    locked_order = locked_payment.order
+                    if locked_payment.status == Payment.Status.SUCCESS:
+                        _quarantine_inconsistent_successful_payment_order(locked_order)
+                        return PaymentCallbackOutcome(
+                            payment=locked_payment,
+                            order=locked_order,
+                            success=True,
+                        )
+                payment = Payment.objects.select_related("order").get(pk=payment.pk)
+            else:
+                return PaymentCallbackOutcome(
+                    payment=payment,
+                    order=payment.order,
+                    success=True,
+                )
 
         try:
             result = gateway.verify_callback(
@@ -213,6 +243,7 @@ class PaymentService:
             # A concurrent callback may have committed SUCCESS while the gateway
             # verification was in flight. Treat that as the idempotent outcome.
             if locked_payment.status == Payment.Status.SUCCESS:
+                _quarantine_inconsistent_successful_payment_order(locked_order)
                 return PaymentCallbackOutcome(
                     payment=locked_payment,
                     order=locked_order,
