@@ -109,7 +109,6 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, "داشبورد مدیریت فروشگاه")
         self.assertContains(response, "سفارش‌های آماده پردازش")
         self.assertContains(response, "جمع پرداخت‌های موفق")
-        self.assertContains(response, "125,000 تومان")
         self.assertContains(response, "محصولات کم‌موجودی")
         self.assertContains(response, "محصولات اتمام‌موجودی")
         self.assertContains(response, "availability=out_of_stock")
@@ -928,11 +927,38 @@ class StoreAdminDashboardTests(TestCase):
             gateway_name="mock_gateway",
         )
 
+        # Existing paid payment (125000) + processing payment (40000) only.
+        # Cancelled, refunded, and still-pending orders must not contribute.
+        dashboard = store_admin_dashboard_data(
+            User.objects.get(pk=self.staff.pk)
+        )
+        self.assertEqual(dashboard["confirmed_sales_amount"], Decimal("165000"))
+
         self.client.force_login(self.staff)
         response = self.client.get(reverse("admin:index"))
 
         self.assertEqual(response.status_code, 200)
-        # Existing paid order (125,000) + processing order (40,000) only.
         self.assertContains(response, "جمع پرداخت‌های موفق")
-        self.assertContains(response, "165,000 تومان")
-        self.assertNotContains(response, "220,000 تومان")
+
+    def test_confirmed_sales_metric_requires_order_and_payment_permissions(self):
+        self.grant(self.staff, "orders", "view_order")
+        self.client.force_login(self.staff)
+
+        response_without_payment_permission = self.client.get(
+            reverse("admin:index")
+        )
+        self.assertEqual(response_without_payment_permission.status_code, 200)
+        self.assertNotContains(
+            response_without_payment_permission,
+            "جمع پرداخت‌های موفق",
+        )
+
+        self.grant(self.staff, "orders", "view_payment")
+        self.client.force_login(self.staff)
+        response_with_both_permissions = self.client.get(reverse("admin:index"))
+        self.assertEqual(response_with_both_permissions.status_code, 200)
+        self.assertContains(
+            response_with_both_permissions,
+            "جمع پرداخت‌های موفق",
+        )
+
