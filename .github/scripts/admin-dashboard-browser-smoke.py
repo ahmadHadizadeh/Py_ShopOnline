@@ -219,15 +219,51 @@ def main() -> None:
                     raise AssertionError(
                         f"Product changelist failed: {None if response is None else response.status}"
                     )
-                product_list_dimensions = page.evaluate(
-                    "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
+                product_list_diagnostics = page.evaluate(
+                    """() => {
+                        const viewport = window.innerWidth;
+                        const round = value => Math.round(value * 100) / 100;
+                        const overflowingElements = Array.from(document.querySelectorAll("body *"))
+                            .map(element => {
+                                const rect = element.getBoundingClientRect();
+                                const style = window.getComputedStyle(element);
+                                return {
+                                    tag: element.tagName.toLowerCase(),
+                                    id: element.id || null,
+                                    className: typeof element.className === "string" ? element.className : "",
+                                    text: (element.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 100),
+                                    left: round(rect.left),
+                                    right: round(rect.right),
+                                    width: round(rect.width),
+                                    scrollWidth: element.scrollWidth,
+                                    clientWidth: element.clientWidth,
+                                    overflowX: style.overflowX,
+                                    position: style.position,
+                                };
+                            })
+                            .filter(element =>
+                                element.width > 0 &&
+                                (element.right > viewport + 2 || element.left < -2)
+                            )
+                            .sort((a, b) => b.right - a.right)
+                            .slice(0, 40);
+                        return {
+                            viewport,
+                            document: document.documentElement.scrollWidth,
+                            body: document.body.scrollWidth,
+                            overflowingElements,
+                        };
+                    }"""
                 )
-                report["viewport_checks"]["product_list_mobile"] = product_list_dimensions
-                if product_list_dimensions["document"] > product_list_dimensions["viewport"] + 2:
-                    raise AssertionError(f"Mobile product list has horizontal overflow: {product_list_dimensions}")
+                report["viewport_checks"]["product_list_mobile"] = product_list_diagnostics
                 product_list_screenshot = ARTIFACTS / "admin-products-mobile.png"
                 page.screenshot(path=str(product_list_screenshot), full_page=True)
                 report["screenshots"].append(str(product_list_screenshot.relative_to(ROOT)))
+                if product_list_diagnostics["document"] > product_list_diagnostics["viewport"] + 2:
+                    raise AssertionError(
+                        "Mobile product list has horizontal overflow; diagnostics: "
+                        + json.dumps(product_list_diagnostics, ensure_ascii=False)
+                    )
 
                 response = page.goto(
                     f"{BASE_URL}/admin/catalog/product/add/",
