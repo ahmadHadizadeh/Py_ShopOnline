@@ -1510,6 +1510,9 @@ body.change-list #changelist-filter li.selected a {
 }
 
 body.change-list #changelist .actions {
+    /* Django sets width: 100%; keep custom padding inside that width. */
+    box-sizing: border-box;
+    max-width: 100%;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
