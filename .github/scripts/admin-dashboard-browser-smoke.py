@@ -336,9 +336,11 @@ def main() -> None:
                     "/static/css/admin_dashboard.css",
                     "/static/js/admin_sidebar.js",
                 ):
-                    assert report["important_static_assets"].get(asset_path) == 200, (
-                        f"Admin asset did not load with HTTP 200: {asset_path} "
-                        f"statuses={report['important_static_assets']}"
+                    asset_status = report["important_static_assets"].get(asset_path)
+                    assert asset_status in (200, 304), (
+                        f"Admin asset did not load successfully (expected HTTP 200 or 304): "
+                        f"{asset_path} status={asset_status} "
+                        f"all_statuses={report['important_static_assets']}"
                     )
 
                 if report["page_errors"]:

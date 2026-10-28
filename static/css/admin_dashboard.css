@@ -1347,6 +1347,7 @@ body.change-list #changelist {
 }
 
 body.change-list #changelist .changelist-form-container {
+    box-sizing: border-box;
     gap: 1rem;
     align-items: flex-start;
     padding: 0.85rem;
