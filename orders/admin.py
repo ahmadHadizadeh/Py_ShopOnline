@@ -68,6 +68,7 @@ class PaymentInline(admin.StackedInline):
         return False
 
 
+@admin.action(permissions=["change"])
 def move_paid_orders_to_processing(modeladmin, request, queryset):
     changed = 0
     for order in queryset:
@@ -85,6 +86,7 @@ def move_paid_orders_to_processing(modeladmin, request, queryset):
 move_paid_orders_to_processing.short_description = "انتقال سفارش‌های پرداخت‌شده به در حال پردازش"
 
 
+@admin.action(permissions=["change"])
 def move_processing_orders_to_completed(modeladmin, request, queryset):
     changed = 0
     for order in queryset:
@@ -102,6 +104,7 @@ def move_processing_orders_to_completed(modeladmin, request, queryset):
 move_processing_orders_to_completed.short_description = "تکمیل سفارش‌های در حال پردازش"
 
 
+@admin.action(permissions=["change"])
 def cancel_unpaid_orders(modeladmin, request, queryset):
     changed = 0
     for order in queryset:

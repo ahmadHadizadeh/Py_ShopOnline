@@ -276,6 +276,19 @@ class StoreAdminDashboardTests(TestCase):
         self.assertNotIn("move_processing_orders_to_completed", actions)
         self.assertNotIn("cancel_unpaid_orders", actions)
 
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("admin:orders_order_changelist"),
+            {
+                "action": "move_paid_orders_to_processing",
+                "_selected_action": [str(self.order.pk)],
+                "index": "0",
+            },
+        )
+        self.assertLess(response.status_code, 500)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.PAID)
+
     def test_add_only_permission_shows_only_supported_product_add_link(self):
         self.grant(self.staff, "catalog", "add_product")
         self.client.force_login(self.staff)
