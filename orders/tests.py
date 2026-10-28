@@ -2117,3 +2117,19 @@ class ShippingMethodAdminDeletionSafetyTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(ShippingMethod.objects.filter(pk=unused_method.pk).exists())
+
+    def test_shipping_method_used_by_order_cannot_be_bulk_deleted_from_admin(self):
+        response = self.client.post(
+            reverse("admin:orders_shippingmethod_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(self.method.pk)],
+                "index": "0",
+                "post": "yes",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ShippingMethod.objects.filter(pk=self.method.pk).exists())
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.shipping_method_id, self.method.pk)

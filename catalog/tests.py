@@ -205,3 +205,18 @@ class CategoryAdminDeletionSafetyTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Category.objects.filter(pk=empty_category.pk).exists())
+
+    def test_category_with_products_cannot_be_bulk_deleted_from_admin(self):
+        response = self.client.post(
+            reverse("admin:catalog_category_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(self.category.pk)],
+                "index": "0",
+                "post": "yes",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Category.objects.filter(pk=self.category.pk).exists())
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
