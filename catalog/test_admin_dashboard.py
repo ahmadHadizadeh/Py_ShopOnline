@@ -108,6 +108,8 @@ class StoreAdminDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "داشبورد مدیریت فروشگاه")
         self.assertContains(response, "سفارش‌های آماده پردازش")
+        self.assertContains(response, "جمع پرداخت‌های موفق")
+        self.assertContains(response, "125,000 تومان")
         self.assertContains(response, "محصولات کم‌موجودی")
         self.assertContains(response, "محصولات اتمام‌موجودی")
         self.assertContains(response, "availability=out_of_stock")
@@ -865,3 +867,72 @@ class StoreAdminDashboardTests(TestCase):
         self.assertFalse(wishlist_admin.has_add_permission(request))
         self.assertFalse(wishlist_admin.has_change_permission(request, wishlist))
         self.assertFalse(wishlist_admin.has_delete_permission(request, wishlist))
+
+    def test_confirmed_sales_total_excludes_cancelled_pending_and_refunded_orders(self):
+        self.grant(self.staff, "orders", "view_order")
+        self.grant(self.staff, "orders", "view_payment")
+
+        processing_order = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.PROCESSING,
+            subtotal_amount=Decimal("40000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=processing_order,
+            amount=Decimal("40000"),
+            status=Payment.Status.SUCCESS,
+            gateway_name="mock_gateway",
+        )
+
+        cancelled_order = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.CANCELLED,
+            subtotal_amount=Decimal("90000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=cancelled_order,
+            amount=Decimal("90000"),
+            status=Payment.Status.SUCCESS,
+            gateway_name="mock_gateway",
+        )
+
+        refunded_order = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.COMPLETED,
+            subtotal_amount=Decimal("70000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=refunded_order,
+            amount=Decimal("70000"),
+            status=Payment.Status.REFUNDED,
+            gateway_name="mock_gateway",
+        )
+
+        pending_order = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.PENDING,
+            subtotal_amount=Decimal("60000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=pending_order,
+            amount=Decimal("60000"),
+            status=Payment.Status.SUCCESS,
+            gateway_name="mock_gateway",
+        )
+
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        # Existing paid order (125,000) + processing order (40,000) only.
+        self.assertContains(response, "جمع پرداخت‌های موفق")
+        self.assertContains(response, "165,000 تومان")
+        self.assertNotContains(response, "220,000 تومان")

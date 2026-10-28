@@ -1,5 +1,5 @@
 from django import template
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.urls import reverse
 
 from catalog.models.product import Product
@@ -100,6 +100,7 @@ def store_admin_dashboard_data(user):
         "out_of_stock_products": 0,
         "pending_payments": 0,
         "failed_payments": 0,
+        "confirmed_sales_amount": 0,
         "successful_payments_on_cancelled_orders": 0,
         "recent_orders": [],
         "order_status_breakdown": [],
@@ -155,6 +156,22 @@ def store_admin_dashboard_data(user):
         data["payments_url"] = reverse("admin:orders_payment_changelist")
         data["payment_status_breakdown"] = _status_breakdown(
             payment_queryset, Payment.Status.choices
+        )
+
+    # Show cumulative successful payment value only to staff allowed to view
+    # both orders and payments. Cancelled/pending orders and refunded payments
+    # are excluded; this is a paid-transaction total, not accounting net revenue.
+    if can_view_orders and can_view_payments:
+        data["confirmed_sales_amount"] = (
+            Payment.objects.filter(
+                status=Payment.Status.SUCCESS,
+                order__status__in=(
+                    Order.Status.PAID,
+                    Order.Status.PROCESSING,
+                    Order.Status.COMPLETED,
+                ),
+            ).aggregate(total=Sum("amount"))["total"]
+            or 0
         )
 
     # A successful payment attached to a cancelled order is a reconciliation

@@ -84,6 +84,11 @@
                 {% endif %}
 
                 {% if dashboard.can_view_orders and dashboard.can_view_payments %}
+                    <article class="store-metric-card store-metric-card--payments">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg></span><span class="store-metric-label">جمع پرداخت‌های موفق</span></div>
+                        <strong class="store-metric-value">{{ dashboard.confirmed_sales_amount|intcomma }} تومان</strong>
+                        <span class="store-metric-help">مجموع پرداخت‌های موفق سفارش‌های پرداخت‌شده، در حال پردازش و تکمیل‌شده از ابتدای فعالیت فروشگاه؛ سفارش‌های لغوشده و پرداخت‌های مرجوع‌شده محاسبه نمی‌شوند.</span>
+                    </article>
                     <a class="store-metric-card store-metric-card--payments"
                        href="{{ dashboard.successful_cancelled_payment_url }}">
                         <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg></span><span class="store-metric-label">پرداخت‌های موفق برای سفارش لغوشده</span></div>
