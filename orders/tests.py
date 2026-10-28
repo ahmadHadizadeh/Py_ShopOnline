@@ -729,6 +729,64 @@ class PaymentServiceTests(TestCase):
             subtotal_price=Decimal("50000000"),
         )
 
+    def test_reduce_item_stock_locks_multiple_products_in_primary_key_order(self):
+        from unittest.mock import patch
+
+        self.order.items.all().delete()
+        second_product = Product.objects.create(
+            category=self.category,
+            name="Payment Service Second Product",
+            slug="payment-service-second-product",
+            price=Decimal("100000"),
+            stock=10,
+            is_active=True,
+            is_available_status=True,
+        )
+        # Deliberately create order items in reverse product-PK order.
+        for product in (second_product, self.product):
+            OrderItem.objects.create(
+                order=self.order,
+                product=product,
+                variant_id=None,
+                product_name=product.name,
+                variant_name="",
+                sku=getattr(product, "sku", None),
+                quantity=1,
+                unit_price=Decimal("100000"),
+                subtotal_price=Decimal("100000"),
+            )
+
+        locked_product_ids = []
+        manager = Product.objects
+        original_select_for_update = manager.select_for_update
+
+        class TrackingQuerySet:
+            def __init__(self, queryset):
+                self.queryset = queryset
+
+            def get(self, *args, **kwargs):
+                locked_product_ids.append(kwargs["pk"])
+                return self.queryset.get(*args, **kwargs)
+
+        def track_product_locks(*args, **kwargs):
+            return TrackingQuerySet(original_select_for_update(*args, **kwargs))
+
+        with patch.object(
+            manager,
+            "select_for_update",
+            side_effect=track_product_locks,
+        ):
+            self.order.reduce_item_stock()
+
+        self.assertEqual(
+            locked_product_ids,
+            sorted([self.product.pk, second_product.pk]),
+        )
+        self.product.refresh_from_db()
+        second_product.refresh_from_db()
+        self.assertEqual(self.product.stock, 9)
+        self.assertEqual(second_product.stock, 9)
+
     def test_service_uses_registered_mock_gateway(self):
         payment, order, initiation = PaymentService.initiate(
             user=self.user,

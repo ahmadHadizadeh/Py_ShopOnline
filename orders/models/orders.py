@@ -182,9 +182,11 @@ class Order(models.Model):
                 required_quantities.get(item.product_id, 0) + item.quantity
             )
 
-        # همه Productها را قبل از کوچک‌ترین تغییر lock و validate می‌کنیم.
+        # همه Productها را در ترتیب ثابت شناسه قفل و validate می‌کنیم.
+        # این ترتیب بین سفارش‌های هم‌پوشان از inversion و deadlock جلوگیری می‌کند.
         locked_products = {}
-        for product_id, required_quantity in required_quantities.items():
+        for product_id in sorted(required_quantities):
+            required_quantity = required_quantities[product_id]
             sample_item = next(
                 item for item in order_items if item.product_id == product_id
             )
@@ -200,7 +202,8 @@ class Order(models.Model):
                 )
 
         # فقط پس از اعتبارسنجی مجموع موجودی، برای هر Product یک‌بار کاهش انجام می‌شود.
-        for product_id, required_quantity in required_quantities.items():
+        for product_id in sorted(required_quantities):
+            required_quantity = required_quantities[product_id]
             product = locked_products[product_id]
             product.stock -= required_quantity
 
