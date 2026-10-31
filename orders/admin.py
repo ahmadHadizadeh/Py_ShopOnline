@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib import messages
 from django.contrib.humanize.templatetags.humanize import intcomma
+from django.db import transaction
 from django.utils.html import format_html
 
 from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
@@ -68,19 +69,40 @@ class PaymentInline(admin.StackedInline):
         return False
 
 
-@admin.action(permissions=["change"])
-def move_paid_orders_to_processing(modeladmin, request, queryset):
+def _transition_orders_with_audit_log(modeladmin, request, queryset, new_status):
     changed = 0
-    for order in queryset:
+    for selected_order in queryset:
         try:
-            OrderService.transition_status(
-                order_id=order.pk,
-                new_status=Order.Status.PROCESSING,
-            )
+            # Keep the state transition and its audit record in one transaction.
+            with transaction.atomic():
+                previous_status = selected_order.get_status_display()
+                updated_order = OrderService.transition_status(
+                    order_id=selected_order.pk,
+                    new_status=new_status,
+                )
+                modeladmin.log_change(
+                    request,
+                    updated_order,
+                    (
+                        f"وضعیت سفارش از «{previous_status}» به "
+                        f"«{updated_order.get_status_display()}» "
+                        "از طریق عملیات گروهی تغییر کرد."
+                    ),
+                )
             changed += 1
         except Exception as exc:
             modeladmin.message_user(request, str(exc), level=messages.ERROR)
-    modeladmin.message_user(request, f"{changed} سفارش به وضعیت در حال پردازش منتقل شد.")
+    modeladmin.message_user(request, f"{changed} سفارش به وضعیت جدید منتقل شد.")
+
+
+@admin.action(permissions=["change"])
+def move_paid_orders_to_processing(modeladmin, request, queryset):
+    _transition_orders_with_audit_log(
+        modeladmin,
+        request,
+        queryset,
+        Order.Status.PROCESSING,
+    )
 
 
 move_paid_orders_to_processing.short_description = "انتقال سفارش‌های پرداخت‌شده به در حال پردازش"
@@ -88,17 +110,12 @@ move_paid_orders_to_processing.short_description = "انتقال سفارش‌ه
 
 @admin.action(permissions=["change"])
 def move_processing_orders_to_completed(modeladmin, request, queryset):
-    changed = 0
-    for order in queryset:
-        try:
-            OrderService.transition_status(
-                order_id=order.pk,
-                new_status=Order.Status.COMPLETED,
-            )
-            changed += 1
-        except Exception as exc:
-            modeladmin.message_user(request, str(exc), level=messages.ERROR)
-    modeladmin.message_user(request, f"{changed} سفارش به وضعیت تکمیل‌شده منتقل شد.")
+    _transition_orders_with_audit_log(
+        modeladmin,
+        request,
+        queryset,
+        Order.Status.COMPLETED,
+    )
 
 
 move_processing_orders_to_completed.short_description = "تکمیل سفارش‌های در حال پردازش"
@@ -106,21 +123,15 @@ move_processing_orders_to_completed.short_description = "تکمیل سفارش�
 
 @admin.action(permissions=["change"])
 def cancel_unpaid_orders(modeladmin, request, queryset):
-    changed = 0
-    for order in queryset:
-        try:
-            OrderService.transition_status(
-                order_id=order.pk,
-                new_status=Order.Status.CANCELLED,
-            )
-            changed += 1
-        except Exception as exc:
-            modeladmin.message_user(request, str(exc), level=messages.ERROR)
-    modeladmin.message_user(request, f"{changed} سفارش لغو شد.")
+    _transition_orders_with_audit_log(
+        modeladmin,
+        request,
+        queryset,
+        Order.Status.CANCELLED,
+    )
 
 
 cancel_unpaid_orders.short_description = "لغو سفارش‌های پرداخت‌نشده"
-
 
 class StockReductionFilter(admin.SimpleListFilter):
     title = "وضعیت کاهش موجودی"
