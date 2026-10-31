@@ -42,6 +42,7 @@ class StoreAdminDashboardTests(TestCase):
         self.order = Order.objects.create(
             user=self.staff,
             status=Order.Status.PAID,
+            stock_reduced=True,
             subtotal_amount=Decimal("125000"),
             discount_amount=Decimal("0"),
             shipping_amount=Decimal("0"),
@@ -117,6 +118,89 @@ class StoreAdminDashboardTests(TestCase):
         self.assertContains(response, "status__exact=failed")
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "availability=low_stock")
+        dashboard = store_admin_dashboard_data(self.staff)
+        self.assertEqual(dashboard["orders_to_process"], 1)
+        self.assertEqual(dashboard["orders_requiring_reconciliation"], 0)
+
+    def test_dashboard_counts_only_fully_reconciled_paid_orders_as_ready(self):
+        self.grant(self.staff, "orders", "view_order")
+        self.grant(self.staff, "orders", "view_payment")
+
+        stock_mismatch = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.PAID,
+            stock_reduced=False,
+            subtotal_amount=Decimal("30000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=stock_mismatch,
+            amount=stock_mismatch.final_amount,
+            status=Payment.Status.SUCCESS,
+            gateway_name="zarinpal",
+        )
+
+        non_successful_statuses = (
+            Payment.Status.PENDING,
+            Payment.Status.FAILED,
+            Payment.Status.REFUNDED,
+            Payment.Status.CANCELLED,
+        )
+        for index, payment_status in enumerate(non_successful_statuses, start=1):
+            mismatched_order = Order.objects.create(
+                user=self.staff,
+                status=Order.Status.PAID,
+                stock_reduced=True,
+                subtotal_amount=Decimal("10000") * index,
+                discount_amount=Decimal("0"),
+                shipping_amount=Decimal("0"),
+            )
+            Payment.objects.create(
+                order=mismatched_order,
+                amount=mismatched_order.final_amount,
+                status=payment_status,
+                gateway_name="zarinpal",
+            )
+
+        Order.objects.create(
+            user=self.staff,
+            status=Order.Status.PAID,
+            stock_reduced=True,
+            subtotal_amount=Decimal("50000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+
+        dashboard = store_admin_dashboard_data(self.staff)
+        self.assertEqual(dashboard["orders_to_process"], 1)
+        self.assertEqual(dashboard["orders_requiring_reconciliation"], 6)
+
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("admin:index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "سفارش‌های پرداخت‌شده نیازمند تطبیق")
+
+    def test_order_readiness_metrics_are_hidden_without_payment_permission(self):
+        self.grant(self.staff, "orders", "view_order")
+        self.client.force_login(self.staff)
+
+        dashboard_without_payment_access = store_admin_dashboard_data(self.staff)
+        self.assertFalse(dashboard_without_payment_access["can_view_order_readiness"])
+        self.assertEqual(dashboard_without_payment_access["orders_to_process"], 0)
+        self.assertEqual(
+            dashboard_without_payment_access["orders_requiring_reconciliation"],
+            0,
+        )
+
+        response_without_payment_access = self.client.get(reverse("admin:index"))
+        self.assertEqual(response_without_payment_access.status_code, 200)
+        self.assertNotContains(response_without_payment_access, "سفارش‌های آماده پردازش")
+        self.assertNotContains(response_without_payment_access, "سفارش‌های پرداخت‌شده نیازمند تطبیق")
+
+        self.grant(self.staff, "orders", "view_payment")
+        response_with_payment_access = self.client.get(reverse("admin:index"))
+        self.assertContains(response_with_payment_access, "سفارش‌های آماده پردازش")
 
     def test_dashboard_shows_total_order_count_and_all_orders_link(self):
         self.grant(self.staff, "orders", "view_order")
@@ -257,7 +341,7 @@ class StoreAdminDashboardTests(TestCase):
         dashboard_response = self.client.get(reverse("admin:index"))
 
         self.assertEqual(dashboard_response.status_code, 200)
-        self.assertContains(dashboard_response, "سفارش‌های آماده پردازش")
+        self.assertNotContains(dashboard_response, "سفارش‌های آماده پردازش")
         self.assertContains(dashboard_response, self.order.order_number)
         self.assertNotContains(dashboard_response, "پرداخت‌های در انتظار")
 

@@ -32,7 +32,7 @@ class OrderService:
             "status", flat=True
         ).first()
         if (
-            new_status == Order.Status.PROCESSING
+            new_status in {Order.Status.PROCESSING, Order.Status.COMPLETED}
             and payment_status != Payment.Status.SUCCESS
         ):
             raise ValidationError(

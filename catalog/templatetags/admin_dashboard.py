@@ -1,5 +1,5 @@
 from django import template
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.urls import reverse
 
 from catalog.models.product import Product
@@ -92,8 +92,10 @@ def store_admin_dashboard_data(user):
         "can_view_orders": can_view_orders,
         "can_view_products": can_view_products,
         "can_view_payments": can_view_payments,
+        "can_view_order_readiness": can_view_orders and can_view_payments,
         "total_orders": 0,
         "orders_to_process": 0,
+        "orders_requiring_reconciliation": 0,
         "orders_processing": 0,
         "active_products": 0,
         "low_stock_products": 0,
@@ -115,9 +117,6 @@ def store_admin_dashboard_data(user):
     if can_view_orders:
         order_queryset = Order.objects.all()
         data["total_orders"] = order_queryset.count()
-        data["orders_to_process"] = order_queryset.filter(
-            status=Order.Status.PAID
-        ).count()
         data["orders_processing"] = order_queryset.filter(
             status=Order.Status.PROCESSING
         ).count()
@@ -128,6 +127,20 @@ def store_admin_dashboard_data(user):
         data["order_status_breakdown"] = _status_breakdown(
             order_queryset, Order.Status.choices
         )
+
+    # Readiness is a payment-sensitive operational metric. Do not expose it
+    # unless the staff member can view both orders and payments.
+    if data["can_view_order_readiness"]:
+        paid_orders = order_queryset.filter(status=Order.Status.PAID)
+        data["orders_to_process"] = paid_orders.filter(
+            stock_reduced=True,
+            payment__status=Payment.Status.SUCCESS,
+        ).count()
+        data["orders_requiring_reconciliation"] = paid_orders.filter(
+            Q(stock_reduced=False)
+            | Q(payment__isnull=True)
+            | ~Q(payment__status=Payment.Status.SUCCESS)
+        ).count()
 
     if can_view_products:
         data["active_products"] = Product.objects.filter(is_active=True).count()
@@ -212,13 +225,27 @@ def store_admin_dashboard_data(user):
             }
         )
 
-    if can_view_orders and data["orders_to_process"]:
+    if data["can_view_order_readiness"] and data["orders_to_process"]:
         data["operational_alerts"].append(
             {
                 "tone": "warning",
                 "title": "سفارش‌های آماده پردازش",
-                "description": "پرداخت موفق بوده و سفارش منتظر شروع آماده‌سازی است.",
+                "description": "پرداخت موفق تأیید شده و کاهش موجودی ثبت شده است؛ سفارش منتظر شروع آماده‌سازی است.",
                 "count": data["orders_to_process"],
+                "url": f'{data["orders_url"]}?status__exact=paid',
+            }
+        )
+
+    if (
+        data["can_view_order_readiness"]
+        and data["orders_requiring_reconciliation"]
+    ):
+        data["operational_alerts"].append(
+            {
+                "tone": "danger",
+                "title": "سفارش‌های پرداخت‌شده نیازمند تطبیق",
+                "description": "وضعیت پرداخت و ثبت کاهش موجودی سفارش با هم سازگار نیست؛ پیش از پردازش بررسی کنید.",
+                "count": data["orders_requiring_reconciliation"],
                 "url": f'{data["orders_url"]}?status__exact=paid',
             }
         )

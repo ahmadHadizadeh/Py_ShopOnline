@@ -1757,6 +1757,44 @@ class OrderStatusTransitionTests(TestCase):
         self.assertEqual(order.status, Order.Status.COMPLETED)
         self.assertIsNotNone(order.completed_at)
 
+    def test_processing_order_with_non_successful_payment_cannot_be_completed(self):
+        order = self.create_order(Order.Status.PROCESSING)
+        payment = Payment.objects.get(order=order)
+
+        for payment_status in (
+            Payment.Status.PENDING,
+            Payment.Status.FAILED,
+            Payment.Status.REFUNDED,
+            Payment.Status.CANCELLED,
+        ):
+            with self.subTest(payment_status=payment_status):
+                payment.status = payment_status
+                payment.save(update_fields=["status", "updated"])
+
+                with self.assertRaises(ValidationError):
+                    OrderService.transition_status(
+                        order_id=order.pk,
+                        new_status=Order.Status.COMPLETED,
+                    )
+
+                order.refresh_from_db()
+                self.assertEqual(order.status, Order.Status.PROCESSING)
+                self.assertIsNone(order.completed_at)
+
+    def test_processing_order_without_payment_cannot_be_completed(self):
+        order = self.create_order(Order.Status.PROCESSING)
+        Payment.objects.filter(order=order).delete()
+
+        with self.assertRaises(ValidationError):
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.COMPLETED,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PROCESSING)
+        self.assertIsNone(order.completed_at)
+
     def test_unpaid_order_with_stock_reduced_flag_cannot_be_cancelled_without_reconciliation(self):
         order = self.create_order(Order.Status.PENDING)
         Order.objects.filter(pk=order.pk).update(stock_reduced=True)

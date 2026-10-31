@@ -33,12 +33,14 @@
                         <strong class="store-metric-value">{{ dashboard.total_orders|intcomma }}</strong>
                         <span class="store-metric-help">مشاهده همه سفارش‌های ثبت‌شده در فروشگاه</span>
                     </a>
-                    <a class="store-metric-card store-metric-card--orders"
-                       href="{{ dashboard.orders_url }}?status__exact=paid">
-                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M12 17v4"/></svg></span><span class="store-metric-label">سفارش‌های آماده پردازش</span></div>
-                        <strong class="store-metric-value">{{ dashboard.orders_to_process|intcomma }}</strong>
-                        <span class="store-metric-help">پرداخت شده و منتظر شروع آماده‌سازی</span>
-                    </a>
+                    {% if dashboard.can_view_order_readiness %}
+                        <a class="store-metric-card store-metric-card--orders"
+                           href="{{ dashboard.orders_url }}?status__exact=paid">
+                            <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M12 17v4"/></svg></span><span class="store-metric-label">سفارش‌های آماده پردازش</span></div>
+                            <strong class="store-metric-value">{{ dashboard.orders_to_process|intcomma }}</strong>
+                            <span class="store-metric-help">پرداخت موفق تأیید شده و کاهش موجودی ثبت شده است</span>
+                        </a>
+                    {% endif %}
                     <a class="store-metric-card store-metric-card--processing"
                        href="{{ dashboard.orders_url }}?status__exact=processing">
                         <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span><span class="store-metric-label">سفارش‌های در حال پردازش</span></div>
