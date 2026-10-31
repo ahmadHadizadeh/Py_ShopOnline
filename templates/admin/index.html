@@ -277,7 +277,11 @@
                                     {% if model.admin_url %}
                                         <a href="{{ model.admin_url }}">{{ model.name }}</a>
                                     {% elif model.add_url %}
-                                        <a href="{{ model.add_url }}">{{ model.name }}</a>
+                                        {% if app.app_label == "auth" and model.object_name == "User" %}
+                                            <span>{{ model.name }}</span>
+                                        {% else %}
+                                            <a href="{{ model.add_url }}">{{ model.name }}</a>
+                                        {% endif %}
                                     {% else %}
                                         <span>{{ model.name }}</span>
                                     {% endif %}
