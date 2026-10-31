@@ -2815,3 +2815,95 @@ class ShippingMethodAdminDeletionSafetyTests(TestCase):
         self.assertTrue(ShippingMethod.objects.filter(pk=self.method.pk).exists())
         self.order.refresh_from_db()
         self.assertEqual(self.order.shipping_method_id, self.method.pk)
+
+    
+    def test_shipping_method_used_by_order_keeps_its_definition_readonly(self):
+        shipping_admin = admin.site._registry[ShippingMethod]
+        historical_fields = {
+            "name",
+            "description",
+            "cost",
+            "free_shipping_threshold",
+            "estimated_delivery_days",
+        }
+        readonly_fields = set(
+            shipping_admin.get_readonly_fields(None, self.method)
+        )
+
+        self.assertTrue(historical_fields.issubset(readonly_fields))
+        self.assertNotIn("is_active", readonly_fields)
+        self.assertEqual(shipping_admin.list_editable, ("is_active",))
+
+        response = self.client.post(
+            reverse("admin:orders_shippingmethod_change", args=[self.method.pk]),
+            {
+                "name": "Renamed Historical Method",
+                "description": "Changed after order creation",
+                "cost": "99000",
+                "free_shipping_threshold": "250000",
+                "estimated_delivery_days": "9",
+                "is_active": "on",
+                "_save": "ذخیره",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.method.refresh_from_db()
+        self.assertEqual(self.method.name, "Historical Shipping Method")
+        self.assertEqual(self.method.description, "Method preserved for historic orders")
+        self.assertEqual(self.method.cost, Decimal("50000"))
+        self.assertIsNone(self.method.free_shipping_threshold)
+        self.assertEqual(self.method.estimated_delivery_days, 3)
+
+        detail_response = self.client.get(
+            reverse(
+                "accounts:dashboard_order_detail",
+                args=[self.order.order_number],
+            )
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Historical Shipping Method")
+        self.assertNotContains(detail_response, "Renamed Historical Method")
+
+    def test_unused_shipping_method_definition_remains_editable(self):
+        unused_method = ShippingMethod.objects.create(
+            name="Unused Editable Method",
+            description="Before update",
+            cost=Decimal("30000"),
+            free_shipping_threshold=None,
+            estimated_delivery_days=2,
+            is_active=True,
+        )
+        shipping_admin = admin.site._registry[ShippingMethod]
+        readonly_fields = set(
+            shipping_admin.get_readonly_fields(None, unused_method)
+        )
+        historical_fields = {
+            "name",
+            "description",
+            "cost",
+            "free_shipping_threshold",
+            "estimated_delivery_days",
+        }
+        self.assertTrue(historical_fields.isdisjoint(readonly_fields))
+
+        response = self.client.post(
+            reverse("admin:orders_shippingmethod_change", args=[unused_method.pk]),
+            {
+                "name": "Updated Editable Method",
+                "description": "After update",
+                "cost": "45000",
+                "free_shipping_threshold": "300000",
+                "estimated_delivery_days": "5",
+                "is_active": "on",
+                "_save": "ذخیره",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        unused_method.refresh_from_db()
+        self.assertEqual(unused_method.name, "Updated Editable Method")
+        self.assertEqual(unused_method.description, "After update")
+        self.assertEqual(unused_method.cost, Decimal("45000"))
+        self.assertEqual(unused_method.free_shipping_threshold, Decimal("300000"))
+        self.assertEqual(unused_method.estimated_delivery_days, 5)

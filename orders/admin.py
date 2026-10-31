@@ -509,6 +509,20 @@ class ShippingMethodAdmin(admin.ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.orders.exists():
+            fields.extend(
+                (
+                    "name",
+                    "description",
+                    "cost",
+                    "free_shipping_threshold",
+                    "estimated_delivery_days",
+                )
+            )
+        return tuple(fields)
+
     list_per_page = 25
     date_hierarchy = "updated"
     list_display = (
@@ -521,7 +535,7 @@ class ShippingMethodAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_active", "estimated_delivery_days")
     search_fields = ("name", "description")
-    list_editable = ("is_active", "estimated_delivery_days")
+    list_editable = ("is_active",)
     ordering = ("cost",)
     readonly_fields = ("created", "updated")
     fieldsets = (
@@ -530,8 +544,8 @@ class ShippingMethodAdmin(admin.ModelAdmin):
             {
                 "fields": ("name", "description", "is_active"),
                 "description": (
-                    "روش ارسالِ استفاده‌شده در سفارش‌های ثبت‌شده قابل حذف نیست. "
-                    "برای متوقف‌کردن آن، وضعیت فعال را خاموش کنید."
+                    "پس از استفاده در سفارش ثبت‌شده، مشخصات این روش ارسال قفل می‌شود. "
+                    "برای نرخ یا شرایط جدید، روش ارسال تازه‌ای بسازید و این مورد را غیرفعال کنید."
                 ),
             },
         ),
