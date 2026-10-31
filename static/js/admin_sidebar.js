@@ -41,7 +41,11 @@
                     || captionMatches
                     || normalize(row.textContent).includes(query);
 
+                // Django's built-in nav_sidebar.js also filters this input
+                // and writes inline display styles before this listener runs.
+                // Synchronize both mechanisms so normalization/group matches win.
                 row.hidden = !matches;
+                row.style.display = matches ? "" : "none";
                 hasVisibleRows = hasVisibleRows || matches;
             });
 
@@ -53,7 +57,11 @@
         input.classList.toggle("no-results", Boolean(query && !hasVisibleItems));
     };
 
+    // Register after Django's built-in listeners and re-apply normalized
+    // visibility for every event type used by its quick filter.
+    input.addEventListener("change", filterMenu);
     input.addEventListener("input", filterMenu);
+    input.addEventListener("keyup", filterMenu);
     input.addEventListener("search", filterMenu);
     filterMenu();
 })();

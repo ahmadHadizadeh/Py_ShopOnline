@@ -188,9 +188,27 @@ def main() -> None:
                 report["screenshots"].append(str(desktop_screenshot.relative_to(ROOT)))
 
                 search = page.locator("#nav-filter")
-                search.fill("سفارش")
                 order_group = page.locator(".store-nav-module").filter(has_text="فروش و سفارش‌ها").first
                 product_group = page.locator(".store-nav-module").filter(has_text="محصولات و موجودی").first
+                customer_group = page.locator(".store-nav-module").filter(has_text="مشتریان و کاربران").first
+
+                # Searching a group caption should reveal every link in that group.
+                search.fill("فروش و سفارش‌ها")
+                assert order_group.is_visible(), "Group-caption search hid the matching order group"
+                assert order_group.locator("a").filter(has_text="پرداخت‌ها و تراکنش‌ها").is_visible(), (
+                    "Group-caption search did not reveal all links in the matching group"
+                )
+                assert not product_group.is_visible(), "Group-caption search did not hide unrelated product group"
+
+                # Arabic Yeh must normalize to Persian Yeh despite Django's native quick filter.
+                search.fill("مشتري")
+                assert customer_group.is_visible(), "Arabic Yeh was not normalized in Persian sidebar search"
+                assert customer_group.locator("a").filter(has_text="پروفایل و تأیید مشتریان").is_visible(), (
+                    "Normalized customer search did not reveal the matching link"
+                )
+
+                # Retain a normal Persian word-search regression as well.
+                search.fill("سفارش")
                 assert order_group.is_visible(), "Persian sidebar search hid the matching order group"
                 assert not product_group.is_visible(), "Persian sidebar search did not hide unrelated product group"
 
