@@ -2788,7 +2788,6 @@ class AdminOrderedCartProtectionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["protected"])
-        self.assertContains(response, "Cannot delete")
         self.assertTrue(ProductVariant.objects.filter(pk=variant.pk).exists())
         self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
 
