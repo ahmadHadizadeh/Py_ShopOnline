@@ -999,6 +999,28 @@ class StoreAdminDashboardTests(TestCase):
         self.assertEqual(add_response.status_code, 200)
 
 
+    def test_variant_add_link_is_hidden_when_product_autocomplete_is_not_authorized(self):
+        self.grant(self.staff, "catalog", "add_productvariant")
+        self.client.force_login(self.staff)
+
+        dashboard_response = self.client.get(reverse("admin:index"))
+        self.assertEqual(dashboard_response.status_code, 200)
+        self.assertNotContains(
+            dashboard_response,
+            f'href="{reverse("admin:catalog_productvariant_add")}"',
+        )
+
+        autocomplete_response = self.client.get(
+            reverse("admin:autocomplete"),
+            {
+                "app_label": "catalog",
+                "model_name": "productvariant",
+                "field_name": "product",
+                "term": "Dashboard",
+            },
+        )
+        self.assertEqual(autocomplete_response.status_code, 403)
+
     def test_wishlist_admin_is_permission_gated_searchable_and_read_only(self):
         wishlist = Wishlist.objects.create(user=self.staff)
         wishlist.products.add(self.product)

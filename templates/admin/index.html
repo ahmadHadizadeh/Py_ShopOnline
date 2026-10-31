@@ -279,6 +279,8 @@
                                     {% elif model.add_url %}
                                         {% if app.app_label == "auth" and model.object_name == "User" %}
                                             <span>{{ model.name }}</span>
+                                        {% elif app.app_label == "catalog" and model.object_name == "ProductVariant" and not perms.catalog.view_product and not perms.catalog.change_product %}
+                                            <span>{{ model.name }}</span>
                                         {% else %}
                                             <a href="{{ model.add_url }}">{{ model.name }}</a>
                                         {% endif %}
