@@ -1999,6 +1999,58 @@ class OrderStatusTransitionTests(TestCase):
 
 
 class AdminOrderWorkflowConfigurationTests(TestCase):
+    def test_order_admin_exposes_persian_stock_reduction_filter_and_badge(self):
+        admin_user = User.objects.create_superuser(
+            username="stock-reduction-admin",
+            email="stock-reduction-admin@example.test",
+            password="TestPassword123!",
+        )
+        recorded_order = Order.objects.create(
+            user=admin_user,
+            status=Order.Status.PAID,
+            stock_reduced=True,
+            subtotal_amount=Decimal("50000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        pending_order = Order.objects.create(
+            user=admin_user,
+            status=Order.Status.PENDING,
+            stock_reduced=False,
+            subtotal_amount=Decimal("40000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        self.client.force_login(admin_user)
+
+        list_response = self.client.get(reverse("admin:orders_order_changelist"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "وضعیت کاهش موجودی")
+        self.assertContains(list_response, "ثبت شده")
+        self.assertContains(list_response, "ثبت نشده")
+        self.assertNotContains(list_response, "stock reduced")
+
+        recorded_filter = self.client.get(
+            reverse("admin:orders_order_changelist"),
+            {"stock_reduced": "yes"},
+        )
+        self.assertEqual(recorded_filter.status_code, 200)
+        self.assertContains(recorded_filter, recorded_order.order_number)
+        self.assertNotContains(recorded_filter, pending_order.order_number)
+
+        form_response = self.client.get(
+            reverse("admin:orders_order_change", args=[pending_order.pk])
+        )
+        self.assertEqual(form_response.status_code, 200)
+        self.assertContains(form_response, "وضعیت کاهش موجودی")
+        self.assertContains(form_response, "ثبت نشده")
+        self.assertNotContains(form_response, "Stock reduced")
+
+        order_admin = admin.site._registry[Order]
+        self.assertIn("stock_reduced", order_admin.readonly_fields)
+        self.assertIn("stock_reduced_display", order_admin.readonly_fields)
+        self.assertIn("stock_reduced_display", order_admin.list_display)
+
     def test_order_admin_exposes_only_service_backed_workflow_actions(self):
         order_admin = admin.site._registry[Order]
         action_names = {action.__name__ for action in order_admin.actions}

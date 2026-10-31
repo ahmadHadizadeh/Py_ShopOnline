@@ -122,6 +122,24 @@ def cancel_unpaid_orders(modeladmin, request, queryset):
 cancel_unpaid_orders.short_description = "لغو سفارش‌های پرداخت‌نشده"
 
 
+class StockReductionFilter(admin.SimpleListFilter):
+    title = "وضعیت کاهش موجودی"
+    parameter_name = "stock_reduced"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "کاهش موجودی ثبت شده"),
+            ("no", "کاهش موجودی ثبت نشده"),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(stock_reduced=True)
+        if self.value() == "no":
+            return queryset.filter(stock_reduced=False)
+        return queryset
+
+
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     list_per_page = 25
@@ -134,12 +152,12 @@ class OrderAdmin(admin.ModelAdmin):
         "get_status_display_value",
         "get_final_amount_display",
         "get_payment_status_display",
-        "stock_reduced",
+        "stock_reduced_display",
         "created",
     )
     list_filter = (
         "status",
-        "stock_reduced",
+        StockReductionFilter,
         "shipping_method",
         "payment__status",
         "created",
@@ -170,6 +188,7 @@ class OrderAdmin(admin.ModelAdmin):
         "completed_at",
         "customer_note",
         "stock_reduced",
+        "stock_reduced_display",
         "created",
         "updated",
     )
@@ -183,7 +202,7 @@ class OrderAdmin(admin.ModelAdmin):
                     "cart",
                     "shipping_method",
                     "status",
-                    "stock_reduced",
+                    "stock_reduced_display",
                 )
             },
         ),
@@ -321,6 +340,18 @@ class OrderAdmin(admin.ModelAdmin):
             '<span class="store-status-pill store-status-pill--payment-{}">{}</span>',
             payment.status,
             payment.get_status_display(),
+        )
+
+    @admin.display(description="وضعیت کاهش موجودی", ordering="stock_reduced")
+    def stock_reduced_display(self, obj):
+        if obj.stock_reduced:
+            tone, label = "success", "ثبت شده"
+        else:
+            tone, label = "warning", "ثبت نشده"
+        return format_html(
+            '<span class="store-status-pill store-status-pill--{}">{}</span>',
+            tone,
+            label,
         )
 
     def has_add_permission(self, request):
