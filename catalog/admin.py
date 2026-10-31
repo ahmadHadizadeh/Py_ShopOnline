@@ -68,10 +68,36 @@ class ProductAdmin(admin.ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        field_labels = {
+            "category": "دسته‌بندی",
+            "image": "تصویر اصلی محصول",
+            "slug": "نشانی محصول",
+        }
+        field_help_texts = {
+            "slug": "نشانی یکتای محصول در فروشگاه؛ این مقدار به‌صورت خودکار از نام محصول پیشنهاد می‌شود.",
+            "related_products": (
+                "برای انتخاب چند محصول، هنگام انتخاب موارد کلید Ctrl در ویندوز "
+                "یا Command در macOS را نگه دارید."
+            ),
+        }
+        for field_name, label in field_labels.items():
+            if field_name in form.base_fields:
+                form.base_fields[field_name].label = label
+        for field_name, help_text in field_help_texts.items():
+            if field_name in form.base_fields:
+                form.base_fields[field_name].help_text = help_text
+        return form
+
+    @admin.display(description="دسته‌بندی", ordering="category__name")
+    def category_display(self, obj):
+        return obj.category.name
+
     # Keep common stock/pricing controls visible in the list; availability itself is derived.
     list_display = (
         "name",
-        "category",
+        "category_display",
         "brand",
         "price",
         "stock",

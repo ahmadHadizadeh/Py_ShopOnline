@@ -159,6 +159,43 @@ class ProductAdminUsabilityTests(TestCase):
             },
         )
 
+    def test_product_admin_labels_and_help_text_are_persian_for_sellers(self):
+        admin_user = User.objects.create_superuser(
+            username="product-admin-labels",
+            email="product-admin-labels@example.test",
+            password="TestPassword123!",
+        )
+        category = Category.objects.create(
+            name="Seller Product Category",
+            slug="seller-product-category",
+        )
+        product = Product.objects.create(
+            category=category,
+            name="Seller Product",
+            slug="seller-product",
+            price=Decimal("100000"),
+            stock=2,
+        )
+        self.client.force_login(admin_user)
+
+        list_response = self.client.get(reverse("admin:catalog_product_changelist"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "دسته‌بندی")
+        self.assertContains(list_response, category.name)
+        self.assertNotContains(list_response, ">CATEGORY<")
+
+        form_response = self.client.get(
+            reverse("admin:catalog_product_change", args=[product.pk])
+        )
+        self.assertEqual(form_response.status_code, 200)
+        self.assertContains(form_response, "دسته‌بندی")
+        self.assertContains(form_response, "تصویر اصلی محصول")
+        self.assertContains(form_response, "نشانی محصول")
+        self.assertContains(form_response, "برای انتخاب چند محصول")
+        self.assertNotContains(form_response, ">Category<")
+        self.assertNotContains(form_response, ">Image<")
+        self.assertNotContains(form_response, ">Slug<")
+
 
 
 class CategoryAdminDeletionSafetyTests(TestCase):

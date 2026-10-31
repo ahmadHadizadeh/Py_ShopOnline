@@ -51,6 +51,10 @@ jobs:
             artifacts/admin-dashboard-mobile.png
             artifacts/admin-products-mobile.png
             artifacts/admin-product-form-mobile.png
+            artifacts/admin-orders-mobile.png
+            artifacts/admin-order-form-mobile.png
+            artifacts/admin-payments-mobile.png
+            artifacts/admin-payment-form-mobile.png
             artifacts/browser-smoke-report.json
           if-no-files-found: warn
           retention-days: 5
