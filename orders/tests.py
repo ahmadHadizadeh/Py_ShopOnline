@@ -2786,7 +2786,9 @@ class AdminOrderedCartProtectionTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["protected"])
+        self.assertContains(response, "Cannot delete")
         self.assertTrue(ProductVariant.objects.filter(pk=variant.pk).exists())
         self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
 
@@ -2902,6 +2904,10 @@ class AdminOrderedCartProtectionTests(TestCase):
                 "user": other_user.pk,
                 "session_key": "cart-admin-forged-session",
                 "status": Cart.STATUS_ORDERED,
+                "items-TOTAL_FORMS": "0",
+                "items-INITIAL_FORMS": "0",
+                "items-MIN_NUM_FORMS": "0",
+                "items-MAX_NUM_FORMS": "1000",
                 "_save": "ذخیره",
             },
         )
@@ -2938,8 +2944,12 @@ class AdminOrderedCartProtectionTests(TestCase):
             is_active=True,
             is_available_status=True,
         )
+        other_cart_user = User.objects.create_user(
+            username="cart-item-forged-cart-user",
+            password="Password123!",
+        )
         other_cart = Cart.objects.create(
-            user=self.admin_user,
+            user=other_cart_user,
             status=Cart.STATUS_ACTIVE,
         )
         forged_variant = ProductVariant.objects.create(
