@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.db import connection
 from django.db.models.signals import post_save
-from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from accounts.models.profile import Profile
 from accounts.signals import create_user_profile
