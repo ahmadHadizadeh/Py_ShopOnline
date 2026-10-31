@@ -1633,6 +1633,18 @@ class AdminOperationalTests(TestCase):
         self.assertIn("status", payment_admin.readonly_fields)
         self.assertIn("transaction_code", payment_admin.readonly_fields)
 
+        request = RequestFactory().get(reverse("admin:orders_order_changelist"))
+        request.user = self.admin_user
+        protected_models = (Order, OrderItem, Payment, OrderAddressSnapshot)
+        for model in protected_models:
+            model_admin = admin.site._registry[model]
+            self.assertFalse(model_admin.has_add_permission(request), model.__name__)
+            self.assertFalse(model_admin.has_delete_permission(request), model.__name__)
+
+        for inline in order_admin.get_inline_instances(request, self.order):
+            self.assertFalse(inline.has_add_permission(request, self.order))
+            self.assertFalse(inline.can_delete)
+
     def test_order_admin_changelist_is_operational(self):
         response = self.client.get(reverse("admin:orders_order_changelist"))
 
