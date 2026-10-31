@@ -423,6 +423,21 @@ class StoreAdminDashboardTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.PAID)
 
+    def test_add_only_user_permission_does_not_show_unavailable_sidebar_link(self):
+        self.grant(self.staff, "auth", "add_user")
+        self.client.force_login(self.staff)
+
+        dashboard_response = self.client.get(reverse("admin:index"))
+        self.assertEqual(dashboard_response.status_code, 200)
+        self.assertNotContains(dashboard_response, "مشتریان و کاربران")
+        self.assertNotContains(
+            dashboard_response,
+            f'href="{reverse("admin:auth_user_add")}"',
+        )
+
+        add_user_response = self.client.get(reverse("admin:auth_user_add"))
+        self.assertIn(add_user_response.status_code, (403, 404))
+
     def test_add_only_permission_shows_only_supported_product_add_link(self):
         self.grant(self.staff, "catalog", "add_product")
         self.client.force_login(self.staff)
