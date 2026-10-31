@@ -81,11 +81,6 @@ class CartAdmin(admin.ModelAdmin):
     def total_price_display(self, obj):
         return f"{intcomma(int(obj.total_price))} تومان"
 
-    def get_readonly_fields(self, request, obj=None):
-        if obj and obj.status == Cart.STATUS_ORDERED:
-            return self.readonly_fields + ("user", "session_key", "status")
-        return super().get_readonly_fields(request, obj)
-
     def has_delete_permission(self, request, obj=None):
         if obj and obj.status == Cart.STATUS_ORDERED:
             return False
