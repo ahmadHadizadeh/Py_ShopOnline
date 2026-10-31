@@ -222,7 +222,8 @@ class StoreAdminDashboardTests(TestCase):
 
         self.client.force_login(self.staff)
         dashboard_response = self.client.get(reverse("admin:index"))
-        self.assertContains(dashboard_response, dashboard["ready_orders_url"])
+        self.assertContains(dashboard_response, "stock_reduced__exact=1")
+        self.assertContains(dashboard_response, "payment__status__exact=success")
 
         list_response = self.client.get(dashboard["ready_orders_url"])
         self.assertEqual(list_response.status_code, 200)
