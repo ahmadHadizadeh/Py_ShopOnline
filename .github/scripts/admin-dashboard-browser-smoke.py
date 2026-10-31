@@ -37,7 +37,7 @@ from orders.models import Order, Payment  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 
-def prepare_database() -> None:
+def prepare_database() -> tuple[Order, Payment]:
     call_command("migrate", interactive=False, verbosity=0)
     user_model = get_user_model()
     admin_user, created = user_model.objects.get_or_create(
@@ -80,6 +80,7 @@ def prepare_database() -> None:
         status=Payment.Status.SUCCESS,
         gateway_name="mock_gateway",
     )
+    return order, payment
 
 
 def wait_for_server(process: subprocess.Popen, log_path: Path) -> None:
@@ -112,7 +113,7 @@ def main() -> None:
         "page_errors": [],
         "screenshots": [],
     }
-    prepare_database()
+    order, payment = prepare_database()
 
     env = os.environ.copy()
     log_path = ARTIFACTS / "browser-server.log"
