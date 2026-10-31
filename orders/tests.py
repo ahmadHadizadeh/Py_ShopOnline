@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
@@ -2064,6 +2065,167 @@ class AdminOrderWorkflowConfigurationTests(TestCase):
         )
 
 
+class OrderAdminActionAuditLogTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="order-action-audit-staff",
+            email="order-action-audit@example.test",
+            password="Password123!",
+            is_staff=True,
+        )
+        change_permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename="change_order",
+        )
+        self.staff.user_permissions.add(change_permission)
+        self.client.force_login(self.staff)
+
+    def create_order(self, *, status, payment_status, stock_reduced):
+        order = Order.objects.create(
+            user=self.staff,
+            status=status,
+            stock_reduced=stock_reduced,
+            subtotal_amount=Decimal("100000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+            final_amount=Decimal("100000"),
+        )
+        Payment.objects.create(
+            order=order,
+            user=self.staff,
+            amount=Decimal("100000"),
+            status=payment_status,
+            gateway_name="mock_gateway",
+        )
+        return order
+
+    def execute_action(self, action_name, order):
+        return self.client.post(
+            reverse("admin:orders_order_changelist"),
+            {
+                "action": action_name,
+                "_selected_action": [str(order.pk)],
+                "index": "0",
+            },
+        )
+
+    def assert_action_was_logged(self, order):
+        entry = LogEntry.objects.get(
+            user=self.staff,
+            content_type__app_label="orders",
+            content_type__model="order",
+            object_id=str(order.pk),
+            action_flag=CHANGE,
+        )
+        self.assertIn("وضعیت سفارش", entry.change_message)
+        self.assertIn("عملیات گروهی", entry.change_message)
+
+    def test_processing_action_records_actor_and_status_change(self):
+        order = self.create_order(
+            status=Order.Status.PAID,
+            payment_status=Payment.Status.SUCCESS,
+            stock_reduced=True,
+        )
+
+        response = self.execute_action("move_paid_orders_to_processing", order)
+
+        self.assertEqual(response.status_code, 302)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PROCESSING)
+        self.assert_action_was_logged(order)
+
+    def test_completion_action_records_actor_and_status_change(self):
+        order = self.create_order(
+            status=Order.Status.PROCESSING,
+            payment_status=Payment.Status.SUCCESS,
+            stock_reduced=True,
+        )
+
+        response = self.execute_action("move_processing_orders_to_completed", order)
+
+        self.assertEqual(response.status_code, 302)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.COMPLETED)
+        self.assert_action_was_logged(order)
+
+    def test_cancellation_action_records_actor_and_status_change(self):
+        order = self.create_order(
+            status=Order.Status.PENDING,
+            payment_status=Payment.Status.PENDING,
+            stock_reduced=False,
+        )
+
+        response = self.execute_action("cancel_unpaid_orders", order)
+
+        self.assertEqual(response.status_code, 302)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assert_action_was_logged(order)
+
+    def test_rejected_transition_does_not_create_success_audit_entry(self):
+        order = self.create_order(
+            status=Order.Status.PENDING,
+            payment_status=Payment.Status.PENDING,
+            stock_reduced=False,
+        )
+
+        response = self.execute_action("move_paid_orders_to_processing", order)
+
+        self.assertEqual(response.status_code, 302)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING)
+        self.assertFalse(
+            LogEntry.objects.filter(
+                user=self.staff,
+                content_type__app_label="orders",
+                content_type__model="order",
+                object_id=str(order.pk),
+                action_flag=CHANGE,
+            ).exists()
+        )
+
+    def test_view_only_staff_cannot_expose_or_execute_status_actions(self):
+        order = self.create_order(
+            status=Order.Status.PAID,
+            payment_status=Payment.Status.SUCCESS,
+            stock_reduced=True,
+        )
+        view_only_staff = User.objects.create_user(
+            username="order-action-view-only",
+            password="Password123!",
+            is_staff=True,
+        )
+        view_permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename="view_order",
+        )
+        view_only_staff.user_permissions.add(view_permission)
+
+        request = RequestFactory().get(reverse("admin:orders_order_changelist"))
+        request.user = view_only_staff
+        order_admin = admin.site._registry[Order]
+        actions = order_admin.get_actions(request)
+        self.assertNotIn("move_paid_orders_to_processing", actions)
+        self.assertNotIn("move_processing_orders_to_completed", actions)
+        self.assertNotIn("cancel_unpaid_orders", actions)
+
+        self.client.force_login(view_only_staff)
+        response = self.execute_action("move_paid_orders_to_processing", order)
+
+        self.assertLess(response.status_code, 500)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)
+        self.assertFalse(
+            LogEntry.objects.filter(
+                user=view_only_staff,
+                content_type__app_label="orders",
+                content_type__model="order",
+                object_id=str(order.pk),
+                action_flag=CHANGE,
+            ).exists()
+        )
+
+
 class PaymentPresentationContractTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -2543,6 +2705,74 @@ class AdminOrderedCartProtectionTests(TestCase):
             args=[variant.pk],
         )
         response = self.client.post(delete_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ProductVariant.objects.filter(pk=variant.pk).exists())
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
+
+    def test_ordered_cart_cannot_be_bulk_deleted(self):
+        response = self.client.post(
+            reverse("admin:cart_cart_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(self.ordered_cart.pk)],
+                "index": "0",
+                "post": "yes",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Cart.objects.filter(pk=self.ordered_cart.pk).exists())
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
+
+    def test_ordered_cart_item_cannot_be_bulk_deleted(self):
+        response = self.client.post(
+            reverse("admin:cart_cartitem_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(self.cart_item.pk)],
+                "index": "0",
+                "post": "yes",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
+
+    def test_product_with_cart_reference_cannot_be_bulk_deleted(self):
+        response = self.client.post(
+            reverse("admin:catalog_product_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(self.product.pk)],
+                "index": "0",
+                "post": "yes",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+        self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
+
+    def test_product_variant_with_cart_reference_cannot_be_bulk_deleted(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=Decimal("25000"),
+        )
+        self.cart_item.variant = variant
+        self.cart_item.save(update_fields=["variant", "updated"])
+
+        response = self.client.post(
+            reverse("admin:catalog_productvariant_changelist"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(variant.pk)],
+                "index": "0",
+                "post": "yes",
+            },
+        )
 
         self.assertEqual(response.status_code, 403)
         self.assertTrue(ProductVariant.objects.filter(pk=variant.pk).exists())
