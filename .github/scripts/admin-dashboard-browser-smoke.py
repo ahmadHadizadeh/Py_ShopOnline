@@ -32,7 +32,7 @@ from django.contrib.auth import get_user_model  # noqa: E402
 from django.core.management import call_command  # noqa: E402
 from catalog.models.category import Category  # noqa: E402
 from catalog.models.product import Product  # noqa: E402
-from orders.models import Order, Payment  # noqa: E402
+from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment  # noqa: E402
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -58,7 +58,7 @@ def prepare_database() -> tuple[Order, Payment]:
         slug="browser-smoke-category",
         is_active=True,
     )
-    Product.objects.create(
+    product = Product.objects.create(
         category=category,
         name="Browser Smoke Low Stock Product",
         slug="browser-smoke-low-stock-product",
@@ -68,17 +68,41 @@ def prepare_database() -> tuple[Order, Payment]:
     )
     order = Order.objects.create(
         user=admin_user,
-        status=Order.Status.PAID,
+        status=Order.Status.PLACED,
         subtotal_amount=Decimal("125000"),
         discount_amount=Decimal("0"),
         shipping_amount=Decimal("0"),
         final_amount=Decimal("125000"),
     )
+    OrderItem.objects.create(
+        order=order,
+        product=product,
+        variant_id=None,
+        product_name=product.name,
+        variant_name="",
+        sku=None,
+        quantity=1,
+        unit_price=Decimal("125000"),
+        subtotal_price=Decimal("125000"),
+    )
+    OrderAddressSnapshot.objects.create(
+        order=order,
+        recipient_name="گیرنده آزمایشی",
+        recipient_mobile="09120000000",
+        postal_code="1234567890",
+        province="تهران",
+        city="تهران",
+        address_line="خیابان آزمایشی، پلاک ۱",
+    )
     payment = Payment.objects.create(
         order=order,
         amount=Decimal("125000"),
-        status=Payment.Status.SUCCESS,
+        status=Payment.Status.PENDING,
         gateway_name="mock_gateway",
+    )
+    payment.update_status_and_order(
+        Payment.Status.SUCCESS,
+        transaction_id="BROWSER-SMOKE-TRANSACTION",
     )
     return order, payment
 
