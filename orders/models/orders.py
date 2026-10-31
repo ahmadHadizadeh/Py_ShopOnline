@@ -123,9 +123,9 @@ class Order(models.Model):
 
     @property
     def jalali_created(self):
-        return jdatetime.datetime.fromgregorian(
-            datetime=self.created
-        ).strftime("%Y/%m/%d - %H:%M")
+        return jdatetime.datetime.fromgregorian(datetime=self.created).strftime(
+            "%Y/%m/%d - %H:%M"
+        )
 
     def save(self, *args, **kwargs):
         if not self.order_number:
@@ -142,20 +142,33 @@ class Order(models.Model):
 
     @transaction.atomic
     def reduce_item_stock(self):
-        if self.stock_reduced:
+        locked_order = Order.objects.select_for_update().get(pk=self.pk)
+
+        self.status = locked_order.status
+        self.stock_reduced = locked_order.stock_reduced
+
+        if self.status == Order.Status.CANCELLED:
             return
-    
+
+        if self.stock_reduced:
+            if self.status in {
+                Order.Status.PENDING,
+                Order.Status.PLACED,
+            }:
+                raise ValueError(
+                    "پرچم کاهش موجودی با وضعیت پرداخت‌نشده سفارش سازگار نیست."
+                )
+            return
+
         order_items = list(
             self.items.select_related("product").select_for_update(of=("self",))
         )
-    
+
         if not order_items:
-            Order.objects.filter(pk=self.pk).update(
-                stock_reduced=True,
+            raise ValueError(
+                "سفارش فاقد آیتم قابل پردازش است؛ بررسی مالی و بازپرداخت لازم است."
             )
-            self.stock_reduced = True
-            return
-    
+
         # ابتدا تمام موجودی‌ها را قبل از کوچک‌ترین تغییر بررسی می‌کنیم.
         # بنابراین در صورت کمبود موجودی هیچ محصولی نصفه‌نیمه کاهش پیدا نمی‌کند.
         # مجموع quantity هر Product را محاسبه می‌کنیم؛ یک Product ممکن است به‌دلیل
@@ -169,14 +182,16 @@ class Order(models.Model):
                 required_quantities.get(item.product_id, 0) + item.quantity
             )
 
-        # همه Productها را قبل از کوچک‌ترین تغییر lock و validate می‌کنیم.
+        # همه Productها را در ترتیب ثابت شناسه قفل و validate می‌کنیم.
+        # این ترتیب بین سفارش‌های هم‌پوشان از inversion و deadlock جلوگیری می‌کند.
         locked_products = {}
-        for product_id, required_quantity in required_quantities.items():
+        for product_id in sorted(required_quantities):
+            required_quantity = required_quantities[product_id]
             sample_item = next(
                 item for item in order_items if item.product_id == product_id
             )
-            product = type(sample_item.product).objects.select_for_update().get(
-                pk=product_id
+            product = (
+                type(sample_item.product).objects.select_for_update().get(pk=product_id)
             )
             locked_products[product_id] = product
 
@@ -187,7 +202,8 @@ class Order(models.Model):
                 )
 
         # فقط پس از اعتبارسنجی مجموع موجودی، برای هر Product یک‌بار کاهش انجام می‌شود.
-        for product_id, required_quantity in required_quantities.items():
+        for product_id in sorted(required_quantities):
+            required_quantity = required_quantities[product_id]
             product = locked_products[product_id]
             product.stock -= required_quantity
 
@@ -198,6 +214,7 @@ class Order(models.Model):
                 update_fields=[
                     "stock",
                     "is_available_status",
+                    "updated",
                 ]
             )
 
@@ -206,16 +223,17 @@ class Order(models.Model):
             Order.Status.PLACED,
         ):
             self.status = Order.Status.PAID
-    
+
             if not self.paid_at:
                 self.paid_at = timezone.now()
-    
+
         Order.objects.filter(pk=self.pk).update(
             stock_reduced=True,
             status=self.status,
             paid_at=self.paid_at,
+            updated=timezone.now(),
         )
-    
+
         self.stock_reduced = True
 
     @staticmethod

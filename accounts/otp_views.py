@@ -71,7 +71,7 @@ def send_otp_view(request):
     try:
         success, message, ttl = SMSIRService.send_otp(phone)
     except Exception:
-        logger.exception("[Send OTP] Unexpected error for phone=%s", phone)
+        logger.exception("[Send OTP] Unexpected error")
         return JsonResponse(
             {
                 "status": "error",
@@ -165,6 +165,15 @@ def verify_otp_view(request):
                 profile.phone_number = phone
                 profile.save(update_fields=["phone_number"])
 
+        if not user.is_active:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "این حساب کاربری غیرفعال است؛ برای پیگیری با پشتیبانی تماس بگیرید.",
+                },
+                status=403,
+            )
+
         merge_guest_cart_to_user(
             request,
             user=user,
@@ -173,7 +182,7 @@ def verify_otp_view(request):
         login(request, user)
 
     except Exception:
-        logger.exception("[Verify OTP] Login error for phone=%s", phone)
+        logger.exception("[Verify OTP] Login error")
         return JsonResponse(
             {
                 "status": "error",

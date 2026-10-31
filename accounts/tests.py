@@ -8,7 +8,7 @@ import jdatetime
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from accounts.models import Address
+from accounts.models import Address, Profile
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderAddressSnapshot, OrderItem, ShippingMethod
 from catalog.models.category import Category
@@ -198,6 +198,38 @@ def test_verify_otp_merges_guest_cart_before_login_and_preserves_cart_id(client)
     current_session = client.session
     assert current_session["cart_id"] == user_cart.pk
     assert current_session.session_key != guest_session_key
+
+
+@pytest.mark.django_db
+def test_verify_otp_rejects_inactive_user_without_login_or_cart_merge(
+    client, django_user_model
+):
+    inactive_user = django_user_model.objects.create_user(
+        username="09123456789",
+        password="testpass123",
+        is_active=False,
+    )
+    profile, _ = Profile.objects.get_or_create(user=inactive_user)
+    profile.phone_number = "09123456789"
+    profile.save(update_fields=["phone_number"])
+
+    with (
+        patch(
+            "accounts.otp_views.SMSIRService.verify_otp",
+            return_value=(True, "ok"),
+        ),
+        patch("accounts.otp_views.merge_guest_cart_to_user") as merge_cart,
+    ):
+        response = client.post(
+            reverse("accounts:verify_otp"),
+            data=dumps({"phone": "09123456789", "code": "123456"}),
+            content_type="application/json",
+        )
+
+    assert response.status_code == 403
+    assert response.json()["status"] == "error"
+    assert client.session.get("_auth_user_id") is None
+    merge_cart.assert_not_called()
 
 
 @pytest.mark.django_db

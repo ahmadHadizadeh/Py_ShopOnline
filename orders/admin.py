@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.contrib import messages
 from django.contrib.humanize.templatetags.humanize import intcomma
+from django.db import transaction
+from django.utils.html import format_html
 
 from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
 from .services import OrderService
@@ -67,71 +69,106 @@ class PaymentInline(admin.StackedInline):
         return False
 
 
-def move_paid_orders_to_processing(modeladmin, request, queryset):
+def _transition_orders_with_audit_log(modeladmin, request, queryset, new_status):
     changed = 0
-    for order in queryset:
+    for selected_order in queryset:
         try:
-            OrderService.transition_status(
-                order_id=order.pk,
-                new_status=Order.Status.PROCESSING,
-            )
+            # Keep the state transition and its audit record in one transaction.
+            with transaction.atomic():
+                previous_status = selected_order.get_status_display()
+                updated_order = OrderService.transition_status(
+                    order_id=selected_order.pk,
+                    new_status=new_status,
+                )
+                modeladmin.log_change(
+                    request,
+                    updated_order,
+                    (
+                        f"وضعیت سفارش از «{previous_status}» به "
+                        f"«{updated_order.get_status_display()}» "
+                        "از طریق عملیات گروهی تغییر کرد."
+                    ),
+                )
             changed += 1
         except Exception as exc:
             modeladmin.message_user(request, str(exc), level=messages.ERROR)
-    modeladmin.message_user(request, f"{changed} سفارش به وضعیت در حال پردازش منتقل شد.")
+    modeladmin.message_user(request, f"{changed} سفارش به وضعیت جدید منتقل شد.")
+
+
+@admin.action(permissions=["change"])
+def move_paid_orders_to_processing(modeladmin, request, queryset):
+    _transition_orders_with_audit_log(
+        modeladmin,
+        request,
+        queryset,
+        Order.Status.PROCESSING,
+    )
 
 
 move_paid_orders_to_processing.short_description = "انتقال سفارش‌های پرداخت‌شده به در حال پردازش"
 
 
+@admin.action(permissions=["change"])
 def move_processing_orders_to_completed(modeladmin, request, queryset):
-    changed = 0
-    for order in queryset:
-        try:
-            OrderService.transition_status(
-                order_id=order.pk,
-                new_status=Order.Status.COMPLETED,
-            )
-            changed += 1
-        except Exception as exc:
-            modeladmin.message_user(request, str(exc), level=messages.ERROR)
-    modeladmin.message_user(request, f"{changed} سفارش به وضعیت تکمیل‌شده منتقل شد.")
+    _transition_orders_with_audit_log(
+        modeladmin,
+        request,
+        queryset,
+        Order.Status.COMPLETED,
+    )
 
 
 move_processing_orders_to_completed.short_description = "تکمیل سفارش‌های در حال پردازش"
 
 
+@admin.action(permissions=["change"])
 def cancel_unpaid_orders(modeladmin, request, queryset):
-    changed = 0
-    for order in queryset:
-        try:
-            OrderService.transition_status(
-                order_id=order.pk,
-                new_status=Order.Status.CANCELLED,
-            )
-            changed += 1
-        except Exception as exc:
-            modeladmin.message_user(request, str(exc), level=messages.ERROR)
-    modeladmin.message_user(request, f"{changed} سفارش لغو شد.")
+    _transition_orders_with_audit_log(
+        modeladmin,
+        request,
+        queryset,
+        Order.Status.CANCELLED,
+    )
 
 
 cancel_unpaid_orders.short_description = "لغو سفارش‌های پرداخت‌نشده"
 
+class StockReductionFilter(admin.SimpleListFilter):
+    title = "وضعیت کاهش موجودی"
+    parameter_name = "stock_reduced"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("yes", "کاهش موجودی ثبت شده"),
+            ("no", "کاهش موجودی ثبت نشده"),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(stock_reduced=True)
+        if self.value() == "no":
+            return queryset.filter(stock_reduced=False)
+        return queryset
+
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
+    list_per_page = 25
+    date_hierarchy = "created"
     list_display = (
         "order_number",
+        "recipient_name_display",
+        "recipient_mobile_display",
         "user_display",
         "get_status_display_value",
         "get_final_amount_display",
         "get_payment_status_display",
-        "stock_reduced",
+        "stock_reduced_display",
         "created",
     )
     list_filter = (
         "status",
-        "stock_reduced",
+        StockReductionFilter,
         "shipping_method",
         "payment__status",
         "created",
@@ -140,11 +177,13 @@ class OrderAdmin(admin.ModelAdmin):
         "order_number",
         "user__username",
         "user__email",
+        "address_snapshot__recipient_name",
+        "address_snapshot__recipient_mobile",
         "payment__transaction_code",
         "payment__reference_code",
     )
     ordering = ("-created",)
-    list_select_related = ("user", "shipping_method", "payment")
+    list_select_related = ("user", "shipping_method", "payment", "address_snapshot")
     readonly_fields = (
         "order_number",
         "user",
@@ -160,6 +199,7 @@ class OrderAdmin(admin.ModelAdmin):
         "completed_at",
         "customer_note",
         "stock_reduced",
+        "stock_reduced_display",
         "created",
         "updated",
     )
@@ -173,7 +213,7 @@ class OrderAdmin(admin.ModelAdmin):
                     "cart",
                     "shipping_method",
                     "status",
-                    "stock_reduced",
+                    "stock_reduced_display",
                 )
             },
         ),
@@ -218,13 +258,80 @@ class OrderAdmin(admin.ModelAdmin):
         cancel_unpaid_orders,
     )
 
+    @staticmethod
+    def _can_view_payment_data(request):
+        user = request.user
+        return bool(
+            user.is_superuser
+            or user.has_perm("orders.view_payment")
+            or user.has_perm("orders.change_payment")
+        )
+
+    def get_list_display(self, request):
+        fields = list(super().get_list_display(request))
+        if not self._can_view_payment_data(request):
+            fields = [
+                field for field in fields
+                if field != "get_payment_status_display"
+            ]
+        return fields
+
+    def get_list_filter(self, request):
+        filters = list(super().get_list_filter(request))
+        if not self._can_view_payment_data(request):
+            filters = [item for item in filters if item != "payment__status"]
+        return filters
+
+    def get_search_fields(self, request):
+        fields = tuple(super().get_search_fields(request))
+        if not self._can_view_payment_data(request):
+            fields = tuple(
+                field for field in fields
+                if not field.startswith("payment__")
+            )
+        return fields
+
+    def get_list_select_related(self, request):
+        relations = super().get_list_select_related(request)
+        if self._can_view_payment_data(request):
+            return relations
+        if isinstance(relations, (tuple, list)):
+            return tuple(relation for relation in relations if relation != "payment")
+        return relations
+
+    def lookup_allowed(self, lookup, value, request):
+        if (
+            not self._can_view_payment_data(request)
+            and (lookup == "payment" or lookup.startswith("payment__"))
+        ):
+            return False
+        return super().lookup_allowed(lookup, value, request)
+
+    @admin.display(description="نام گیرنده", ordering="address_snapshot__recipient_name")
+    def recipient_name_display(self, obj):
+        try:
+            return obj.address_snapshot.recipient_name
+        except OrderAddressSnapshot.DoesNotExist:
+            return "—"
+
+    @admin.display(description="موبایل گیرنده", ordering="address_snapshot__recipient_mobile")
+    def recipient_mobile_display(self, obj):
+        try:
+            return obj.address_snapshot.recipient_mobile
+        except OrderAddressSnapshot.DoesNotExist:
+            return "—"
+
     @admin.display(description="کاربر", ordering="user__email")
     def user_display(self, obj):
         return obj.user.email or obj.user.username
 
     @admin.display(description="وضعیت سفارش", ordering="status")
     def get_status_display_value(self, obj):
-        return obj.get_status_display()
+        return format_html(
+            '<span class="store-status-pill store-status-pill--order-{}">{}</span>',
+            obj.status,
+            obj.get_status_display(),
+        )
 
     @admin.display(description="مبلغ نهایی", ordering="final_amount")
     def get_final_amount_display(self, obj):
@@ -233,9 +340,30 @@ class OrderAdmin(admin.ModelAdmin):
     @admin.display(description="وضعیت پرداخت", ordering="payment__status")
     def get_payment_status_display(self, obj):
         try:
-            return obj.payment.get_status_display()
+            payment = obj.payment
         except Payment.DoesNotExist:
-            return "بدون پرداخت"
+            return format_html(
+                '<span class="store-status-pill store-status-pill--muted">{}</span>',
+                "بدون پرداخت",
+            )
+
+        return format_html(
+            '<span class="store-status-pill store-status-pill--payment-{}">{}</span>',
+            payment.status,
+            payment.get_status_display(),
+        )
+
+    @admin.display(description="وضعیت کاهش موجودی", ordering="stock_reduced")
+    def stock_reduced_display(self, obj):
+        if obj.stock_reduced:
+            tone, label = "success", "ثبت شده"
+        else:
+            tone, label = "warning", "ثبت نشده"
+        return format_html(
+            '<span class="store-status-pill store-status-pill--{}">{}</span>',
+            tone,
+            label,
+        )
 
     def has_add_permission(self, request):
         return False
@@ -246,6 +374,7 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
+    list_per_page = 25
     list_display = (
         "order",
         "product_name",
@@ -286,11 +415,13 @@ class OrderItemAdmin(admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
+    list_per_page = 25
+    date_hierarchy = "created"
     list_display = (
         "order",
         "user",
         "amount_display",
-        "status",
+        "status_badge",
         "gateway_name",
         "transaction_code",
         "reference_code",
@@ -358,6 +489,14 @@ class PaymentAdmin(admin.ModelAdmin):
     def amount_display(self, obj):
         return f"{intcomma(int(obj.amount))} تومان"
 
+    @admin.display(description="وضعیت پرداخت", ordering="status")
+    def status_badge(self, obj):
+        return format_html(
+            '<span class="store-status-pill store-status-pill--payment-{}">{}</span>',
+            obj.status,
+            obj.get_status_display(),
+        )
+
     def has_add_permission(self, request):
         return False
 
@@ -367,6 +506,8 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(OrderAddressSnapshot)
 class OrderAddressSnapshotAdmin(admin.ModelAdmin):
+    list_per_page = 25
+    date_hierarchy = "created"
     list_display = (
         "order",
         "recipient_name",
@@ -405,6 +546,27 @@ class OrderAddressSnapshotAdmin(admin.ModelAdmin):
 
 @admin.register(ShippingMethod)
 class ShippingMethodAdmin(admin.ModelAdmin):
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.orders.exists():
+            return False
+        return super().has_delete_permission(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if obj is not None and obj.orders.exists():
+            fields.extend(
+                (
+                    "name",
+                    "description",
+                    "cost",
+                    "free_shipping_threshold",
+                    "estimated_delivery_days",
+                )
+            )
+        return tuple(fields)
+
+    list_per_page = 25
+    date_hierarchy = "updated"
     list_display = (
         "name",
         "get_cost_display",
@@ -415,11 +577,20 @@ class ShippingMethodAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_active", "estimated_delivery_days")
     search_fields = ("name", "description")
-    list_editable = ("is_active", "estimated_delivery_days")
+    list_editable = ("is_active",)
     ordering = ("cost",)
     readonly_fields = ("created", "updated")
     fieldsets = (
-        ("اطلاعات اصلی", {"fields": ("name", "description", "is_active")}),
+        (
+            "اطلاعات اصلی",
+            {
+                "fields": ("name", "description", "is_active"),
+                "description": (
+                    "پس از استفاده در سفارش ثبت‌شده، مشخصات این روش ارسال قفل می‌شود. "
+                    "برای نرخ یا شرایط جدید، روش ارسال تازه‌ای بسازید و این مورد را غیرفعال کنید."
+                ),
+            },
+        ),
         (
             "تنظیمات هزینه",
             {

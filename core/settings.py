@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import os
 import secrets
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from django.utils.csp import CSP
@@ -206,6 +207,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "core.admin_locale.AdminLocaleMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -214,7 +216,7 @@ ROOT_URLCONF = "core.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -359,9 +361,17 @@ if not PAYMENT_DEFAULT_GATEWAY:
 # -------------------------------------------------------------------------
 # ZarinPal
 # -------------------------------------------------------------------------
-# Sandbox defaults are development-only. When ZarinPal is the selected
-# production gateway, merchant/callback/endpoints must be explicit and the
-# production endpoints may not point to the sandbox host.
+# Gateway mode is independent from Django DEBUG: a deployed, secure site
+# can explicitly use Sandbox until its live merchant account is activated.
+ZARINPAL_ENVIRONMENT = (
+    os.getenv("ZARINPAL_ENVIRONMENT", "").strip().lower()
+    or ("sandbox" if DEBUG else "production")
+)
+if ZARINPAL_ENVIRONMENT not in {"sandbox", "production"}:
+    raise RuntimeError(
+        "ZARINPAL_ENVIRONMENT must be 'sandbox' or 'production'."
+    )
+
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_MERCHANT_ID", "").strip()
 ZARINPAL_CALLBACK_URL = os.getenv("ZARINPAL_CALLBACK_URL", "").strip()
 ZARINPAL_CURRENCY = (
@@ -369,49 +379,168 @@ ZARINPAL_CURRENCY = (
 )
 ZARINPAL_HTTP_TIMEOUT = os.getenv("ZARINPAL_HTTP_TIMEOUT", "15").strip() or "15"
 
-if DEBUG:
-    ZARINPAL_REQUEST_URL = (
-        os.getenv(
-            "ZARINPAL_REQUEST_URL",
-            "https://sandbox.zarinpal.com/pg/v4/payment/request.json",
+if DEBUG and PAYMENT_DEFAULT_GATEWAY == "zarinpal" and ZARINPAL_ENVIRONMENT == "production":
+    raise RuntimeError(
+        "Do not enable the ZarinPal production gateway while DJANGO_DEBUG=1."
+    )
+
+if PAYMENT_DEFAULT_GATEWAY == "zarinpal":
+    ZARINPAL_MERCHANT_ID = _required_env("ZARINPAL_MERCHANT_ID")
+    ZARINPAL_CALLBACK_URL = _required_env("ZARINPAL_CALLBACK_URL")
+    if not DEBUG:
+        try:
+            callback_parts = urlsplit(ZARINPAL_CALLBACK_URL)
+            callback_port = callback_parts.port
+        except ValueError as exc:
+            raise RuntimeError(
+                "ZARINPAL_CALLBACK_URL is invalid for production."
+            ) from exc
+
+        callback_host = (callback_parts.hostname or "").lower()
+        allowed_callback_hosts = [
+            host.strip().lower()
+            for host in ALLOWED_HOSTS
+            if host.strip()
+        ]
+        callback_host_allowed = any(
+            callback_host == host
+            or (
+                host.startswith(".")
+                and (
+                    callback_host == host[1:]
+                    or callback_host.endswith(host)
+                )
+            )
+            for host in allowed_callback_hosts
         )
-        .strip()
+
+        if (
+            callback_parts.scheme != "https"
+            or not callback_host
+            or callback_port not in (None, 443)
+            or callback_parts.username is not None
+            or callback_parts.password is not None
+            or callback_parts.query
+            or callback_parts.fragment
+            or callback_parts.path != "/orders/payment/callback/zarinpal/"
+            or not callback_host_allowed
+        ):
+            raise RuntimeError(
+                "ZARINPAL_CALLBACK_URL must use HTTPS, the canonical "
+                "ZarinPal callback path, and a hostname in ALLOWED_HOSTS "
+                "when DJANGO_DEBUG=0."
+            )
+
+if ZARINPAL_ENVIRONMENT == "sandbox":
+    ZARINPAL_REQUEST_URL = (
+        os.getenv("ZARINPAL_REQUEST_URL", "").strip()
+        or "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
     )
     ZARINPAL_VERIFY_URL = (
-        os.getenv(
-            "ZARINPAL_VERIFY_URL",
-            "https://sandbox.zarinpal.com/pg/v4/payment/verify.json",
-        )
-        .strip()
+        os.getenv("ZARINPAL_VERIFY_URL", "").strip()
+        or "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
     )
     ZARINPAL_STARTPAY_URL = (
-        os.getenv(
-            "ZARINPAL_STARTPAY_URL",
-            "https://sandbox.zarinpal.com/pg/StartPay",
-        )
-        .strip()
+        os.getenv("ZARINPAL_STARTPAY_URL", "").strip()
+        or "https://sandbox.zarinpal.com/pg/StartPay"
     )
+
+    for setting_name, setting_value, expected_path in (
+        (
+            "ZARINPAL_REQUEST_URL",
+            ZARINPAL_REQUEST_URL,
+            "/pg/v4/payment/request.json",
+        ),
+        (
+            "ZARINPAL_VERIFY_URL",
+            ZARINPAL_VERIFY_URL,
+            "/pg/v4/payment/verify.json",
+        ),
+        (
+            "ZARINPAL_STARTPAY_URL",
+            ZARINPAL_STARTPAY_URL,
+            "/pg/StartPay",
+        ),
+    ):
+        try:
+            endpoint = urlsplit(setting_value)
+            endpoint_port = endpoint.port
+        except ValueError as exc:
+            raise RuntimeError(
+                f"{setting_name} is invalid for ZarinPal Sandbox."
+            ) from exc
+
+        actual_path = (
+            endpoint.path.rstrip("/")
+            if setting_name == "ZARINPAL_STARTPAY_URL"
+            else endpoint.path
+        )
+        if (
+            endpoint.scheme != "https"
+            or endpoint.hostname != "sandbox.zarinpal.com"
+            or endpoint_port not in (None, 443)
+            or endpoint.username is not None
+            or endpoint.password is not None
+            or endpoint.query
+            or endpoint.fragment
+            or actual_path != expected_path
+        ):
+            raise RuntimeError(
+                f"{setting_name} must match the canonical HTTPS "
+                "ZarinPal Sandbox endpoint."
+            )
 else:
     if PAYMENT_DEFAULT_GATEWAY == "zarinpal":
-        ZARINPAL_MERCHANT_ID = _required_env("ZARINPAL_MERCHANT_ID")
-        ZARINPAL_CALLBACK_URL = _required_env("ZARINPAL_CALLBACK_URL")
         ZARINPAL_REQUEST_URL = _required_env("ZARINPAL_REQUEST_URL")
         ZARINPAL_VERIFY_URL = _required_env("ZARINPAL_VERIFY_URL")
         ZARINPAL_STARTPAY_URL = _required_env("ZARINPAL_STARTPAY_URL")
 
-        sandbox_markers = ("sandbox.zarinpal.com",)
-        for setting_name, setting_value in (
-            ("ZARINPAL_REQUEST_URL", ZARINPAL_REQUEST_URL),
-            ("ZARINPAL_VERIFY_URL", ZARINPAL_VERIFY_URL),
-            ("ZARINPAL_STARTPAY_URL", ZARINPAL_STARTPAY_URL),
+        for setting_name, setting_value, expected_hosts, expected_path in (
+            (
+                "ZARINPAL_REQUEST_URL",
+                ZARINPAL_REQUEST_URL,
+                ("api.zarinpal.com", "payment.zarinpal.com"),
+                "/pg/v4/payment/request.json",
+            ),
+            (
+                "ZARINPAL_VERIFY_URL",
+                ZARINPAL_VERIFY_URL,
+                ("api.zarinpal.com", "payment.zarinpal.com"),
+                "/pg/v4/payment/verify.json",
+            ),
+            (
+                "ZARINPAL_STARTPAY_URL",
+                ZARINPAL_STARTPAY_URL,
+                ("payment.zarinpal.com", "www.zarinpal.com"),
+                "/pg/StartPay",
+            ),
         ):
-            if any(
-                marker in setting_value.lower()
-                for marker in sandbox_markers
+            try:
+                endpoint = urlsplit(setting_value)
+                endpoint_port = endpoint.port
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"{setting_name} is invalid for ZarinPal Production."
+                ) from exc
+
+            actual_path = (
+                endpoint.path.rstrip("/")
+                if setting_name == "ZARINPAL_STARTPAY_URL"
+                else endpoint.path
+            )
+            if (
+                endpoint.scheme != "https"
+                or endpoint.hostname not in expected_hosts
+                or endpoint_port not in (None, 443)
+                or endpoint.username is not None
+                or endpoint.password is not None
+                or endpoint.query
+                or endpoint.fragment
+                or actual_path != expected_path
             ):
                 raise RuntimeError(
-                    f"{setting_name} must not point to a ZarinPal sandbox URL "
-                    "when DJANGO_DEBUG=0."
+                    f"{setting_name} must match the canonical HTTPS "
+                    "ZarinPal Production endpoint."
                 )
     else:
         ZARINPAL_REQUEST_URL = os.getenv("ZARINPAL_REQUEST_URL", "").strip()

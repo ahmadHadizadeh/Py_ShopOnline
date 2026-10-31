@@ -26,6 +26,43 @@ class OrderService:
                 f"تغییر وضعیت سفارش از {order.get_status_display()} به وضعیت انتخاب‌شده مجاز نیست."
             )
 
+        # Payment initiation and callback finalization both lock Order before Payment.
+        # Read the payment status without locking it to preserve that global lock order.
+        payment_status = Payment.objects.filter(order_id=order.pk).values_list(
+            "status", flat=True
+        ).first()
+        if (
+            new_status in {Order.Status.PROCESSING, Order.Status.COMPLETED}
+            and payment_status != Payment.Status.SUCCESS
+        ):
+            raise ValidationError(
+                "سفارش بدون پرداخت موفق و تأییدشده قابل انتقال به مرحله پردازش نیست."
+            )
+        if (
+            new_status in {Order.Status.PROCESSING, Order.Status.COMPLETED}
+            and not order.stock_reduced
+        ):
+            raise ValidationError(
+                "سفارش بدون ثبت موفق کاهش موجودی قابل پردازش یا تکمیل نیست؛ "
+                "ابتدا مغایرت موجودی بررسی شود."
+            )
+        if (
+            new_status == Order.Status.CANCELLED
+            and order.stock_reduced
+            and payment_status != Payment.Status.SUCCESS
+        ):
+            raise ValidationError(
+                "پرچم کاهش موجودی با سابقه پرداخت‌نشده سازگار نیست؛ "
+                "لغو خودکار متوقف شد تا موجودی و سوابق پرداخت بررسی شوند."
+            )
+        if (
+            new_status == Order.Status.CANCELLED
+            and payment_status == Payment.Status.SUCCESS
+        ):
+            raise ValidationError(
+                "پرداخت این سفارش موفق ثبت شده است؛ لغو آن به‌عنوان سفارش پرداخت‌نشده مجاز نیست."
+            )
+
         now = timezone.now()
         order.status = new_status
         update_fields = ["status", "updated"]

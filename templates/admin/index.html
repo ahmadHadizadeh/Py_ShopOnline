@@ -1,0 +1,302 @@
+{% extends "admin/base_site.html" %}
+{% load humanize admin_dashboard %}
+
+{% block title %}داشبورد مدیریت فروشگاه | {{ site_title }}{% endblock %}
+
+{% block content %}
+    {% store_admin_dashboard_data request.user as dashboard %}
+
+    <div class="store-admin-dashboard" dir="rtl">
+        <header class="store-dashboard-hero">
+            <div>
+                <p class="store-dashboard-eyebrow">پنل عملیات فروشگاه</p>
+                <h1>سلام، امروز فروشگاه را از همین‌جا مدیریت کنید.</h1>
+                <p class="store-dashboard-subtitle">
+                    سفارش‌ها، محصولات، موجودی و پرداخت‌ها را بدون نیاز به کارهای فنی پیگیری کنید.
+                </p>
+            </div>
+        </header>
+
+        <section class="store-dashboard-section" aria-labelledby="store-kpi-title">
+            <div class="store-section-heading">
+                <div>
+                    <h2 id="store-kpi-title">نمای کلی عملیات</h2>
+                    <p>موارد مهمی که ممکن است به اقدام شما نیاز داشته باشند.</p>
+                </div>
+            </div>
+
+            <div class="store-metrics-grid">
+                {% if dashboard.can_view_orders %}
+                    <a class="store-metric-card store-metric-card--orders"
+                       href="{{ dashboard.orders_url }}">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span><span class="store-metric-label">کل سفارش‌ها</span></div>
+                        <strong class="store-metric-value">{{ dashboard.total_orders|intcomma }}</strong>
+                        <span class="store-metric-help">مشاهده همه سفارش‌های ثبت‌شده در فروشگاه</span>
+                    </a>
+                    {% if dashboard.can_view_order_readiness %}
+                        <a class="store-metric-card store-metric-card--orders"
+                           href="{{ dashboard.ready_orders_url }}">
+                            <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M12 17v4"/></svg></span><span class="store-metric-label">سفارش‌های آماده پردازش</span></div>
+                            <strong class="store-metric-value">{{ dashboard.orders_to_process|intcomma }}</strong>
+                            <span class="store-metric-help">پرداخت موفق تأیید شده و کاهش موجودی ثبت شده است</span>
+                        </a>
+                    {% endif %}
+                    <a class="store-metric-card store-metric-card--processing"
+                       href="{{ dashboard.orders_url }}?status__exact=processing">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span><span class="store-metric-label">سفارش‌های در حال پردازش</span></div>
+                        <strong class="store-metric-value">{{ dashboard.orders_processing|intcomma }}</strong>
+                        <span class="store-metric-help">سفارش‌هایی که در حال آماده‌سازی هستند</span>
+                    </a>
+                {% endif %}
+
+                {% if dashboard.can_view_products %}
+                    <a class="store-metric-card store-metric-card--products"
+                       href="{{ dashboard.products_url }}">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg></span><span class="store-metric-label">محصولات فعال</span></div>
+                        <strong class="store-metric-value">{{ dashboard.active_products|intcomma }}</strong>
+                        <span class="store-metric-help">مشاهده و مدیریت محصولات فروشگاه</span>
+                    </a>
+                    <a class="store-metric-card store-metric-card--stock"
+                       href="{{ dashboard.low_stock_url }}">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg></span><span class="store-metric-label">محصولات کم‌موجودی</span></div>
+                        <strong class="store-metric-value">{{ dashboard.low_stock_products|intcomma }}</strong>
+                        <span class="store-metric-help">دارای موجودی بین ۱ تا ۵ عدد</span>
+                    </a>
+                    <a class="store-metric-card store-metric-card--stock"
+                       href="{{ dashboard.out_of_stock_url }}">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7 12 3l8 4v10l-8 4-8-4V7Z"/><path d="m4 7 8 4 8-4M12 11v10"/></svg></span><span class="store-metric-label">محصولات اتمام‌موجودی</span></div>
+                        <strong class="store-metric-value">{{ dashboard.out_of_stock_products|intcomma }}</strong>
+                        <span class="store-metric-help">محصولات فعال که موجودی آن‌ها صفر شده است</span>
+                    </a>
+                {% endif %}
+
+                {% if dashboard.can_view_payments %}
+                    <a class="store-metric-card store-metric-card--payments"
+                       href="{{ dashboard.payments_url }}?status__exact=pending">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg></span><span class="store-metric-label">پرداخت‌های در انتظار</span></div>
+                        <strong class="store-metric-value">{{ dashboard.pending_payments|intcomma }}</strong>
+                        <span class="store-metric-help">مشاهده جزئیات و وضعیت پرداخت‌ها</span>
+                    </a>
+                    <a class="store-metric-card store-metric-card--payments"
+                       href="{{ dashboard.payments_url }}?status__exact=failed">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg></span><span class="store-metric-label">پرداخت‌های ناموفق</span></div>
+                        <strong class="store-metric-value">{{ dashboard.failed_payments|intcomma }}</strong>
+                        <span class="store-metric-help">بررسی تراکنش‌های ناموفق</span>
+                    </a>
+                {% endif %}
+
+                {% if dashboard.can_view_orders and dashboard.can_view_payments %}
+                    <article class="store-metric-card store-metric-card--payments">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg></span><span class="store-metric-label">جمع پرداخت‌های موفق</span></div>
+                        <strong class="store-metric-value">{{ dashboard.confirmed_sales_amount|intcomma }} تومان</strong>
+                        <span class="store-metric-help">مجموع پرداخت‌های موفق سفارش‌های پرداخت‌شده، در حال پردازش و تکمیل‌شده از ابتدای فعالیت فروشگاه؛ سفارش‌های لغوشده و پرداخت‌های مرجوع‌شده محاسبه نمی‌شوند.</span>
+                    </article>
+                    <a class="store-metric-card store-metric-card--payments"
+                       href="{{ dashboard.successful_cancelled_payment_url }}">
+                        <div class="store-metric-head"><span class="store-metric-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg></span><span class="store-metric-label">پرداخت‌های موفق برای سفارش لغوشده</span></div>
+                        <strong class="store-metric-value">{{ dashboard.successful_payments_on_cancelled_orders|intcomma }}</strong>
+                        <span class="store-metric-help">پرداخت تأیید شده، اما سفارش لغو شده؛ نیازمند بررسی مالی</span>
+                    </a>
+                {% endif %}
+            </div>
+        </section>
+
+        <div class="store-dashboard-columns">
+            <section class="store-dashboard-section" aria-labelledby="store-shortcuts-title">
+                <div class="store-section-heading">
+                    <div>
+                        <h2 id="store-shortcuts-title">دسترسی سریع</h2>
+                        <p>برای انجام کارهای روزمره از این میان‌برها استفاده کنید.</p>
+                    </div>
+                </div>
+
+                <div class="store-quick-links">
+                    {% for link in dashboard.quick_links %}
+                        <article class="store-quick-link">
+                            <a href="{{ link.url }}" class="store-quick-link-main">
+                                <span class="store-quick-link-title">{{ link.label }}</span>
+                                <span class="store-quick-link-description">{{ link.description }}</span>
+                            </a>
+                            {% if link.add_url %}
+                                <a class="store-quick-link-add" href="{{ link.add_url }}">{{ link.add_label }}</a>
+                            {% endif %}
+                        </article>
+                    {% empty %}
+                        <p class="store-empty-state">
+                            در حال حاضر دسترسی مدیریتی برای نمایش میان‌برها ندارید.
+                        </p>
+                    {% endfor %}
+                </div>
+            </section>
+
+            {% if dashboard.can_view_orders %}
+                <section class="store-dashboard-section" aria-labelledby="store-recent-orders-title">
+                    <div class="store-section-heading">
+                        <div>
+                            <h2 id="store-recent-orders-title">آخرین سفارش‌ها</h2>
+                            <p>آخرین سفارش‌های ثبت‌شده در فروشگاه.</p>
+                        </div>
+                        <a class="store-text-link" href="{{ dashboard.orders_url }}">همه سفارش‌ها</a>
+                    </div>
+
+                    <div class="store-recent-orders">
+                        {% for order in dashboard.recent_orders %}
+                            <a class="store-recent-order" href="{% url 'admin:orders_order_change' order.pk %}">
+                                <span class="store-order-primary">
+                                    <strong class="store-order-number">{{ order.order_number }}</strong>
+                                    <span class="store-order-customer">{{ order.user.get_full_name|default:order.user.username }}</span>
+                                </span>
+                                <span class="store-order-secondary">
+                                    <span class="store-order-status store-order-status--{{ order.status }}">{{ order.get_status_display }}</span>
+                                    <strong class="store-order-amount">{{ order.final_amount|floatformat:0|intcomma }} تومان</strong>
+                                    <time datetime="{{ order.created|date:'c' }}">{{ order.created|date:"Y/m/d H:i" }}</time>
+                                </span>
+                            </a>
+                        {% empty %}
+                            <p class="store-empty-state">هنوز سفارشی ثبت نشده است.</p>
+                        {% endfor %}
+                    </div>
+                </section>
+            {% endif %}
+        </div>
+
+
+        {% if dashboard.can_view_orders or dashboard.can_view_payments %}
+            <div class="store-chart-grid">
+                {% if dashboard.can_view_orders %}
+                    <section class="store-dashboard-section store-chart-section store-chart-section--orders"
+                             aria-labelledby="store-order-status-chart-title">
+                        <div class="store-section-heading">
+                            <div>
+                                <h2 id="store-order-status-chart-title">ترکیب وضعیت سفارش‌ها</h2>
+                                <p>برای دیدن سفارش‌های هر وضعیت، روی ردیف آن کلیک کنید.</p>
+                            </div>
+                        </div>
+                        <div class="store-chart-list">
+                            {% for item in dashboard.order_status_breakdown %}
+                                <a class="store-chart-row"
+                                   href="{{ dashboard.orders_url }}?status__exact={{ item.key }}"
+                                   aria-label="نمایش سفارش‌های با وضعیت {{ item.label }}">
+                                    <span class="store-chart-row-head">
+                                        <span class="store-chart-row-label">{{ item.label }}</span>
+                                        <span class="store-chart-row-value">
+                                            {{ item.count|intcomma }}
+                                            <small>{{ item.percentage }}٪</small>
+                                        </span>
+                                    </span>
+                                    <span class="store-chart-track" aria-hidden="true">
+                                        <span class="store-chart-fill store-chart-fill--{{ item.key }}"
+                                              style="width: {{ item.percentage }}%;"></span>
+                                    </span>
+                                </a>
+                            {% empty %}
+                                <p class="store-empty-state">هنوز سفارشی برای نمایش در نمودار ثبت نشده است.</p>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endif %}
+
+                {% if dashboard.can_view_payments %}
+                    <section class="store-dashboard-section store-chart-section store-chart-section--payments"
+                             aria-labelledby="store-payment-status-chart-title">
+                        <div class="store-section-heading">
+                            <div>
+                                <h2 id="store-payment-status-chart-title">ترکیب وضعیت پرداخت‌ها</h2>
+                                <p>برای بررسی جزئیات هر وضعیت، ردیف مربوط را انتخاب کنید.</p>
+                            </div>
+                        </div>
+                        <div class="store-chart-list">
+                            {% for item in dashboard.payment_status_breakdown %}
+                                <a class="store-chart-row"
+                                   href="{{ dashboard.payments_url }}?status__exact={{ item.key }}"
+                                   aria-label="نمایش پرداخت‌های با وضعیت {{ item.label }}">
+                                    <span class="store-chart-row-head">
+                                        <span class="store-chart-row-label">{{ item.label }}</span>
+                                        <span class="store-chart-row-value">
+                                            {{ item.count|intcomma }}
+                                            <small>{{ item.percentage }}٪</small>
+                                        </span>
+                                    </span>
+                                    <span class="store-chart-track" aria-hidden="true">
+                                        <span class="store-chart-fill store-chart-fill--{{ item.key }}"
+                                              style="width: {{ item.percentage }}%;"></span>
+                                    </span>
+                                </a>
+                            {% empty %}
+                                <p class="store-empty-state">هنوز پرداختی برای نمایش در نمودار ثبت نشده است.</p>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {% if dashboard.can_view_operational_alerts %}
+            <section class="store-dashboard-section store-attention-section"
+                     aria-labelledby="store-attention-title">
+                <div class="store-section-heading">
+                    <div>
+                        <h2 id="store-attention-title">موارد نیازمند رسیدگی</h2>
+                        <p>این فهرست بر اساس وضعیت واقعی فروشگاه ساخته می‌شود و هر مورد به صفحهٔ بررسی آن می‌رود.</p>
+                    </div>
+                </div>
+                <div class="store-attention-list">
+                    {% for alert in dashboard.operational_alerts %}
+                        <a class="store-attention-item store-attention-item--{{ alert.tone }}" href="{{ alert.url }}">
+                            <span class="store-attention-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg>
+                            </span>
+                            <span class="store-attention-copy">
+                                <strong>{{ alert.title }}</strong>
+                                <span>{{ alert.description }}</span>
+                            </span>
+                            <strong class="store-attention-count">{{ alert.count|intcomma }}</strong>
+                        </a>
+                    {% empty %}
+                        <p class="store-empty-state">در حال حاضر موردی برای رسیدگی فوری در بخش‌هایی که به آن‌ها دسترسی دارید ثبت نشده است.</p>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+
+        <section class="store-dashboard-section store-all-modules" aria-labelledby="store-all-modules-title">
+            <div class="store-section-heading">
+                <div>
+                    <h2 id="store-all-modules-title">همه بخش‌های مدیریتی</h2>
+                    <p>فهرست کامل بخش‌هایی که حساب شما اجازهٔ دسترسی به آن‌ها را دارد.</p>
+                </div>
+            </div>
+
+            {% if app_list %}
+                <div class="store-module-groups">
+                    {% for app in app_list %}
+                        <section class="store-module-group">
+                            <h3>{{ app.name }}</h3>
+                            <div class="store-module-links">
+                                {% for model in app.models %}
+                                    {% if model.admin_url %}
+                                        <a href="{{ model.admin_url }}">{{ model.name }}</a>
+                                    {% elif model.add_url %}
+                                        {% if app.app_label == "auth" and model.object_name == "User" %}
+                                            <span>{{ model.name }}</span>
+                                        {% elif app.app_label == "catalog" and model.object_name == "ProductVariant" and not perms.catalog.view_product and not perms.catalog.change_product %}
+                                            <span>{{ model.name }}</span>
+                                        {% else %}
+                                            <a href="{{ model.add_url }}">{{ model.name }}</a>
+                                        {% endif %}
+                                    {% else %}
+                                        <span>{{ model.name }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </section>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="store-empty-state">
+                    حساب شما به هیچ‌یک از بخش‌های مدیریتی دسترسی ندارد. برای دریافت دسترسی مناسب با مدیر سیستم تماس بگیرید.
+                </p>
+            {% endif %}
+        </section>
+    </div>
+{% endblock %}

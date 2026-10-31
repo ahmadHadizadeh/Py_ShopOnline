@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 from orders.models import Order, Payment
 from .gateways import (
@@ -20,6 +21,41 @@ from .gateways import (
 def get_default_gateway_name() -> str:
     value = getattr(settings, "PAYMENT_DEFAULT_GATEWAY", "mock_gateway")
     return str(value).strip() or "mock_gateway"
+
+
+class PaymentReconciliationRequired(ValidationError):
+    """The order/payment/inventory records disagree; never initiate another charge."""
+
+
+def _quarantine_inconsistent_successful_payment_order(order) -> bool:
+    """Prevent fulfilment when a recorded successful payment has a payable order state."""
+    if order.status not in {Order.Status.PENDING, Order.Status.PLACED}:
+        return False
+
+    order.status = Order.Status.CANCELLED
+    order.cancelled_at = timezone.now()
+    reconciliation_note = (
+        "پرداخت این سفارش قبلاً موفق ثبت شده، اما وضعیت سفارش با پرداخت "
+        "سازگار نیست. سفارش برای جلوگیری از ارسال خودکار لغو شد؛ "
+        "بررسی مالی و موجودی/بازپرداخت لازم است."
+    )
+    existing_note = (order.admin_note or "").strip()
+    order.admin_note = "\n\n".join(
+        note for note in (existing_note, reconciliation_note) if note
+    )
+    order.save(
+        update_fields=["status", "cancelled_at", "admin_note", "updated"]
+    )
+    return True
+
+
+def _lock_order_then_payment(*, order_id: int, payment_id: int) -> tuple[Payment, Order]:
+    """Acquire transactional row locks in the same order as payment initiation."""
+    locked_order = Order.objects.select_for_update().get(pk=order_id)
+    locked_payment = Payment.objects.select_for_update().get(pk=payment_id)
+    # Reuse the locked Order instance rather than issuing an unlocked relation read.
+    locked_payment.order = locked_order
+    return locked_payment, locked_order
 
 
 @dataclass(frozen=True)
@@ -60,6 +96,20 @@ class PaymentService:
             Order.Status.COMPLETED,
         }
         if order.status in non_payable_statuses:
+            payment = (
+                Payment.objects.select_for_update()
+                .filter(order=order)
+                .first()
+            )
+            if (
+                payment is None
+                or payment.status != Payment.Status.SUCCESS
+                or not order.stock_reduced
+            ):
+                raise PaymentReconciliationRequired(
+                    "وضعیت سفارش با سابقه پرداخت یا ثبت موجودی سازگار نیست؛ "
+                    "برای جلوگیری از دریافت وجه مجدد، بررسی پشتیبانی لازم است."
+                )
             return None, order, None
 
         if order.status == Order.Status.CANCELLED:
@@ -77,13 +127,18 @@ class PaymentService:
 
         if order.status != Order.Status.PENDING:
             order.status = Order.Status.PENDING
-            order.save(update_fields=["status"])
+            order.save(update_fields=["status", "updated"])
 
         payment = (
             Payment.objects.select_for_update()
             .filter(order=order)
             .first()
         )
+
+        if payment is not None and payment.status == Payment.Status.SUCCESS:
+            # Never charge again when a successful payment has an inconsistent order state.
+            _quarantine_inconsistent_successful_payment_order(order)
+            return None, order, None
 
         if payment is None:
             payment = Payment.objects.create(
@@ -161,11 +216,51 @@ class PaymentService:
             raise ValidationError("درگاه تراکنش با درگاه Callback مطابقت ندارد.")
 
         if payment.status == Payment.Status.SUCCESS:
-            return PaymentCallbackOutcome(
-                payment=payment,
-                order=payment.order,
-                success=True,
-            )
+            if payment.order.status in {
+                Order.Status.PENDING,
+                Order.Status.PLACED,
+            }:
+                # A corrupt order/payment pair may need reconciliation, but do not
+                # mutate it based on an unauthenticated duplicate callback.
+                try:
+                    result = gateway.verify_callback(payment=payment, data=data)
+                except GatewayVerificationError:
+                    raise
+                except Exception as exc:
+                    raise GatewayVerificationError(
+                        "خطا در اعتبارسنجی پاسخ درگاه."
+                    ) from exc
+
+                if not result.success:
+                    return PaymentCallbackOutcome(
+                        payment=payment,
+                        order=payment.order,
+                        success=True,
+                    )
+                if result.transaction_id != payment.transaction_code:
+                    raise ValidationError("شناسه تراکنش با رکورد پرداخت مطابقت ندارد.")
+                if result.amount != payment.amount:
+                    raise ValidationError("مبلغ تراکنش با سفارش مطابقت ندارد.")
+
+                with transaction.atomic():
+                    locked_payment, locked_order = _lock_order_then_payment(
+                        order_id=payment.order_id,
+                        payment_id=payment.pk,
+                    )
+                    if locked_payment.status == Payment.Status.SUCCESS:
+                        _quarantine_inconsistent_successful_payment_order(locked_order)
+                        return PaymentCallbackOutcome(
+                            payment=locked_payment,
+                            order=locked_order,
+                            success=True,
+                        )
+                payment = Payment.objects.select_related("order").get(pk=payment.pk)
+            else:
+                return PaymentCallbackOutcome(
+                    payment=payment,
+                    order=payment.order,
+                    success=True,
+                )
 
         try:
             result = gateway.verify_callback(
@@ -178,13 +273,10 @@ class PaymentService:
             raise GatewayVerificationError("خطا در اعتبارسنجی پاسخ درگاه.") from exc
 
         with transaction.atomic():
-            locked_payment = (
-                Payment.objects
-                .select_related("order")
-                .select_for_update()
-                .get(pk=payment.pk)
+            locked_payment, locked_order = _lock_order_then_payment(
+                order_id=payment.order_id,
+                payment_id=payment.pk,
             )
-            locked_order = locked_payment.order
 
             if locked_payment.gateway_name != gateway.name:
                 raise ValidationError("درگاه تراکنش با درگاه Callback مطابقت ندارد.")
@@ -192,6 +284,7 @@ class PaymentService:
             # A concurrent callback may have committed SUCCESS while the gateway
             # verification was in flight. Treat that as the idempotent outcome.
             if locked_payment.status == Payment.Status.SUCCESS:
+                _quarantine_inconsistent_successful_payment_order(locked_order)
                 return PaymentCallbackOutcome(
                     payment=locked_payment,
                     order=locked_order,
@@ -211,8 +304,17 @@ class PaymentService:
             )
 
             reference_id = result.reference_id
+            if reference_id is not None:
+                reference_id = str(reference_id).strip() or None
+
             if result.success and not reference_id:
-                reference_id = f"REF-{locked_payment.pk}-{uuid4().hex[:12].upper()}"
+                if gateway.name == "zarinpal":
+                    raise GatewayVerificationError(
+                        "زرین‌پال پرداخت موفق را بدون شناسه مرجع معتبر برگرداند."
+                    )
+                reference_id = (
+                    f"REF-{locked_payment.pk}-{uuid4().hex[:12].upper()}"
+                )
 
             new_status = (
                 Payment.Status.SUCCESS

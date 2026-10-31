@@ -39,6 +39,20 @@ class GatewayInitiationError(ValueError):
     """Raised when a gateway cannot create a payment request."""
 
 
+def build_mock_callback_signature(*, transaction_id: str, amount: Decimal) -> str:
+    callback_secret = getattr(
+        settings,
+        "PAYMENT_CALLBACK_SECRET",
+        settings.SECRET_KEY,
+    )
+    payload = f"{transaction_id}:{Decimal(str(amount))}".encode("utf-8")
+    return hmac.new(
+        callback_secret.encode("utf-8"),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+
+
 class PaymentGateway(Protocol):
     name: str
 
@@ -139,17 +153,10 @@ class MockGateway:
         except (InvalidOperation, TypeError, ValueError) as exc:
             raise GatewayVerificationError("مبلغ تراکنش نامعتبر است.") from exc
 
-        callback_secret = getattr(
-            settings,
-            "PAYMENT_CALLBACK_SECRET",
-            settings.SECRET_KEY,
+        expected_signature = build_mock_callback_signature(
+            transaction_id=trxid,
+            amount=amount,
         )
-        payload = f"{trxid}:{amount}".encode("utf-8")
-        expected_signature = hmac.new(
-            callback_secret.encode("utf-8"),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
 
         if not hmac.compare_digest(signature, expected_signature):
             raise GatewayVerificationError("امضای تراکنش نامعتبر است.")
@@ -207,6 +214,26 @@ class ZarinPalGateway:
         if currency not in {"IRR", "IRT"}:
             raise GatewayInitiationError("ZarinPal currency باید IRR یا IRT باشد.")
         return currency
+
+    def _amount_for_api(self, amount: Decimal) -> int:
+        """Convert the store's canonical Toman amount to the chosen API unit."""
+        try:
+            value = Decimal(str(amount))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise GatewayInitiationError("مبلغ تراکنش نامعتبر است.") from exc
+
+        if (
+            not value.is_finite()
+            or value <= 0
+            or value != value.to_integral_value()
+        ):
+            raise GatewayInitiationError(
+                "مبلغ تراکنش باید عدد صحیح و مثبت باشد."
+            )
+
+        if self._currency() == "IRR":
+            value *= Decimal("10")
+        return int(value)
 
     def _timeout(self) -> float:
         raw = self._setting("ZARINPAL_HTTP_TIMEOUT", "15")
@@ -270,7 +297,7 @@ class ZarinPalGateway:
         payload = {
             "merchant_id": self._merchant_id(),
             "currency": self._currency(),
-            "amount": int(payment.amount),
+            "amount": self._amount_for_api(payment.amount),
             "callback_url": self._callback_url(),
             "description": f"Payment for order {payment.order.order_number}",
             "metadata": {"order_id": payment.order.order_number},
@@ -326,9 +353,16 @@ class ZarinPalGateway:
                 raw_response={"status": status, "authority": authority},
             )
 
+        try:
+            api_amount = self._amount_for_api(payment.amount)
+        except GatewayInitiationError as exc:
+            raise GatewayVerificationError(
+                "مبلغ تراکنش زرین‌پال برای تأیید نامعتبر است."
+            ) from exc
+
         payload = {
             "merchant_id": self._setting("ZARINPAL_MERCHANT_ID"),
-            "amount": int(payment.amount),
+            "amount": api_amount,
             "authority": authority,
         }
         if not payload["merchant_id"]:
@@ -345,6 +379,13 @@ class ZarinPalGateway:
 
         success = code in {100, 101}
         reference_id = data_response.get("ref_id")
+        if success and (
+            reference_id is None or not str(reference_id).strip()
+        ):
+            raise GatewayVerificationError(
+                "شناسه رهگیری واقعی از تأیید زرین‌پال دریافت نشد."
+            )
+
         safe_response = self._safe_response(data_response)
         safe_response["authority"] = authority
 

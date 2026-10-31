@@ -206,6 +206,7 @@ def test_logout_requires_post_and_ends_authenticated_session():
     assert client.session.get(SESSION_KEY) is None
 
 
+@override_settings(DEBUG=True)
 class PaymentCallbackHttpContractTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="callback-http-user")

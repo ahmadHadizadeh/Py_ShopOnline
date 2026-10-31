@@ -40,18 +40,24 @@ def production_base_env(**overrides):
     return env
 
 
+
 def zarinpal_production_env(**overrides):
-    env = production_base_env(PAYMENT_DEFAULT_GATEWAY="zarinpal")
-    env.update(
-        {
-            "ZARINPAL_MERCHANT_ID": "test-merchant",
-            "ZARINPAL_CALLBACK_URL": (
-                "https://shop.example.test/orders/payment/callback/"
-            ),
-            "ZARINPAL_REQUEST_URL": "https://gateway.example.test/request",
-            "ZARINPAL_VERIFY_URL": "https://gateway.example.test/verify",
-            "ZARINPAL_STARTPAY_URL": "https://gateway.example.test/startpay",
-        }
+    env = production_base_env(
+        PAYMENT_DEFAULT_GATEWAY="zarinpal",
+        ALLOWED_HOSTS="shop.example.com",
+        ZARINPAL_ENVIRONMENT="production",
+        ZARINPAL_MERCHANT_ID="test-merchant",
+        ZARINPAL_CALLBACK_URL=(
+            "https://shop.example.com/orders/payment/callback/zarinpal/"
+        ),
+        ZARINPAL_CURRENCY="IRT",
+        ZARINPAL_REQUEST_URL=(
+            "https://api.zarinpal.com/pg/v4/payment/request.json"
+        ),
+        ZARINPAL_VERIFY_URL=(
+            "https://api.zarinpal.com/pg/v4/payment/verify.json"
+        ),
+        ZARINPAL_STARTPAY_URL="https://www.zarinpal.com/pg/StartPay",
     )
     env.update(overrides)
     return env
@@ -165,23 +171,26 @@ def test_zarinpal_production_requires_explicit_configuration():
 def test_zarinpal_production_accepts_explicit_non_sandbox_configuration():
     settings = load_settings_env(**zarinpal_production_env())
 
+    assert settings["DEBUG"] is False
+    assert settings["ZARINPAL_ENVIRONMENT"] == "production"
     assert settings["ZARINPAL_MERCHANT_ID"] == "test-merchant"
+    assert settings["ZARINPAL_CURRENCY"] == "IRT"
     assert settings["ZARINPAL_CALLBACK_URL"] == (
-        "https://shop.example.test/orders/payment/callback/"
+        "https://shop.example.com/orders/payment/callback/zarinpal/"
     )
     assert settings["ZARINPAL_REQUEST_URL"] == (
-        "https://gateway.example.test/request"
+        "https://api.zarinpal.com/pg/v4/payment/request.json"
     )
     assert settings["ZARINPAL_VERIFY_URL"] == (
-        "https://gateway.example.test/verify"
+        "https://api.zarinpal.com/pg/v4/payment/verify.json"
     )
     assert settings["ZARINPAL_STARTPAY_URL"] == (
-        "https://gateway.example.test/startpay"
+        "https://www.zarinpal.com/pg/StartPay"
     )
 
 
 def test_zarinpal_production_rejects_sandbox_endpoint():
-    with pytest.raises(RuntimeError, match="sandbox"):
+    with pytest.raises(RuntimeError, match="ZARINPAL_REQUEST_URL"):
         load_settings_env(
             **zarinpal_production_env(
                 ZARINPAL_REQUEST_URL=(
@@ -308,3 +317,171 @@ def test_rejects_unsupported_database_engine():
                 DB_ENGINE="mysql",
             )
         )
+
+
+def test_production_can_select_sandbox_zarinpal_while_debug_is_false():
+    env = production_base_env(
+        PAYMENT_DEFAULT_GATEWAY="zarinpal",
+        ALLOWED_HOSTS="shop.example.com",
+        ZARINPAL_ENVIRONMENT="sandbox",
+        ZARINPAL_MERCHANT_ID="00000000-0000-0000-0000-000000000000",
+        ZARINPAL_CALLBACK_URL=(
+            "https://shop.example.com/orders/payment/callback/zarinpal/"
+        ),
+    )
+    settings = load_settings_env(**env)
+
+    assert settings["DEBUG"] is False
+    assert settings["ZARINPAL_ENVIRONMENT"] == "sandbox"
+    assert settings["ZARINPAL_REQUEST_URL"] == (
+        "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
+    )
+    assert settings["ZARINPAL_VERIFY_URL"] == (
+        "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
+    )
+    assert settings["ZARINPAL_STARTPAY_URL"] == (
+        "https://sandbox.zarinpal.com/pg/StartPay"
+    )
+
+
+def test_production_sandbox_rejects_a_non_sandbox_endpoint():
+    with pytest.raises(RuntimeError, match="(?i)sandbox"):
+        load_settings_env(
+            **production_base_env(
+                PAYMENT_DEFAULT_GATEWAY="zarinpal",
+        ALLOWED_HOSTS="shop.example.com",
+                ZARINPAL_ENVIRONMENT="sandbox",
+                ZARINPAL_MERCHANT_ID=(
+                    "00000000-0000-0000-0000-000000000000"
+                ),
+                ZARINPAL_CALLBACK_URL=(
+                    "https://shop.example.com/orders/payment/callback/zarinpal/"
+                ),
+                ZARINPAL_REQUEST_URL=(
+                    "https://payment.zarinpal.com/pg/v4/payment/request.json"
+                ),
+            )
+        )
+
+def _canonical_zarinpal_production_env():
+    return production_base_env(
+        PAYMENT_DEFAULT_GATEWAY="zarinpal",
+        ALLOWED_HOSTS="shop.example.com",
+        ZARINPAL_ENVIRONMENT="production",
+        ZARINPAL_MERCHANT_ID="00000000-0000-0000-0000-000000000000",
+        ZARINPAL_CALLBACK_URL=(
+            "https://shop.example.com/orders/payment/callback/zarinpal/"
+        ),
+        ZARINPAL_REQUEST_URL=(
+            "https://api.zarinpal.com/pg/v4/payment/request.json"
+        ),
+        ZARINPAL_VERIFY_URL=(
+            "https://api.zarinpal.com/pg/v4/payment/verify.json"
+        ),
+        ZARINPAL_STARTPAY_URL="https://www.zarinpal.com/pg/StartPay",
+    )
+
+
+
+def test_production_accepts_official_sdk_startpay_host():
+    env = _canonical_zarinpal_production_env()
+    env["ZARINPAL_STARTPAY_URL"] = (
+        "https://payment.zarinpal.com/pg/StartPay"
+    )
+
+    settings = load_settings_env(**env)
+
+    assert settings["ZARINPAL_STARTPAY_URL"] == (
+        "https://payment.zarinpal.com/pg/StartPay"
+    )
+
+def test_production_rejects_noncanonical_zarinpal_endpoints():
+    cases = (
+        (
+            "ZARINPAL_REQUEST_URL",
+            "http://api.zarinpal.com/pg/v4/payment/request.json",
+        ),
+        (
+            "ZARINPAL_REQUEST_URL",
+            "https://api.zarinpal.com.attacker.example/pg/v4/payment/request.json",
+        ),
+        (
+            "ZARINPAL_REQUEST_URL",
+            "https://user@api.zarinpal.com/pg/v4/payment/request.json",
+        ),
+        (
+            "ZARINPAL_REQUEST_URL",
+            "https://api.zarinpal.com:444/pg/v4/payment/request.json",
+        ),
+        (
+            "ZARINPAL_REQUEST_URL",
+            "https://api.zarinpal.com/pg/v4/payment/request.json?next=attacker",
+        ),
+        (
+            "ZARINPAL_VERIFY_URL",
+            "https://api.zarinpal.com/unexpected/path",
+        ),
+        (
+            "ZARINPAL_STARTPAY_URL",
+            "https://www.zarinpal.com/unexpected/path",
+        ),
+    )
+
+    for setting_name, value in cases:
+        with __import__("pytest").raises(RuntimeError, match=setting_name):
+            env = _canonical_zarinpal_production_env()
+            env[setting_name] = value
+            load_settings_env(**env)
+
+
+def test_production_rejects_unsafe_zarinpal_callbacks():
+    callbacks = (
+        "http://shop.example.com/orders/payment/callback/zarinpal/",
+        "https://attacker.example/orders/payment/callback/zarinpal/",
+        "https://shop.example.com/orders/payment/callback/mock_gateway/",
+        "https://shop.example.com/orders/payment/callback/zarinpal/?next=attacker",
+        "https://user@shop.example.com/orders/payment/callback/zarinpal/",
+        "https://shop.example.com:444/orders/payment/callback/zarinpal/",
+    )
+
+    for callback_url in callbacks:
+        with __import__("pytest").raises(
+            RuntimeError, match="ZARINPAL_CALLBACK_URL"
+        ):
+            env = _canonical_zarinpal_production_env()
+            env["ZARINPAL_CALLBACK_URL"] = callback_url
+            load_settings_env(**env)
+
+
+def test_sandbox_rejects_noncanonical_endpoint_path():
+    env = production_base_env(
+        PAYMENT_DEFAULT_GATEWAY="zarinpal",
+        ALLOWED_HOSTS="shop.example.com",
+        ZARINPAL_ENVIRONMENT="sandbox",
+        ZARINPAL_MERCHANT_ID="00000000-0000-0000-0000-000000000000",
+        ZARINPAL_CALLBACK_URL=(
+            "https://shop.example.com/orders/payment/callback/zarinpal/"
+        ),
+        ZARINPAL_REQUEST_URL=(
+            "https://sandbox.zarinpal.com/pg/v4/payment/request.json"
+        ),
+        ZARINPAL_VERIFY_URL=(
+            "https://sandbox.zarinpal.com/unexpected/path"
+        ),
+        ZARINPAL_STARTPAY_URL=(
+            "https://sandbox.zarinpal.com/pg/StartPay"
+        ),
+    )
+    with __import__("pytest").raises(
+        RuntimeError, match="ZARINPAL_VERIFY_URL"
+    ):
+        load_settings_env(**env)
+
+def test_default_language_preserves_public_storefront_locale():
+    settings = load_settings_env(
+        DJANGO_DEBUG="1",
+        SECRET_KEY="dev-secret",
+    )
+
+    assert settings["LANGUAGE_CODE"] == "en-us"
+
