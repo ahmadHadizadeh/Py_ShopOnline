@@ -181,6 +181,55 @@ class StoreAdminDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "سفارش‌های پرداخت‌شده نیازمند تطبیق")
 
+    def test_ready_orders_link_only_lists_successful_paid_orders_with_reduced_stock(self):
+        self.grant(self.staff, "orders", "view_order")
+        self.grant(self.staff, "orders", "view_payment")
+
+        stock_mismatch = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.PAID,
+            stock_reduced=False,
+            subtotal_amount=Decimal("30000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=stock_mismatch,
+            amount=stock_mismatch.final_amount,
+            status=Payment.Status.SUCCESS,
+            gateway_name="zarinpal",
+        )
+
+        payment_mismatch = Order.objects.create(
+            user=self.staff,
+            status=Order.Status.PAID,
+            stock_reduced=True,
+            subtotal_amount=Decimal("40000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+        )
+        Payment.objects.create(
+            order=payment_mismatch,
+            amount=payment_mismatch.final_amount,
+            status=Payment.Status.FAILED,
+            gateway_name="zarinpal",
+        )
+
+        dashboard = store_admin_dashboard_data(self.staff)
+        self.assertEqual(dashboard["orders_to_process"], 1)
+        self.assertIn("stock_reduced__exact=1", dashboard["ready_orders_url"])
+        self.assertIn("payment__status__exact=success", dashboard["ready_orders_url"])
+
+        self.client.force_login(self.staff)
+        dashboard_response = self.client.get(reverse("admin:index"))
+        self.assertContains(dashboard_response, dashboard["ready_orders_url"])
+
+        list_response = self.client.get(dashboard["ready_orders_url"])
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, self.order.order_number)
+        self.assertNotContains(list_response, stock_mismatch.order_number)
+        self.assertNotContains(list_response, payment_mismatch.order_number)
+
     def test_order_readiness_metrics_are_hidden_without_payment_permission(self):
         self.grant(self.staff, "orders", "view_order")
         self.client.force_login(self.staff)

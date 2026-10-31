@@ -132,6 +132,10 @@ def store_admin_dashboard_data(user):
     # unless the staff member can view both orders and payments.
     if data["can_view_order_readiness"]:
         paid_orders = order_queryset.filter(status=Order.Status.PAID)
+        data["ready_orders_url"] = (
+            f"{data['orders_url']}?status__exact={Order.Status.PAID}"
+            f"&stock_reduced__exact=1&payment__status__exact={Payment.Status.SUCCESS}"
+        )
         data["orders_to_process"] = paid_orders.filter(
             stock_reduced=True,
             payment__status=Payment.Status.SUCCESS,
@@ -232,7 +236,7 @@ def store_admin_dashboard_data(user):
                 "title": "سفارش‌های آماده پردازش",
                 "description": "پرداخت موفق تأیید شده و کاهش موجودی ثبت شده است؛ سفارش منتظر شروع آماده‌سازی است.",
                 "count": data["orders_to_process"],
-                "url": f'{data["orders_url"]}?status__exact=paid',
+                "url": data["ready_orders_url"],
             }
         )
 
