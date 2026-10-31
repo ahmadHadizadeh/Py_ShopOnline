@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -1648,6 +1649,142 @@ class AdminOperationalTests(TestCase):
         content = response.content.decode()
         self.assertIn(self.order.order_number, content)
         self.assertIn(self.payment.transaction_code, content)
+
+
+class OrderPaymentDataPermissionTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="order-payment-permission-staff",
+            email="order-payment-permission@example.test",
+            password="Password123!",
+            is_staff=True,
+        )
+        self.order = Order.objects.create(
+            user=self.staff,
+            order_number="ORD-PAYMENT-PERMISSION",
+            status=Order.Status.PAID,
+            subtotal_amount=Decimal("125000"),
+            discount_amount=Decimal("0"),
+            shipping_amount=Decimal("0"),
+            final_amount=Decimal("125000"),
+        )
+        self.payment = Payment.objects.create(
+            order=self.order,
+            user=self.staff,
+            amount=Decimal("125000"),
+            status=Payment.Status.SUCCESS,
+            gateway_name="zarinpal",
+            transaction_code="PRIVATE-TRANSACTION-REF-001",
+            reference_code="PRIVATE-PROVIDER-REFERENCE-001",
+            gateway_response='{"private_provider_payload":"DO-NOT-EXPOSE"}',
+        )
+
+    def grant(self, codename):
+        permission = Permission.objects.get(
+            content_type__app_label="orders",
+            codename=codename,
+        )
+        self.staff.user_permissions.add(permission)
+
+    def test_order_only_staff_cannot_view_payment_fields_in_order_admin(self):
+        self.grant("view_order")
+        self.client.force_login(self.staff)
+
+        order_admin = admin.site._registry[Order]
+        request = RequestFactory().get(reverse("admin:orders_order_changelist"))
+        request.user = self.staff
+
+        self.assertNotIn("get_payment_status_display", order_admin.get_list_display(request))
+        self.assertNotIn("payment__status", order_admin.get_list_filter(request))
+        self.assertFalse(
+            any(field.startswith("payment__") for field in order_admin.get_search_fields(request))
+        )
+        self.assertNotIn("payment", order_admin.get_list_select_related(request))
+
+        payment_inline_instances = [
+            inline for inline in order_admin.get_inline_instances(request, self.order)
+            if inline.model is Payment
+        ]
+        self.assertEqual(payment_inline_instances, [])
+
+        changelist_url = reverse("admin:orders_order_changelist")
+        list_response = self.client.get(changelist_url)
+        self.assertEqual(list_response.status_code, 200)
+        self.assertNotContains(list_response, "وضعیت پرداخت")
+        self.assertNotContains(list_response, self.payment.transaction_code)
+        self.assertNotContains(list_response, self.payment.reference_code)
+        self.assertNotContains(list_response, "DO-NOT-EXPOSE")
+
+        detail_response = self.client.get(
+            reverse("admin:orders_order_change", args=[self.order.pk])
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotContains(detail_response, self.payment.transaction_code)
+        self.assertNotContains(detail_response, self.payment.reference_code)
+        self.assertNotContains(detail_response, "DO-NOT-EXPOSE")
+
+        payment_admin_response = self.client.get(
+            reverse("admin:orders_payment_changelist")
+        )
+        self.assertEqual(payment_admin_response.status_code, 403)
+
+    def test_order_only_staff_cannot_search_or_filter_using_payment_data(self):
+        self.grant("view_order")
+        self.client.force_login(self.staff)
+        changelist_url = reverse("admin:orders_order_changelist")
+
+        search_response = self.client.get(
+            changelist_url,
+            {"q": self.payment.transaction_code},
+        )
+        self.assertEqual(search_response.status_code, 200)
+        self.assertNotContains(search_response, self.order.order_number)
+        self.assertNotContains(search_response, self.payment.transaction_code)
+
+        direct_filter_response = self.client.get(
+            changelist_url,
+            {"payment__status__exact": Payment.Status.SUCCESS},
+        )
+        self.assertEqual(direct_filter_response.status_code, 400)
+
+    def test_view_payment_permission_restores_payment_read_surfaces(self):
+        self.grant("view_order")
+        self.grant("view_payment")
+        self.client.force_login(self.staff)
+
+        list_response = self.client.get(reverse("admin:orders_order_changelist"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "وضعیت پرداخت")
+        self.assertContains(list_response, "پرداخت موفق")
+
+        detail_response = self.client.get(
+            reverse("admin:orders_order_change", args=[self.order.pk])
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, self.payment.transaction_code)
+        self.assertContains(detail_response, self.payment.reference_code)
+        self.assertContains(detail_response, "DO-NOT-EXPOSE")
+
+        payment_list_response = self.client.get(
+            reverse("admin:orders_payment_changelist")
+        )
+        self.assertEqual(payment_list_response.status_code, 200)
+        self.assertContains(payment_list_response, self.payment.transaction_code)
+
+    def test_change_payment_permission_also_allows_payment_read_surfaces(self):
+        self.grant("view_order")
+        self.grant("change_payment")
+        self.client.force_login(self.staff)
+
+        list_response = self.client.get(reverse("admin:orders_order_changelist"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "وضعیت پرداخت")
+
+        detail_response = self.client.get(
+            reverse("admin:orders_order_change", args=[self.order.pk])
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, self.payment.transaction_code)
 
 
 class OrderStatusTransitionTests(TestCase):

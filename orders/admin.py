@@ -228,6 +228,55 @@ class OrderAdmin(admin.ModelAdmin):
         cancel_unpaid_orders,
     )
 
+    @staticmethod
+    def _can_view_payment_data(request):
+        user = request.user
+        return bool(
+            user.is_superuser
+            or user.has_perm("orders.view_payment")
+            or user.has_perm("orders.change_payment")
+        )
+
+    def get_list_display(self, request):
+        fields = list(super().get_list_display(request))
+        if not self._can_view_payment_data(request):
+            fields = [
+                field for field in fields
+                if field != "get_payment_status_display"
+            ]
+        return fields
+
+    def get_list_filter(self, request):
+        filters = list(super().get_list_filter(request))
+        if not self._can_view_payment_data(request):
+            filters = [item for item in filters if item != "payment__status"]
+        return filters
+
+    def get_search_fields(self, request):
+        fields = tuple(super().get_search_fields(request))
+        if not self._can_view_payment_data(request):
+            fields = tuple(
+                field for field in fields
+                if not field.startswith("payment__")
+            )
+        return fields
+
+    def get_list_select_related(self, request):
+        relations = super().get_list_select_related(request)
+        if self._can_view_payment_data(request):
+            return relations
+        if isinstance(relations, (tuple, list)):
+            return tuple(relation for relation in relations if relation != "payment")
+        return relations
+
+    def lookup_allowed(self, lookup, value, request):
+        if (
+            not self._can_view_payment_data(request)
+            and (lookup == "payment" or lookup.startswith("payment__"))
+        ):
+            return False
+        return super().lookup_allowed(lookup, value, request)
+
     @admin.display(description="نام گیرنده", ordering="address_snapshot__recipient_name")
     def recipient_name_display(self, obj):
         try:
