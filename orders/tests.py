@@ -2092,6 +2092,32 @@ class PaymentPresentationContractTests(TestCase):
         self.assertIn(self.order.order_number, content)
         self.assertIn("تاریخ ثبت:", content)
 
+    def test_confirmation_uses_stored_order_discount_after_product_old_price_changes(self):
+        self.order.discount_amount = Decimal("10000")
+        self.order.final_amount = Decimal("130000")
+        self.order.save(update_fields=["discount_amount", "final_amount", "updated"])
+
+        self.payment.amount = Decimal("130000")
+        self.payment.save(update_fields=["amount", "updated"])
+
+        # Product.old_price remains editable in ProductAdmin, but it is not
+        # a historical price snapshot for this already-created order.
+        self.product.old_price = Decimal("200000")
+        self.product.save(update_fields=["old_price", "updated"])
+
+        response = self.client.get(
+            reverse(
+                "orders:order_confirmation",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "تخفیف سفارش:")
+        self.assertContains(response, "10,000 تومان")
+        self.assertContains(response, "130,000 تومان")
+        self.assertNotContains(response, "75,000")
+
     def test_confirmation_failed_state_exposes_retry_action(self):
         self.payment.status = Payment.Status.FAILED
         self.payment.save(update_fields=["status"])

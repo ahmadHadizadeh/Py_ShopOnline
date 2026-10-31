@@ -87,7 +87,6 @@
                                 <th class="p-4 font-semibold">کالا</th>
                                 <th class="p-4 font-semibold text-center">تعداد</th>
                                 <th class="p-4 font-semibold text-center">قیمت واحد</th>
-                                <th class="p-4 font-semibold text-center text-rose-500">تخفیف</th>
                                 <th class="p-4 font-semibold text-center">جمع</th>
                             </tr>
                         </thead>
@@ -99,9 +98,6 @@
                                 <td class="p-4 font-medium text-gray-900">{{ item.product_name }}</td>
                                 <td class="p-4 text-center">{{ item.quantity }}</td>
                                 <td class="p-4 text-center">{{ item.unit_price|floatformat:"0"|intcomma }}</td>
-                                <td class="p-4 text-center text-rose-600 font-medium">
-                                    {{ item.discount_amount|floatformat:"0"|intcomma }}
-                                </td>
                                 <td class="p-4 text-center font-bold text-gray-900">
                                     {{ item.subtotal_price|floatformat:"0"|intcomma }}
                                 </td>
@@ -111,19 +107,25 @@
 
                         <tfoot class="bg-gray-50 border-t-2 border-gray-100">
                             <tr>
-                                <td colspan="5" class="p-4 text-right font-bold text-gray-700">جمع مبلغ کالاها:</td>
+                                <td colspan="4" class="p-4 text-right font-bold text-gray-700">جمع مبلغ کالاها:</td>
                                 <td class="p-4 text-center font-bold text-gray-900 whitespace-nowrap">
                                     {{ order.subtotal_amount|floatformat:"0"|intcomma }} تومان
                                 </td>
                             </tr>
                             <tr>
-                                <td colspan="5" class="p-4 text-right font-bold text-gray-700">هزینه ارسال:</td>
+                                <td colspan="4" class="p-4 text-right font-bold text-rose-600">تخفیف سفارش:</td>
+                                <td class="p-4 text-center font-bold text-rose-600 whitespace-nowrap">
+                                    {{ order.discount_amount|floatformat:"0"|intcomma }} تومان
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="p-4 text-right font-bold text-gray-700">هزینه ارسال:</td>
                                 <td class="p-4 text-center font-bold text-gray-900 whitespace-nowrap">
                                     {{ order.shipping_amount|floatformat:"0"|intcomma }} تومان
                                 </td>
                             </tr>
                             <tr>
-                                <td colspan="5" class="p-4 text-right font-bold text-gray-900 text-lg">مبلغ نهایی قابل پرداخت:</td>
+                                <td colspan="4" class="p-4 text-right font-bold text-gray-900 text-lg">مبلغ نهایی قابل پرداخت:</td>
                                 <td class="p-4 text-center font-bold text-emerald-600 text-lg whitespace-nowrap">
                                     {{ order.final_amount|floatformat:"0"|intcomma }} تومان
                                 </td>
