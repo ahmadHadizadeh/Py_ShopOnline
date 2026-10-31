@@ -74,7 +74,7 @@ def prepare_database() -> None:
         shipping_amount=Decimal("0"),
         final_amount=Decimal("125000"),
     )
-    Payment.objects.create(
+    payment = Payment.objects.create(
         order=order,
         amount=Decimal("125000"),
         status=Payment.Status.SUCCESS,
@@ -331,6 +331,60 @@ def main() -> None:
                 product_form_screenshot = ARTIFACTS / "admin-product-form-mobile.png"
                 page.screenshot(path=str(product_form_screenshot), full_page=True)
                 report["screenshots"].append(str(product_form_screenshot.relative_to(ROOT)))
+
+                # Exercise the main seller operations pages in a narrow viewport.
+                # These routes use the same persisted objects created for this smoke run.
+                mobile_admin_pages = (
+                    (
+                        "orders_mobile",
+                        f"{BASE_URL}/admin/orders/order/",
+                        "change-list",
+                        "admin-orders-mobile.png",
+                    ),
+                    (
+                        "order_form_mobile",
+                        f"{BASE_URL}/admin/orders/order/{order.pk}/change/",
+                        "change-form",
+                        "admin-order-form-mobile.png",
+                    ),
+                    (
+                        "payments_mobile",
+                        f"{BASE_URL}/admin/orders/payment/",
+                        "change-list",
+                        "admin-payments-mobile.png",
+                    ),
+                    (
+                        "payment_form_mobile",
+                        f"{BASE_URL}/admin/orders/payment/{payment.pk}/change/",
+                        "change-form",
+                        "admin-payment-form-mobile.png",
+                    ),
+                )
+                for check_name, page_url, body_class, screenshot_name in mobile_admin_pages:
+                    response = page.goto(page_url, wait_until="networkidle")
+                    if response is None or response.status != 200:
+                        raise AssertionError(
+                            f"{check_name} returned {None if response is None else response.status}"
+                        )
+                    assert body_class in (page.locator("body").get_attribute("class") or "")
+                    assert page.locator("html").get_attribute("dir") == "rtl"
+                    assert page.locator("html").get_attribute("lang") == "fa-ir"
+                    if body_class == "change-list":
+                        assert page.locator("#changelist").count() == 1
+                    else:
+                        assert page.locator("#content-main > form").count() == 1
+
+                    dimensions = page.evaluate(
+                        "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
+                    )
+                    report["viewport_checks"][check_name] = dimensions
+                    if max(dimensions["document"], dimensions["body"]) > dimensions["viewport"]:
+                        raise AssertionError(
+                            f"{check_name} has horizontal overflow: {dimensions}"
+                        )
+                    screenshot_path = ARTIFACTS / screenshot_name
+                    page.screenshot(path=str(screenshot_path), full_page=True)
+                    report["screenshots"].append(str(screenshot_path.relative_to(ROOT)))
 
                 for asset_path in (
                     "/static/css/admin_dashboard.css",
