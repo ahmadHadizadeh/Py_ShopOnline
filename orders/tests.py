@@ -2790,19 +2790,27 @@ class AdminOrderedCartProtectionTests(TestCase):
         self.assertTrue(ProductVariant.objects.filter(pk=variant.pk).exists())
         self.assertTrue(CartItem.objects.filter(pk=self.cart_item.pk).exists())
 
-    def test_active_cart_admin_remains_editable(self):
+    def test_active_cart_identity_is_readonly_but_item_operations_remain_available(self):
         active_user = User.objects.create_user(
             username="active-cart-admin-user",
             password="Password123!",
         )
+        other_user = User.objects.create_user(
+            username="other-active-cart-admin-user",
+            password="Password123!",
+        )
         active_cart = Cart.objects.create(
             user=active_user,
+            session_key="active-cart-original-session",
             status=Cart.STATUS_ACTIVE,
         )
 
         cart_admin = admin.site._registry[Cart]
         cart_readonly = set(cart_admin.get_readonly_fields(self.request, active_cart))
-        self.assertNotIn("status", cart_readonly)
+        self.assertTrue(
+            {"user", "session_key", "status"}.issubset(cart_readonly)
+        )
+        self.assertFalse(cart_admin.has_add_permission(self.request))
         self.assertTrue(cart_admin.has_delete_permission(self.request, active_cart))
 
         active_item = CartItem.objects.create(
@@ -2816,10 +2824,152 @@ class AdminOrderedCartProtectionTests(TestCase):
         item_readonly = set(
             cart_item_admin.get_readonly_fields(self.request, active_item)
         )
+        self.assertTrue(
+            {"cart", "product", "variant", "unit_price_snapshot"}.issubset(
+                item_readonly
+            )
+        )
         self.assertNotIn("quantity", item_readonly)
+        self.assertNotIn("status", item_readonly)
+        self.assertFalse(cart_item_admin.has_add_permission(self.request))
         self.assertTrue(
             cart_item_admin.has_delete_permission(self.request, active_item)
         )
+
+        inline_admin = cart_admin.inlines[0](CartItem, admin.site)
+        inline_readonly = set(
+            inline_admin.get_readonly_fields(self.request, active_cart)
+        )
+        self.assertTrue(
+            {"product", "variant", "unit_price_snapshot"}.issubset(
+                inline_readonly
+            )
+        )
+        self.assertNotIn("quantity", inline_readonly)
+        self.assertNotIn("status", inline_readonly)
+        self.assertFalse(inline_admin.has_add_permission(self.request, active_cart))
+
+    def test_cart_admin_rejects_manual_creation(self):
+        response = self.client.post(
+            reverse("admin:cart_cart_add"),
+            {
+                "user": self.admin_user.pk,
+                "session_key": "manually-created-cart",
+                "status": Cart.STATUS_ACTIVE,
+                "_save": "ذخیره",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Cart.objects.filter(session_key="manually-created-cart").exists()
+        )
+
+    def test_cart_item_admin_rejects_manual_creation(self):
+        response = self.client.post(
+            reverse("admin:cart_cartitem_add"),
+            {
+                "cart": self.ordered_cart.pk,
+                "product": self.product.pk,
+                "quantity": 1,
+                "unit_price_snapshot": "1",
+                "status": CartItem.STATUS_ACTIVE,
+                "_save": "ذخیره",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(CartItem.objects.filter(cart=self.ordered_cart).count(), 1)
+
+    def test_active_cart_admin_ignores_identity_and_lifecycle_tampering(self):
+        active_user = User.objects.create_user(
+            username="cart-admin-original-user",
+            password="Password123!",
+        )
+        other_user = User.objects.create_user(
+            username="cart-admin-target-user",
+            password="Password123!",
+        )
+        active_cart = Cart.objects.create(
+            user=active_user,
+            session_key="cart-admin-original-session",
+            status=Cart.STATUS_ACTIVE,
+        )
+
+        response = self.client.post(
+            reverse("admin:cart_cart_change", args=[active_cart.pk]),
+            {
+                "user": other_user.pk,
+                "session_key": "cart-admin-forged-session",
+                "status": Cart.STATUS_ORDERED,
+                "_save": "ذخیره",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        active_cart.refresh_from_db()
+        self.assertEqual(active_cart.user_id, active_user.pk)
+        self.assertEqual(active_cart.session_key, "cart-admin-original-session")
+        self.assertEqual(active_cart.status, Cart.STATUS_ACTIVE)
+
+    def test_active_cart_item_admin_preserves_price_and_relationships(self):
+        active_user = User.objects.create_user(
+            username="cart-item-admin-user",
+            password="Password123!",
+        )
+        active_cart = Cart.objects.create(
+            user=active_user,
+            status=Cart.STATUS_ACTIVE,
+        )
+        active_item = CartItem.objects.create(
+            cart=active_cart,
+            product=self.product,
+            quantity=1,
+            unit_price_snapshot=Decimal("900000"),
+            status=CartItem.STATUS_ACTIVE,
+        )
+
+        other_product = Product.objects.create(
+            category=self.category,
+            name="Cart Admin Forged Product",
+            slug="cart-admin-forged-product",
+            price=Decimal("1500000"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+        other_cart = Cart.objects.create(
+            user=self.admin_user,
+            status=Cart.STATUS_ACTIVE,
+        )
+        forged_variant = ProductVariant.objects.create(
+            product=other_product,
+            name="رنگ",
+            value="مشکی",
+            price_adjustment=Decimal("50000"),
+        )
+
+        response = self.client.post(
+            reverse("admin:cart_cartitem_change", args=[active_item.pk]),
+            {
+                "cart": other_cart.pk,
+                "product": other_product.pk,
+                "variant": forged_variant.pk,
+                "quantity": "2",
+                "unit_price_snapshot": "1",
+                "status": CartItem.STATUS_SAVED,
+                "_save": "ذخیره",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        active_item.refresh_from_db()
+        self.assertEqual(active_item.cart_id, active_cart.pk)
+        self.assertEqual(active_item.product_id, self.product.pk)
+        self.assertIsNone(active_item.variant_id)
+        self.assertEqual(active_item.unit_price_snapshot, Decimal("900000"))
+        self.assertEqual(active_item.quantity, 2)
+        self.assertEqual(active_item.status, CartItem.STATUS_SAVED)
 
 
 @skipUnless(
