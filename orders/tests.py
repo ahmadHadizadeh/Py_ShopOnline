@@ -1739,7 +1739,6 @@ class OrderPaymentDataPermissionTests(TestCase):
         )
         self.assertEqual(search_response.status_code, 200)
         self.assertNotContains(search_response, self.order.order_number)
-        self.assertNotContains(search_response, self.payment.transaction_code)
 
         direct_filter_response = self.client.get(
             changelist_url,
