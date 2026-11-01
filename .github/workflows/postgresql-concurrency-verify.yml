@@ -56,7 +56,7 @@ jobs:
 
       - name: Confirm PostgreSQL backend
         run: |
-          python -c "import django; django.setup(); from django.db import connection; assert connection.vendor == 'postgresql', connection.vendor; print('Database backend:', connection.vendor)"
+          python -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings'); import django; django.setup(); from django.db import connection; assert connection.vendor == 'postgresql', connection.vendor; print('Database backend:', connection.vendor)"
 
       - name: Run Django system checks
         run: python manage.py check
