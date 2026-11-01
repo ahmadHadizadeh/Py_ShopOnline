@@ -4,6 +4,7 @@ from decimal import Decimal
 import threading
 from uuid import uuid4
 
+from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection
 from django.test import TransactionTestCase
 from unittest import skipUnless
@@ -29,7 +30,7 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
     reset_sequences = True
 
     def setUp(self):
-        self.gateway_name = f"postgres_concurrency_{uuid4().hex}"
+        self.gateway_name = f"pgc_{uuid4().hex[:20]}"
         self.gateway = self.ConcurrentGateway(self.gateway_name)
         PaymentGatewayRegistry.register(self.gateway)
 
@@ -74,9 +75,7 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         )
 
     def _create_order_and_payment(self, *, products):
-        user = __import__(
-            "django.contrib.auth", fromlist=["get_user_model"]
-        ).get_user_model().objects.create_user(
+        user = get_user_model().objects.create_user(
             username=f"pg-concurrency-{uuid4().hex[:12]}"
         )
         # The user-created signal creates the profile; assert the fixture is complete.
@@ -146,7 +145,7 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
                 with result_lock:
                     errors.append((transaction_code, repr(exc)))
             finally:
-                close_old_connections()
+                connection.close()
 
         threads = [
             threading.Thread(
