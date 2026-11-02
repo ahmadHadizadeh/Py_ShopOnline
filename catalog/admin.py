@@ -4,6 +4,7 @@ from django.db.models import Count, Q
 from django.utils.html import format_html
 from .models.category import Category
 from .models.product import Product
+from .models.inventory import InventoryMovement
 from .models.review import Review
 from .models.variant import ProductVariant
 from .models.wishlist import Wishlist
@@ -195,6 +196,55 @@ class ProductAdmin(admin.ModelAdmin):
             tone,
             label,
         )
+
+
+@admin.register(InventoryMovement)
+class InventoryMovementAdmin(admin.ModelAdmin):
+    list_display = (
+        "product_name",
+        "movement_type_display",
+        "delta_display",
+        "quantity_before",
+        "quantity_after",
+        "actor_label",
+        "order_number",
+        "created_at",
+    )
+    list_filter = ("source", "created_at")
+    search_fields = ("product_name", "reason", "order_number", "actor_label")
+    list_select_related = ("product", "actor")
+    date_hierarchy = "created_at"
+    ordering = ("-created_at", "-pk")
+    readonly_fields = (
+        "product",
+        "product_name",
+        "delta",
+        "quantity_before",
+        "quantity_after",
+        "source",
+        "reason",
+        "actor",
+        "actor_label",
+        "order_number",
+        "created_at",
+    )
+
+    @admin.display(description="نوع عملیات", ordering="source")
+    def movement_type_display(self, obj):
+        return obj.get_source_display()
+
+    @admin.display(description="تغییر موجودی", ordering="delta")
+    def delta_display(self, obj):
+        return f"{obj.delta:+d}"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(ProductVariant)
