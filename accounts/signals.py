@@ -16,19 +16,20 @@ User = get_user_model()
 # product/order permissions out of this list.
 STORE_MANAGER_PERMISSION_CODENAMES = {
     "catalog": (
-        "view_product", "add_product", "change_product",
-        "view_category", "add_category", "change_category",
-        "view_productvariant", "add_productvariant", "change_productvariant",
-        "view_productimage", "add_productimage", "change_productimage",
-        "delete_productimage",
-        "view_productspecification", "add_productspecification",
-        "change_productspecification", "delete_productspecification",
-        "view_review", "change_review",
+        "add_product", "change_product",
+        "add_category", "change_category",
+        "add_productvariant", "change_productvariant",
+        "add_productimage", "change_productimage", "delete_productimage",
+        "add_productspecification", "change_productspecification",
+        "delete_productspecification",
+        "change_review",
         "view_inventorymovement",
     ),
     "orders": (
-        "view_order", "change_order", "view_payment",
-        "view_orderitem", "view_orderaddresssnapshot",
+        "change_order",
+        "view_payment",
+        "view_orderitem",
+        "view_orderaddresssnapshot",
     ),
 }
 

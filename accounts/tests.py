@@ -730,19 +730,19 @@ class StoreIdentityAdminPermissionTests(TestCase):
 
 class StoreManagerGroupProvisioningTests(TestCase):
     expected_permissions = {
-        ("catalog", "view_product"), ("catalog", "add_product"),
-        ("catalog", "change_product"), ("catalog", "view_category"),
+        ("catalog", "add_product"), ("catalog", "change_product"),
         ("catalog", "add_category"), ("catalog", "change_category"),
-        ("catalog", "view_productvariant"), ("catalog", "add_productvariant"),
-        ("catalog", "change_productvariant"), ("catalog", "view_productimage"),
+        ("catalog", "add_productvariant"), ("catalog", "change_productvariant"),
         ("catalog", "add_productimage"), ("catalog", "change_productimage"),
-        ("catalog", "delete_productimage"), ("catalog", "view_productspecification"),
+        ("catalog", "delete_productimage"),
         ("catalog", "add_productspecification"),
         ("catalog", "change_productspecification"),
-        ("catalog", "delete_productspecification"), ("catalog", "view_review"),
-        ("catalog", "change_review"), ("catalog", "view_inventorymovement"),
-        ("orders", "view_order"), ("orders", "change_order"),
-        ("orders", "view_payment"), ("orders", "view_orderitem"),
+        ("catalog", "delete_productspecification"),
+        ("catalog", "change_review"),
+        ("catalog", "view_inventorymovement"),
+        ("orders", "change_order"),
+        ("orders", "view_payment"),
+        ("orders", "view_orderitem"),
         ("orders", "view_orderaddresssnapshot"),
     }
 
@@ -826,6 +826,10 @@ class StoreManagerAdminAccessTests(TestCase):
         for permission in (
             "orders.change_payment", "catalog.delete_product",
             "catalog.delete_category", "catalog.delete_productvariant",
+            "catalog.view_product", "catalog.view_category",
+            "catalog.view_productvariant", "catalog.view_productimage",
+            "catalog.view_productspecification", "catalog.view_review",
+            "orders.view_order",
             "orders.delete_order", "orders.add_payment", "cart.view_cart",
             "accounts.view_address", "orders.change_shippingmethod",
             "auth.change_user",
