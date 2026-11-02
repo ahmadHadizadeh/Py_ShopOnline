@@ -1280,9 +1280,11 @@ class SharedProductVariantStockTests(TestCase):
         red_item = self.add_item(self.red, 3)
         self.add_item(self.blue, 2)
 
-        with self.assertRaisesMessage(ValidationError, "تمام واریانت‌ها"):
+        with self.assertRaises(ValidationError) as raised:
+
             update_cart_item_quantity_by_id(self.cart, red_item.pk, 4)
 
+        self.assertIn("تمام واریانت", raised.exception.messages[0])
         red_item.refresh_from_db()
         self.assertEqual(red_item.quantity, 3)
 
@@ -1295,6 +1297,7 @@ class SharedProductVariantStockTests(TestCase):
                 self.cart, blue_item.pk, CartItem.STATUS_ACTIVE
             )
 
+        self.assertIn("تمام واریانت", raised.exception.messages[0])
         blue_item.refresh_from_db()
         self.assertEqual(blue_item.status, CartItem.STATUS_SAVED)
 
@@ -1323,6 +1326,7 @@ class SharedProductVariantStockTests(TestCase):
                 shipping_method=shipping,
             )
 
+        self.assertIn("تمام واریانت", raised.exception.messages[0])
         self.assertFalse(Order.objects.filter(cart=self.cart).exists())
         self.cart.refresh_from_db()
         self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
