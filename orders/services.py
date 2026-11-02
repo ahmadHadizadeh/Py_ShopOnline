@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from cart.models import Cart
+from catalog.models.product import Product
 from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment
 
 
@@ -107,6 +109,7 @@ class OrderService:
         if not user or not getattr(user, "is_authenticated", False):
             raise ValidationError("برای ثبت سفارش باید وارد حساب کاربری شوید.")
 
+        cart = Cart.objects.select_for_update().get(pk=cart.pk)
         if cart.user_id != user.id or cart.status != cart.STATUS_ACTIVE:
             raise ValidationError("سبد خرید معتبر نیست.")
 
@@ -114,9 +117,38 @@ class OrderService:
             cart.items.select_for_update(of=("self",))
             .select_related("product", "variant")
             .filter(status="active")
+            .order_by("pk")
         )
         if not active_items:
             raise ValidationError("سبد خرید فعال فاقد آیتم قابل سفارش است.")
+
+        required_quantities = {}
+        for item in active_items:
+            if item.variant_id and item.variant.product_id != item.product_id:
+                raise ValidationError("واریانت یکی از آیتم‌ها متعلق به محصول انتخاب‌شده نیست.")
+            required_quantities[item.product_id] = (
+                required_quantities.get(item.product_id, 0) + item.quantity
+            )
+
+        locked_products = {}
+        for product_id in sorted(required_quantities):
+            try:
+                product = Product.objects.select_for_update().get(pk=product_id)
+            except Product.DoesNotExist:
+                raise ValidationError("یکی از محصولات سبد دیگر در دسترس نیست.") from None
+            locked_products[product_id] = product
+            if not product.is_available:
+                raise ValidationError(
+                    f"محصول «{product.name}» دیگر برای خرید در دسترس نیست."
+                )
+            if required_quantities[product_id] > product.stock:
+                raise ValidationError(
+                    f"مجموع تعداد محصول «{product.name}» در تمام واریانت‌ها "
+                    "از موجودی فعلی بیشتر است."
+                )
+
+        for item in active_items:
+            item.product = locked_products[item.product_id]
 
         totals = OrderService.calculate_order_totals(cart, shipping_method)
 

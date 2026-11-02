@@ -5,12 +5,18 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.backends.db import SessionStore
+from django.db.models import Sum
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from cart.models import Cart, CartItem
-from cart.services import merge_guest_cart_to_user
+from cart.services import (
+    add_product_to_cart,
+    merge_guest_cart_to_user,
+    toggle_cart_item_status_by_id,
+    update_cart_item_quantity_by_id,
+)
 from catalog.models.product import Product
 
 from accounts.models.address import Address
@@ -1215,3 +1221,108 @@ class CheckoutOrderIntegrityContractTests(TestCase):
 
         order = Order.objects.get(cart=self.cart)
         self.assertEqual(order.payment.amount, order.final_amount)
+
+
+
+class SharedProductVariantStockTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="shared-variant-stock-user",
+            password="testpass123",
+        )
+        self.category = Category.objects.create(
+            name="Shared Variant Stock Category",
+            slug="shared-variant-stock-category",
+        )
+        self.product = Product.objects.create(
+            name="Shared Variant Stock Product",
+            slug="shared-variant-stock-product",
+            price=1000,
+            stock=5,
+            is_active=True,
+            category=self.category,
+        )
+        self.red = ProductVariant.objects.create(
+            product=self.product, name="رنگ", value="قرمز"
+        )
+        self.blue = ProductVariant.objects.create(
+            product=self.product, name="رنگ", value="آبی"
+        )
+        self.cart = Cart.objects.create(
+            user=self.user,
+            status=Cart.STATUS_ACTIVE,
+        )
+
+    def add_item(self, variant, quantity, status=CartItem.STATUS_ACTIVE):
+        return CartItem.objects.create(
+            cart=self.cart,
+            product=self.product,
+            variant=variant,
+            quantity=quantity,
+            unit_price_snapshot=self.product.price,
+            status=status,
+        )
+
+    def test_add_rejects_total_across_variants_above_stock(self):
+        self.add_item(self.red, 3)
+        with self.assertRaisesMessage(ValidationError, "تمام واریانت‌ها"):
+            add_product_to_cart(
+                self.cart, self.product, quantity=3, variant=self.blue
+            )
+
+        active_total = self.cart.items.filter(
+            status=CartItem.STATUS_ACTIVE
+        ).aggregate(total=Sum("quantity"))["total"]
+        self.assertEqual(active_total, 3)
+        self.assertFalse(self.cart.items.filter(variant=self.blue).exists())
+
+    def test_quantity_update_counts_other_active_variants(self):
+        red_item = self.add_item(self.red, 3)
+        self.add_item(self.blue, 2)
+
+        with self.assertRaisesMessage(ValidationError, "تمام واریانت‌ها"):
+            update_cart_item_quantity_by_id(self.cart, red_item.pk, 4)
+
+        red_item.refresh_from_db()
+        self.assertEqual(red_item.quantity, 3)
+
+    def test_saved_item_cannot_be_reactivated_above_shared_stock(self):
+        self.add_item(self.red, 3)
+        blue_item = self.add_item(self.blue, 3, status=CartItem.STATUS_SAVED)
+
+        with self.assertRaisesMessage(ValidationError, "تمام واریانت‌ها"):
+            toggle_cart_item_status_by_id(
+                self.cart, blue_item.pk, CartItem.STATUS_ACTIVE
+            )
+
+        blue_item.refresh_from_db()
+        self.assertEqual(blue_item.status, CartItem.STATUS_SAVED)
+
+    def test_checkout_rejects_aggregate_quantity_across_variants(self):
+        self.add_item(self.red, 3)
+        self.add_item(self.blue, 3)
+        address = Address.objects.create(
+            user=self.user,
+            recipient_name="کاربر تست",
+            phone_number="09123456789",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس تست",
+        )
+        shipping = ShippingMethod.objects.create(
+            name="Shared stock test shipping",
+            cost=0,
+        )
+
+        with self.assertRaisesMessage(ValidationError, "تمام واریانت‌ها"):
+            OrderService.create_order(
+                user=self.user,
+                cart=self.cart,
+                shipping_address=address,
+                shipping_method=shipping,
+            )
+
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)

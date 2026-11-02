@@ -161,10 +161,6 @@ def verify_otp_view(request):
 
             profile, _ = Profile.objects.get_or_create(user=user)
 
-            if profile.phone_number != phone:
-                profile.phone_number = phone
-                profile.save(update_fields=["phone_number"])
-
         if not user.is_active:
             return JsonResponse(
                 {
@@ -173,6 +169,10 @@ def verify_otp_view(request):
                 },
                 status=403,
             )
+
+        profile.phone_number = phone
+        profile.is_verified = True
+        profile.save(update_fields=["phone_number", "is_verified", "updated_at"])
 
         merge_guest_cart_to_user(
             request,

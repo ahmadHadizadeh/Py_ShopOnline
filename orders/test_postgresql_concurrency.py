@@ -7,14 +7,20 @@ from uuid import uuid4
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
-from django.db import close_old_connections, connection
+from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
+from django.db import close_old_connections, connection, transaction
+from django.db.models import Sum
 from django.test import RequestFactory, TransactionTestCase
 from unittest import skipUnless
 
+from accounts.apps import STORE_MANAGER_GROUP_NAME
 from accounts.models.profile import Profile
-from cart.models import Cart
+from cart.models import Cart, CartItem
+from cart.services import add_product_to_cart
 from catalog.models.category import Category
 from catalog.models.product import Product
+from catalog.models.variant import ProductVariant
 from catalog.models.inventory import InventoryMovement
 from catalog.services import adjust_product_stock
 from orders.models.orders import Order
@@ -490,3 +496,125 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
             ).exists()
         )
         self.assertIn("بازپرداخت", order.admin_note)
+
+
+    def test_concurrent_cart_adds_cannot_exceed_shared_variant_stock(self):
+        product = self._create_product(
+            name="Concurrent Shared Cart Stock Product",
+            stock=5,
+        )
+        red = ProductVariant.objects.create(
+            product=product, name="color", value="red"
+        )
+        blue = ProductVariant.objects.create(
+            product=product, name="color", value="blue"
+        )
+        user = get_user_model().objects.create_user(
+            username=f"pg-cart-{uuid4().hex[:12]}"
+        )
+        cart = Cart.objects.create(user=user, status=Cart.STATUS_ACTIVE)
+        barrier = threading.Barrier(2, timeout=10)
+        outcomes = []
+        errors = []
+        result_lock = threading.Lock()
+
+        def worker(variant_id):
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET lock_timeout = '5s'")
+                    cursor.execute("SET statement_timeout = '20s'")
+                local_cart = Cart.objects.get(pk=cart.pk)
+                local_product = Product.objects.get(pk=product.pk)
+                variant = ProductVariant.objects.get(pk=variant_id)
+                barrier.wait(timeout=10)
+                try:
+                    add_product_to_cart(
+                        local_cart, local_product, quantity=3, variant=variant
+                    )
+                    outcome = "accepted"
+                except ValidationError:
+                    outcome = "rejected"
+                with result_lock:
+                    outcomes.append(outcome)
+            except BaseException as exc:
+                with result_lock:
+                    errors.append(repr(exc))
+            finally:
+                connection.close()
+
+        threads = [
+            threading.Thread(target=worker, args=(red.pk,), daemon=True),
+            threading.Thread(target=worker, args=(blue.pk,), daemon=True),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=25)
+
+        alive = [thread.name for thread in threads if thread.is_alive()]
+        self.assertFalse(alive, f"Cart workers did not finish: {alive}")
+        self.assertFalse(errors, f"Concurrent cart add errors: {errors}")
+        self.assertEqual(sorted(outcomes), ["accepted", "rejected"])
+        active_total = CartItem.objects.filter(
+            cart=cart,
+            status=CartItem.STATUS_ACTIVE,
+        ).aggregate(total=Sum("quantity"))["total"]
+        self.assertEqual(active_total, 3)
+
+    def test_concurrent_manager_group_adds_cannot_create_two_managers(self):
+        manager_group = Group.objects.get(name=STORE_MANAGER_GROUP_NAME)
+        users = [
+            get_user_model().objects.create_user(
+                username=f"pg-manager-{uuid4().hex[:12]}"
+            )
+            for _ in range(2)
+        ]
+        barrier = threading.Barrier(2, timeout=10)
+        outcomes = []
+        errors = []
+        result_lock = threading.Lock()
+
+        def worker(user_id):
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET lock_timeout = '5s'")
+                    cursor.execute("SET statement_timeout = '20s'")
+                user = get_user_model().objects.get(pk=user_id)
+                group = Group.objects.get(pk=manager_group.pk)
+                barrier.wait(timeout=10)
+                try:
+                    # RelatedManager.add() supplies the atomic block for m2m_changed.
+                    user.groups.add(group)
+                    outcome = "assigned"
+                except ValidationError:
+                    outcome = "rejected"
+                with result_lock:
+                    outcomes.append(outcome)
+            except BaseException as exc:
+                with result_lock:
+                    errors.append(repr(exc))
+            finally:
+                connection.close()
+
+        threads = [
+            threading.Thread(target=worker, args=(users[0].pk,), daemon=True),
+            threading.Thread(target=worker, args=(users[1].pk,), daemon=True),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=25)
+
+        alive = [thread.name for thread in threads if thread.is_alive()]
+        self.assertFalse(alive, f"Manager workers did not finish: {alive}")
+        self.assertFalse(errors, f"Concurrent manager assignment errors: {errors}")
+        self.assertEqual(sorted(outcomes), ["assigned", "rejected"])
+        self.assertEqual(
+            get_user_model().objects.filter(
+                groups=manager_group,
+                is_superuser=False,
+            ).count(),
+            1,
+        )

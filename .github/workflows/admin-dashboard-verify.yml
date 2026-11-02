@@ -33,5 +33,8 @@ jobs:
       - name: Run Django system checks
         run: python manage.py check
 
+      - name: Check model and migration state
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Run automated test suite
         run: pytest -q

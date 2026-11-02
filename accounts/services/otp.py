@@ -2,7 +2,7 @@
 import hashlib
 import json
 import logging
-import random
+import secrets
 import re
 from typing import Optional, Tuple
 
@@ -209,7 +209,7 @@ class SMSIRService:
             )
 
         # تولید کد ۶ رقمی یکپارچه با قالب
-        code = f"{random.randint(100000, 999999)}"
+        code = str(secrets.randbelow(900000) + 100000)
 
         # ارسال از طریق پیامک
         sent_ok, send_msg = cls.send_verification_code(norm_phone, code)

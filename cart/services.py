@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Sum
 
 from cart.models import Cart, CartItem
 from catalog.models.product import Product
@@ -19,6 +20,24 @@ def _validate_variant(product, variant):
 def _unit_price(product, variant=None):
     adjustment = variant.price_adjustment if variant is not None else Decimal("0")
     return product.price + adjustment
+
+
+def _active_quantity_for_product(cart, product_id, *, exclude_item_id=None):
+    queryset = CartItem.objects.filter(
+        cart_id=cart.pk,
+        product_id=product_id,
+        status=CartItem.STATUS_ACTIVE,
+    )
+    if exclude_item_id is not None:
+        queryset = queryset.exclude(pk=exclude_item_id)
+    return queryset.aggregate(total=Sum("quantity"))["total"] or 0
+
+
+def _lock_active_cart(cart):
+    locked_cart = Cart.objects.select_for_update().get(pk=cart.pk)
+    if locked_cart.status != Cart.STATUS_ACTIVE:
+        raise ValidationError("سبد خرید دیگر فعال نیست.")
+    return locked_cart
 
 
 @transaction.atomic
@@ -250,25 +269,34 @@ def merge_guest_cart_to_user(request, *, user=None, guest_session_key=None):
 def add_product_to_cart(cart, product, quantity=1, variant=None):
     if quantity < 1:
         raise ValidationError("تعداد باید حداقل 1 باشد.")
+
+    cart = _lock_active_cart(cart)
+    product = Product.objects.select_for_update().get(pk=product.pk)
     if not product.is_available:
         raise ValidationError("این محصول در حال حاضر قابل خرید نیست.")
-    if quantity > product.stock:
-        raise ValidationError("تعداد انتخاب‌شده بیشتر از موجودی محصول است.")
 
     _validate_variant(product, variant)
     item = (
         cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
-        .filter(product=product, variant=variant)
+        .filter(product_id=product.pk, variant=variant)
         .first()
     )
-    unit_price = _unit_price(product, variant)
+    current_item_quantity = item.quantity if item is not None else 0
+    other_active_quantity = _active_quantity_for_product(
+        cart,
+        product.pk,
+        exclude_item_id=item.pk if item is not None else None,
+    )
+    if other_active_quantity + current_item_quantity + quantity > product.stock:
+        raise ValidationError(
+            "مجموع تعداد این محصول در تمام واریانت‌های سبد از موجودی فعلی بیشتر است."
+        )
 
+    unit_price = _unit_price(product, variant)
     if item:
-        new_quantity = item.quantity + quantity
-        if new_quantity > product.stock:
-            raise ValidationError("تعداد انتخاب‌شده بیشتر از موجودی محصول است.")
-        item.quantity = new_quantity
+        item.product = product
+        item.quantity = current_item_quantity + quantity
         item.status = CartItem.STATUS_ACTIVE
         item.unit_price_snapshot = unit_price
         item.full_clean()
@@ -293,9 +321,8 @@ def update_cart_item_quantity(cart, product_id, quantity):
     if quantity < 1:
         raise ValidationError("تعداد باید حداقل 1 باشد.")
     item = (
-        cart.items.select_for_update(of=("self",))
-        .select_related("product", "variant")
-        .filter(product_id=product_id, status=CartItem.STATUS_ACTIVE)
+        cart.items.filter(product_id=product_id, status=CartItem.STATUS_ACTIVE)
+        .order_by("pk")
         .first()
     )
     if not item:
@@ -307,20 +334,30 @@ def update_cart_item_quantity(cart, product_id, quantity):
 def update_cart_item_quantity_by_id(cart, item_id, quantity):
     if quantity < 1:
         raise ValidationError("تعداد باید حداقل 1 باشد.")
+    cart = _lock_active_cart(cart)
     item = (
         cart.items.select_for_update(of=("self",))
-        .select_related("product", "variant")
+        .select_related("variant")
         .filter(pk=item_id, status=CartItem.STATUS_ACTIVE)
         .first()
     )
     if not item:
         raise ValidationError("آیتم موردنظر پیدا نشد.")
-    if not item.product.is_available:
+
+    product = Product.objects.select_for_update().get(pk=item.product_id)
+    if not product.is_available:
         raise ValidationError("این محصول در حال حاضر قابل خرید نیست.")
-    if quantity > item.product.stock:
-        raise ValidationError("تعداد انتخاب‌شده بیشتر از موجودی محصول است.")
+    other_active_quantity = _active_quantity_for_product(
+        cart, product.pk, exclude_item_id=item.pk
+    )
+    if other_active_quantity + quantity > product.stock:
+        raise ValidationError(
+            "مجموع تعداد این محصول در تمام واریانت‌های سبد از موجودی فعلی بیشتر است."
+        )
+
+    item.product = product
     item.quantity = quantity
-    item.unit_price_snapshot = _unit_price(item.product, item.variant)
+    item.unit_price_snapshot = _unit_price(product, item.variant)
     item.full_clean()
     item.save(update_fields=["quantity", "unit_price_snapshot", "updated"])
     return item
@@ -328,12 +365,7 @@ def update_cart_item_quantity_by_id(cart, item_id, quantity):
 
 @transaction.atomic
 def toggle_cart_item_status(cart, product_id, to_status):
-    item = (
-        cart.items.select_for_update(of=("self",))
-        .select_related("product", "variant")
-        .filter(product_id=product_id)
-        .first()
-    )
+    item = cart.items.filter(product_id=product_id).order_by("pk").first()
     if not item:
         raise ValidationError("آیتم موردنظر پیدا نشد.")
     return toggle_cart_item_status_by_id(cart, item.id, to_status)
@@ -343,21 +375,31 @@ def toggle_cart_item_status(cart, product_id, to_status):
 def toggle_cart_item_status_by_id(cart, item_id, to_status):
     if to_status not in {CartItem.STATUS_ACTIVE, CartItem.STATUS_SAVED}:
         raise ValidationError("وضعیت نامعتبر است.")
+    cart = _lock_active_cart(cart)
     item = (
         cart.items.select_for_update(of=("self",))
-        .select_related("product", "variant")
+        .select_related("variant")
         .filter(pk=item_id)
         .first()
     )
     if not item:
         raise ValidationError("آیتم موردنظر پیدا نشد.")
+
+    product = Product.objects.select_for_update().get(pk=item.product_id)
     if to_status == CartItem.STATUS_ACTIVE:
-        if not item.product.is_available:
+        if not product.is_available:
             raise ValidationError("این محصول در حال حاضر قابل خرید نیست.")
-        if item.quantity > item.product.stock:
-            raise ValidationError("تعداد این محصول بیشتر از موجودی فعلی است.")
+        other_active_quantity = _active_quantity_for_product(
+            cart, product.pk, exclude_item_id=item.pk
+        )
+        if other_active_quantity + item.quantity > product.stock:
+            raise ValidationError(
+                "مجموع تعداد این محصول در تمام واریانت‌های سبد از موجودی فعلی بیشتر است."
+            )
+
+    item.product = product
     item.status = to_status
-    item.unit_price_snapshot = _unit_price(item.product, item.variant)
+    item.unit_price_snapshot = _unit_price(product, item.variant)
     item.full_clean()
     item.save(update_fields=["status", "unit_price_snapshot", "updated"])
     return item

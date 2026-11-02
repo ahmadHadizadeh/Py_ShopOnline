@@ -1,6 +1,8 @@
 from django.conf import settings
-from django.db import models
+from django.contrib.auth import get_user_model
+from django.db import models, router, transaction
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 class Address(models.Model):
     user = models.ForeignKey(
@@ -81,17 +83,22 @@ class Address(models.Model):
 
 
     def save(self, *args, **kwargs):
-        # اطمینان از اینکه فقط یک آدرس برای هر کاربر به عنوان پیش‌فرض تنظیم شده است
-        # این منطق باید فقط زمانی اجرا شود که آدرس جدیدی ذخیره می‌شود یا آدرس موجود تغییر می‌کند
-        # و مقدار is_default آن True است.
-        if self.pk is None and self.is_default: # اگر آدرس جدید است و پیش فرض است
-            Address.objects.filter(user=self.user).update(is_default=False)
-        elif self.pk is not None and self.is_default and Address.objects.get(pk=self.pk).is_default is False:
-            # اگر آدرس موجود است، پیش فرض بوده و میخواهیم آن را True کنیم
-            Address.objects.filter(user=self.user).exclude(pk=self.pk).update(is_default=False)
-        elif self.pk is not None and self.is_default is False and Address.objects.get(pk=self.pk).is_default is True:
-            # اگر آدرس موجود است، پیش فرض نبوده و میخواهیم آن را False کنیم (ولی این حالت نباید رخ دهد اگر constraint داریم)
-            # این حالت عملا توسط constraint جلوگیری می شود، ولی برای اطمینان بیشتر
-            pass
+        using = kwargs.get("using") or router.db_for_write(type(self), instance=self)
+        with transaction.atomic(using=using):
+            get_user_model()._default_manager.using(using).select_for_update().only(
+                "pk"
+            ).get(pk=self.user_id)
 
-        super().save(*args, **kwargs)
+            update_fields = kwargs.get("update_fields")
+            default_is_written = (
+                update_fields is None or "is_default" in update_fields
+            )
+            if default_is_written and self.is_default:
+                Address.objects.using(using).filter(user_id=self.user_id).exclude(
+                    pk=self.pk
+                ).update(
+                    is_default=False,
+                    updated=timezone.now(),
+                )
+
+            super().save(*args, **kwargs)

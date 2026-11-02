@@ -1,6 +1,7 @@
 from decimal import Decimal
 # فایل: catalog/tests.py
 from django.test import TestCase, Client, RequestFactory
+from django.db.models.deletion import ProtectedError
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib import admin
 from django.urls import reverse
@@ -556,3 +557,26 @@ class CategoryAdminDeletionSafetyTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Category.objects.filter(pk=self.category.pk).exists())
         self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+
+
+
+class ProductCategoryModelProtectionTests(TestCase):
+    def test_category_with_products_is_protected_outside_admin(self):
+        category = Category.objects.create(
+            name="ORM Protected Category",
+            slug="orm-protected-category",
+        )
+        product = Product.objects.create(
+            category=category,
+            name="ORM Protected Product",
+            slug="orm-protected-product",
+            price=Decimal("1000"),
+            stock=1,
+            is_active=True,
+        )
+
+        with self.assertRaises(ProtectedError):
+            category.delete()
+
+        self.assertTrue(Category.objects.filter(pk=category.pk).exists())
+        self.assertTrue(Product.objects.filter(pk=product.pk).exists())

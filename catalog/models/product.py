@@ -39,7 +39,7 @@ class Product(models.Model):
     created = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
     updated = models.DateTimeField(auto_now=True, verbose_name="تاریخ بروزرسانی")
     category = models.ForeignKey(
-        Category, on_delete=models.CASCADE, related_name="products"
+        Category, on_delete=models.PROTECT, related_name="products"
     )
     related_products = models.ManyToManyField(
         "self", blank=True, verbose_name="محصولات مشابه"

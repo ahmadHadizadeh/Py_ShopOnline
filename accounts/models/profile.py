@@ -2,7 +2,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-import random
+import secrets
 
 
 class Profile(models.Model):
@@ -43,21 +43,23 @@ class Profile(models.Model):
 
     def generate_otp(self):
         """تولید کد OTP و ثبت زمان"""
-        self.otp_code = str(random.randint(100000, 999999))
+        self.otp_code = str(secrets.randbelow(900000) + 100000)
         self.otp_created_at = timezone.now()
         self.save(update_fields=["otp_code", "otp_created_at"])
         return self.otp_code
 
     def is_otp_valid(self, code):
-        """اعتبارسنجی کد با رعایت زمان انقضا (مثلاً ۳ دقیقه)"""
-        if self.otp_code != code:
+        """اعتبارسنجی و مصرف یک‌باره کد OTP با انقضای سه‌دقیقه‌ای."""
+        if not self.otp_code or not self.otp_created_at or self.otp_code != code:
             return False
 
-        # انقضای ۳ دقیقه‌ای
-        if (
-            self.otp_created_at
-            and (timezone.now() - self.otp_created_at).total_seconds() > 180
-        ):
+        if (timezone.now() - self.otp_created_at).total_seconds() > 180:
+            self.otp_code = None
+            self.otp_created_at = None
+            self.save(update_fields=["otp_code", "otp_created_at", "updated_at"])
             return False
 
+        self.otp_code = None
+        self.otp_created_at = None
+        self.save(update_fields=["otp_code", "otp_created_at", "updated_at"])
         return True

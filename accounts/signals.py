@@ -1,8 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
-from django.db.models.signals import post_migrate, post_save
+from django.db.models.signals import m2m_changed, post_migrate, post_save
 from django.dispatch import receiver
 
 from accounts.apps import STORE_MANAGER_GROUP_NAME
@@ -94,6 +95,66 @@ def ensure_store_manager_group(sender, using, **kwargs):
             )
 
 
+@receiver(m2m_changed, sender=User.groups.through)
+def enforce_single_store_manager(sender, instance, action, reverse, model, pk_set, using, **kwargs):
+    """Enforce the one-manager rule for both User.groups and Group.user_set writes."""
+    if action != "pre_add" or not pk_set:
+        return
+
+    if reverse:
+        if instance.name != STORE_MANAGER_GROUP_NAME:
+            return
+        manager_group_id = instance.pk
+        candidate_user_ids = set(pk_set)
+    else:
+        manager_group_id = (
+            Group.objects.using(using)
+            .filter(pk__in=pk_set, name=STORE_MANAGER_GROUP_NAME)
+            .values_list("pk", flat=True)
+            .first()
+        )
+        if manager_group_id is None:
+            return
+        candidate_user_ids = {instance.pk}
+
+    if not transaction.get_connection(using).in_atomic_block:
+        raise RuntimeError("تخصیص نقش مدیر باید داخل تراکنش انجام شود.")
+
+    manager_group = (
+        Group.objects.using(using)
+        .select_for_update()
+        .get(pk=manager_group_id)
+    )
+    candidates = User.objects.using(using).filter(pk__in=candidate_user_ids)
+    if candidates.filter(is_superuser=True).exists():
+        raise ValidationError("صاحب فروشگاه نمی‌تواند عضو نقش مدیر فروشگاه باشد.")
+    if candidates.count() > 1:
+        raise ValidationError("در هر فروشگاه فقط یک مدیر قابل تخصیص است.")
+    if candidates.filter(user_permissions__isnull=False).exists():
+        raise ValidationError(
+            "کاربر دارای مجوز مستقیم است؛ ابتدا دسترسی‌های قبلی را ممیزی کنید."
+        )
+    if (
+        candidates.filter(groups__permissions__isnull=False)
+        .exclude(groups=manager_group)
+        .exists()
+    ):
+        raise ValidationError(
+            "کاربر عضو گروه دارای مجوز دیگری است؛ ابتدا دسترسی‌های قبلی را ممیزی کنید."
+        )
+
+    another_manager_exists = (
+        User.objects.using(using)
+        .filter(groups=manager_group, is_superuser=False)
+        .exclude(pk__in=candidate_user_ids)
+        .exists()
+    )
+    if another_manager_exists:
+        raise ValidationError(
+            "مدیر فروشگاه دیگری از قبل تعیین شده است؛ ابتدا نقش او را لغو کنید."
+        )
+
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     """ایجاد پروفایل در لحظه ثبت‌نام کاربر"""
@@ -110,12 +171,6 @@ def create_user_profile(sender, instance, created, **kwargs):
 
         Profile.objects.get_or_create(
             user=instance,
-            defaults={"phone_number": phone, "is_verified": bool(phone)},
+            defaults={"phone_number": phone, "is_verified": False},
         )
 
-
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
-    """ذخیره خودکار پروفایل هنگام آپدیت کاربر"""
-    if hasattr(instance, "profile"):
-        instance.profile.save()

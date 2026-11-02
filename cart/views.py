@@ -1,5 +1,6 @@
 # cart/view.py
 import logging
+from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
@@ -316,6 +317,10 @@ class CheckoutView(View):
 
     @transaction.atomic
     def post(self, request):
+        if request.user.is_authenticated:
+            get_user_model()._default_manager.select_for_update().only("pk").get(
+                pk=request.user.pk
+            )
         cart = self.get_cart(request, for_update=True)
         if not cart or not cart.active_items.exists():
             messages.error(request, "سبد خرید معتبر نیست.")
@@ -353,10 +358,6 @@ class CheckoutView(View):
                 if request.user.is_authenticated:
                     address.user = request.user
                     address.save()
-                    if address.is_default:
-                        Address.objects.filter(
-                            user=request.user
-                        ).exclude(id=address.id).update(is_default=False)
                 else:
                     address.user = None
                     address.save()

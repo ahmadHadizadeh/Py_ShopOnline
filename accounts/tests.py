@@ -10,7 +10,9 @@ import jdatetime
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
-from django.test import RequestFactory, TestCase
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.test import RequestFactory, TestCase, TransactionTestCase
 from django.urls import NoReverseMatch, reverse
 
 from accounts.models import Address, Profile
@@ -55,6 +57,43 @@ def test_address_default_logic(django_user_model):
 
     assert addr2.is_default is True
     assert addr1.is_default is False
+
+
+@pytest.mark.django_db
+def test_address_partial_update_does_not_demote_another_default(django_user_model):
+    user = django_user_model.objects.create_user(
+        username="address-stale-update-user",
+        password="testpass123",
+    )
+    original = Address.objects.create(
+        user=user,
+        recipient_name="Original",
+        phone_number="09123456789",
+        postal_code="1234567890",
+        province="تهران",
+        city="تهران",
+        address_line="آدرس اول",
+        is_default=True,
+    )
+    stale_instance = Address.objects.get(pk=original.pk)
+
+    Address.objects.filter(pk=original.pk).update(is_default=False)
+    current_default = Address.objects.create(
+        user=user,
+        recipient_name="Current default",
+        phone_number="09123456780",
+        postal_code="1234567891",
+        province="تهران",
+        city="تهران",
+        address_line="آدرس دوم",
+        is_default=True,
+    )
+
+    stale_instance.recipient_name = "Updated without changing default"
+    stale_instance.save(update_fields=["recipient_name"])
+
+    current_default.refresh_from_db()
+    assert current_default.is_default is True
 
 
 @pytest.mark.django_db
@@ -197,6 +236,7 @@ def test_verify_otp_merges_guest_cart_before_login_and_preserves_cart_id(client)
     user = User.objects.get(username="09123456789")
     user_cart = Cart.objects.get(user=user, status=Cart.STATUS_ACTIVE)
 
+    assert Profile.objects.get(user=user).is_verified is True
     assert not Cart.objects.filter(pk=guest_cart.pk).exists()
     assert user_cart.items.get(product=product).quantity == 2
     assert user_cart.items.get(product=product).status == CartItem.STATUS_ACTIVE
@@ -205,6 +245,17 @@ def test_verify_otp_merges_guest_cart_before_login_and_preserves_cart_id(client)
     current_session = client.session
     assert current_session["cart_id"] == user_cart.pk
     assert current_session.session_key != guest_session_key
+
+
+@pytest.mark.django_db
+def test_phone_shaped_username_does_not_imply_verified_mobile(django_user_model):
+    user = django_user_model.objects.create_user(
+        username="09123456789",
+        password="testpass123",
+    )
+    profile = Profile.objects.get(user=user)
+    assert profile.phone_number == "09123456789"
+    assert profile.is_verified is False
 
 
 @pytest.mark.django_db
@@ -236,6 +287,7 @@ def test_verify_otp_rejects_inactive_user_without_login_or_cart_merge(
     assert response.status_code == 403
     assert response.json()["status"] == "error"
     assert client.session.get("_auth_user_id") is None
+    assert Profile.objects.get(user=inactive_user).is_verified is False
     merge_cart.assert_not_called()
 
 
@@ -837,3 +889,142 @@ class StoreManagerAdminAccessTests(TestCase):
             with self.subTest(permission=permission):
                 self.assertFalse(self.manager.has_perm(permission))
 
+
+
+
+class StoreManagerAssignmentLimitTests(TransactionTestCase):
+    def setUp(self):
+        self.owner = get_user_model().objects.create_superuser(
+            username="manager-limit-owner",
+            email="manager-limit-owner@example.test",
+            password="OwnerPassword123!",
+        )
+        self.first_candidate = get_user_model().objects.create_user(
+            username="manager-limit-first",
+            password="CandidatePassword123!",
+        )
+        self.second_candidate = get_user_model().objects.create_user(
+            username="manager-limit-second",
+            password="CandidatePassword123!",
+        )
+        self.manager_group = Group.objects.get(name=STORE_MANAGER_GROUP_NAME)
+
+    def test_m2m_assignment_rejects_a_second_manager_even_outside_admin(self):
+        self.first_candidate.groups.add(self.manager_group)
+        with self.assertRaises(ValidationError):
+            self.second_candidate.groups.add(self.manager_group)
+
+        self.assertEqual(
+            get_user_model().objects.filter(
+                groups=self.manager_group,
+                is_superuser=False,
+            ).count(),
+            1,
+        )
+
+    def test_superuser_cannot_be_added_to_the_manager_group(self):
+        with self.assertRaises(ValidationError):
+            self.owner.groups.add(self.manager_group)
+
+    def _manager_change_form(self, user, *, assign_role, staff_checked=False):
+        user_admin = admin.site._registry[get_user_model()]
+        request = RequestFactory().post("/")
+        request.user = self.owner
+        form_class = user_admin.get_form(request, obj=user)
+        data = {
+            "username": user.username,
+            "password": user.password,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "is_active": "on" if user.is_active else "",
+            "is_staff": "on" if staff_checked else "",
+            "groups": [str(self.manager_group.pk)] if assign_role else [],
+        }
+        return request, user_admin, form_class(data=data, instance=user)
+
+    def test_manager_assignment_sets_is_staff_in_owner_form(self):
+        request, user_admin, form = self._manager_change_form(
+            self.first_candidate,
+            assign_role=True,
+        )
+        with transaction.atomic():
+            self.assertTrue(form.is_valid(), form.errors)
+            self.assertTrue(form.cleaned_data["is_staff"])
+            obj = form.save(commit=False)
+            user_admin.save_model(request, obj, form, change=True)
+            user_admin.save_related(request, form, [], change=True)
+
+        self.first_candidate.refresh_from_db()
+        self.assertTrue(self.first_candidate.is_staff)
+        self.assertTrue(
+            self.first_candidate.groups.filter(pk=self.manager_group.pk).exists()
+        )
+
+    def test_revoking_manager_role_revokes_is_staff_in_owner_form(self):
+        self.first_candidate.groups.add(self.manager_group)
+        self.first_candidate.is_staff = True
+        self.first_candidate.save(update_fields=["is_staff"])
+
+        request, user_admin, form = self._manager_change_form(
+            self.first_candidate,
+            assign_role=False,
+            staff_checked=True,
+        )
+        with transaction.atomic():
+            self.assertTrue(form.is_valid(), form.errors)
+            self.assertFalse(form.cleaned_data["is_staff"])
+            obj = form.save(commit=False)
+            user_admin.save_model(request, obj, form, change=True)
+            user_admin.save_related(request, form, [], change=True)
+
+        self.first_candidate.refresh_from_db()
+        self.assertFalse(self.first_candidate.is_staff)
+        self.assertFalse(
+            self.first_candidate.groups.filter(pk=self.manager_group.pk).exists()
+        )
+
+    def test_existing_staff_without_manager_fails_closed_for_manual_audit(self):
+        self.second_candidate.is_staff = True
+        self.second_candidate.save(update_fields=["is_staff"])
+        request, user_admin, form = self._manager_change_form(
+            self.second_candidate,
+            assign_role=False,
+            staff_checked=True,
+        )
+
+        with transaction.atomic():
+            self.assertFalse(form.is_valid())
+            self.assertIn("is_staff", form.errors)
+
+
+
+class ProfileLegacyOTPTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="profile-legacy-otp-user",
+            password="testpass123",
+        )
+        self.profile = Profile.objects.get(user=self.user)
+
+    def test_otp_without_creation_timestamp_is_invalid(self):
+        self.profile.otp_code = "123456"
+        self.profile.otp_created_at = None
+        self.profile.save(update_fields=["otp_code", "otp_created_at"])
+
+        self.assertFalse(self.profile.is_otp_valid("123456"))
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.otp_code, "123456")
+
+    def test_valid_otp_is_consumed_after_first_success(self):
+        from django.utils import timezone
+
+        self.profile.otp_code = "123456"
+        self.profile.otp_created_at = timezone.now()
+        self.profile.save(update_fields=["otp_code", "otp_created_at"])
+
+        self.assertTrue(self.profile.is_otp_valid("123456"))
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.otp_code)
+        self.assertIsNone(self.profile.otp_created_at)
+        self.assertFalse(self.profile.is_otp_valid("123456"))

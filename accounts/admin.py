@@ -1,12 +1,106 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.forms import UserChangeForm as DjangoUserChangeForm
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils.html import format_html
 
 from .apps import STORE_MANAGER_GROUP_NAME
 from .models.address import Address
 from .models.profile import Profile
+
+
+User = get_user_model()
+
+
+def ensure_store_manager_assignment_available(user, manager_group):
+    """Guard a new fixed-role assignment while its caller owns a DB transaction."""
+    if not user.pk:
+        raise ValidationError("ابتدا حساب کاربری را ذخیره کنید.")
+    if manager_group.name != STORE_MANAGER_GROUP_NAME:
+        raise ValidationError("فقط نقش ثابت مدیر فروشگاه قابل تخصیص است.")
+    if user.is_superuser:
+        raise ValidationError("صاحب فروشگاه نباید نقش مدیر فروشگاه بگیرد.")
+
+    if user.user_permissions.exists():
+        raise ValidationError(
+            "این حساب مجوز مستقیم دارد؛ پیش از واگذاری نقش مدیر، دسترسی‌های قبلی را ممیزی کنید."
+        )
+    if (
+        user.groups.exclude(pk=manager_group.pk)
+        .filter(permissions__isnull=False)
+        .exists()
+    ):
+        raise ValidationError(
+            "این حساب عضو گروه دارای مجوز دیگری است؛ پیش از واگذاری نقش مدیر، عضویت‌های قبلی را ممیزی کنید."
+        )
+
+    if user.groups.filter(pk=manager_group.pk).exists():
+        return
+
+    if not user.is_active:
+        raise ValidationError("برای تعیین مدیر فروشگاه، حساب کاربری باید فعال باشد.")
+    if not transaction.get_connection().in_atomic_block:
+        raise RuntimeError(
+            "تخصیص نقش مدیر باید داخل تراکنش اتمیک پنل مدیریت انجام شود."
+        )
+
+    Group.objects.select_for_update().get(pk=manager_group.pk)
+    another_manager_exists = User.objects.filter(
+        groups=manager_group,
+        is_superuser=False,
+    ).exclude(pk=user.pk).exists()
+    if another_manager_exists:
+        raise ValidationError(
+            "مدیر فروشگاه دیگری از قبل تعیین شده است؛ ابتدا نقش او را لغو کنید."
+        )
+
+
+class StoreOwnerUserChangeForm(DjangoUserChangeForm):
+    def clean(self):
+        cleaned_data = super().clean()
+        manager_group = Group.objects.filter(name=STORE_MANAGER_GROUP_NAME).first()
+        selected_groups = cleaned_data.get("groups")
+        manager_selected = bool(
+            manager_group
+            and selected_groups is not None
+            and selected_groups.filter(pk=manager_group.pk).exists()
+        )
+        was_manager = bool(
+            self.instance.pk
+            and manager_group
+            and self.instance.groups.filter(pk=manager_group.pk).exists()
+        )
+
+        if self.instance.is_superuser:
+            if manager_selected:
+                self.add_error(
+                    "groups",
+                    "صاحب فروشگاه نباید به‌عنوان مدیر فروشگاه تخصیص داده شود.",
+                )
+            return cleaned_data
+
+        if manager_selected:
+            try:
+                ensure_store_manager_assignment_available(
+                    self.instance,
+                    manager_group,
+                )
+            except ValidationError as exc:
+                self.add_error("groups", exc)
+            cleaned_data["is_staff"] = True
+        elif was_manager:
+            cleaned_data["is_staff"] = False
+        elif cleaned_data.get("is_staff"):
+            self.add_error(
+                "is_staff",
+                "این حساب دسترسی پنل بدون نقش مدیر فروشگاه دارد؛ ابتدا دسترسی قدیمی آن را ممیزی کنید.",
+            )
+
+        return cleaned_data
+
 
 @admin.register(Address)
 class AddressAdmin(admin.ModelAdmin):
@@ -114,6 +208,8 @@ class StoreOwnerOnlyAdminMixin:
 
 
 class StoreOwnerUserAdmin(StoreOwnerOnlyAdminMixin, DjangoUserAdmin):
+    form = StoreOwnerUserChangeForm
+
     # Hide Django's raw permission editor and expose one predefined store role.
     fieldsets = (
         (None, {"fields": ("username", "password")}),
@@ -140,7 +236,10 @@ class StoreOwnerUserAdmin(StoreOwnerOnlyAdminMixin, DjangoUserAdmin):
         field = super().formfield_for_booleanfield(db_field, request, **kwargs)
         if field and db_field.name == "is_staff":
             field.label = "دسترسی به پنل مدیریت"
-            field.help_text = "برای کاربری که نقش «مدیر فروشگاه» می‌گیرد فعال باشد."
+            field.help_text = (
+                "با نقش ثابت «مدیر فروشگاه» همگام است؛ دسترسی مستقل staff برای "
+                "حساب‌های غیرمالک پذیرفته نمی‌شود."
+            )
         return field
 
     def save_related(self, request, form, formsets, change):
@@ -158,7 +257,6 @@ class StoreOwnerUserAdmin(StoreOwnerOnlyAdminMixin, DjangoUserAdmin):
 
 # The Group editor is intentionally removed. Owners assign the one predefined
 # role from the user's "نقش فروشگاه" field instead of editing Django permissions.
-User = get_user_model()
 if admin.site.is_registered(User):
     admin.site.unregister(User)
 admin.site.register(User, StoreOwnerUserAdmin)
