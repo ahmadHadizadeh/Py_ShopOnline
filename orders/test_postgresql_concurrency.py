@@ -362,6 +362,17 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         self.assertEqual(order.status, Order.Status.PAID)
         self.assertTrue(order.stock_reduced)
         self.assertEqual(product.stock, 2)
+        payment_movements = InventoryMovement.objects.filter(
+            product=product,
+            source=InventoryMovement.Source.ORDER_PAYMENT,
+            order_number=order.order_number,
+        )
+        self.assertEqual(payment_movements.count(), 1)
+        movement = payment_movements.get()
+        self.assertEqual(movement.delta, -1)
+        self.assertEqual(movement.quantity_before, 3)
+        self.assertEqual(movement.quantity_after, 2)
+        self.assertIsNone(movement.actor_id)
 
     def test_two_orders_cannot_oversell_the_last_shared_unit(self):
         product = self._create_product(name="Last Unit Product", stock=1)
@@ -472,4 +483,10 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         self.assertFalse(order.stock_reduced)
         self.assertEqual(available_product.stock, 4)
         self.assertEqual(unavailable_product.stock, 0)
+        self.assertFalse(
+            InventoryMovement.objects.filter(
+                source=InventoryMovement.Source.ORDER_PAYMENT,
+                order_number=order.order_number,
+            ).exists()
+        )
         self.assertIn("بازپرداخت", order.admin_note)
