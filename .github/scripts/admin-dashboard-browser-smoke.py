@@ -37,7 +37,7 @@ from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment  # noq
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 
-def prepare_database() -> tuple[Order, Payment]:
+def prepare_database() -> tuple[Order, Payment, Product]:
     call_command("migrate", interactive=False, verbosity=0)
     user_model = get_user_model()
     admin_user, created = user_model.objects.get_or_create(
@@ -104,7 +104,7 @@ def prepare_database() -> tuple[Order, Payment]:
         Payment.Status.SUCCESS,
         transaction_id="BROWSER-SMOKE-TRANSACTION",
     )
-    return order, payment
+    return order, payment, product
 
 
 def wait_for_server(process: subprocess.Popen, log_path: Path) -> None:
@@ -137,7 +137,7 @@ def main() -> None:
         "page_errors": [],
         "screenshots": [],
     }
-    order, payment = prepare_database()
+    order, payment, product = prepare_database()
 
     env = os.environ.copy()
     log_path = ARTIFACTS / "browser-server.log"
