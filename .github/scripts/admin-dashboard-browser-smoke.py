@@ -391,6 +391,18 @@ def main() -> None:
                         "admin-order-form-mobile.png",
                     ),
                     (
+                        "product_change_mobile",
+                        f"{BASE_URL}/admin/catalog/product/{product.pk}/change/",
+                        "change-form",
+                        "admin-product-change-mobile.png",
+                    ),
+                    (
+                        "inventory_operations_mobile",
+                        f"{BASE_URL}/admin/catalog/product/{product.pk}/inventory/",
+                        "inventory-operation",
+                        "admin-inventory-operations-mobile.png",
+                    ),
+                    (
                         "payments_mobile",
                         f"{BASE_URL}/admin/orders/payment/",
                         "change-list",
@@ -414,8 +426,16 @@ def main() -> None:
                     assert page.locator("html").get_attribute("lang") == "fa-ir"
                     if body_class == "change-list":
                         assert page.locator("#changelist").count() == 1
-                    else:
+                    elif body_class == "change-form":
                         assert page.locator("#content-main > form").count() == 1
+                    else:
+                        assert page.locator("#content-main form").count() == 1
+                        assert page.locator(
+                            "#content-main .store-inventory-history table#result_list"
+                        ).count() == 1
+                        assert page.get_by_role(
+                            "heading", name="آخرین گردش‌های موجودی"
+                        ).count() == 1
 
                     dimensions = page.evaluate(
                         "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
