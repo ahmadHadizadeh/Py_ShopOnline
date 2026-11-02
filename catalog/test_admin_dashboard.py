@@ -695,7 +695,9 @@ class StoreAdminDashboardTests(TestCase):
         self.assertIn("brand", product_admin.search_fields)
         self.assertIn("is_active", product_admin.list_filter)
         self.assertIn("availability_label", product_admin.list_display)
-        self.assertIn("stock", product_admin.list_editable)
+        self.assertNotIn("stock", product_admin.list_editable)
+        self.assertIn("stock", product_admin.list_display)
+        self.assertIn("stock", product_admin.readonly_fields)
         self.assertEqual(product_admin.list_per_page, 25)
 
         category_response = self.client.get(
