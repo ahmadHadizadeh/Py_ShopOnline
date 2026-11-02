@@ -1,4 +1,8 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import GroupAdmin as DjangoGroupAdmin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.models import Group
 from django.utils.html import format_html
 
 from .models.address import Address
@@ -80,4 +84,51 @@ class ProfileAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+class StoreOwnerOnlyAdminMixin:
+    """Keep identity and permission administration exclusive to the store owner."""
+
+    @staticmethod
+    def _is_store_owner(request):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.is_active
+            and request.user.is_superuser
+        )
+
+    def has_module_permission(self, request):
+        return self._is_store_owner(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._is_store_owner(request)
+
+    def has_add_permission(self, request):
+        return self._is_store_owner(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._is_store_owner(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self._is_store_owner(request)
+
+
+class StoreOwnerUserAdmin(StoreOwnerOnlyAdminMixin, DjangoUserAdmin):
+    pass
+
+
+class StoreOwnerGroupAdmin(StoreOwnerOnlyAdminMixin, DjangoGroupAdmin):
+    pass
+
+
+# A shop administrator must never be able to grant themselves staff or
+# superuser access by using Django's built-in User or Group administration.
+User = get_user_model()
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
+admin.site.register(User, StoreOwnerUserAdmin)
+
+if admin.site.is_registered(Group):
+    admin.site.unregister(Group)
+admin.site.register(Group, StoreOwnerGroupAdmin)
 
