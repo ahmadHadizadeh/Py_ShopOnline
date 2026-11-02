@@ -1,6 +1,11 @@
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404, redirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils.html import format_html
 from .models.category import Category
 from .models.product import Product
@@ -10,6 +15,7 @@ from .models.variant import ProductVariant
 from .models.wishlist import Wishlist
 
 from .models.product_media import ProductImage, ProductSpecification
+from .services import adjust_product_stock, record_physical_stock_count
 
 
 # فیلتر سفارشی برای وضعیت موجودی
@@ -63,8 +69,144 @@ class ProductSpecificationInline(admin.TabularInline):
     extra = 1
 
 
+class InventoryOperationForm(forms.Form):
+    OPERATION_CHOICES = (
+        ("increase", "افزایش موجودی (ورود کالا)"),
+        ("decrease", "کاهش موجودی (خروج کالا یا کالای آسیب‌دیده)"),
+        ("physical_count", "ثبت شمارش فیزیکی و اصلاح موجودی"),
+    )
+
+    operation = forms.ChoiceField(
+        label="نوع عملیات",
+        choices=OPERATION_CHOICES,
+    )
+    quantity = forms.IntegerField(
+        label="تعداد",
+        min_value=0,
+        help_text=(
+            "برای افزایش یا کاهش، تعداد جابه‌جاشده را وارد کنید؛ "
+            "برای شمارش فیزیکی، عدد واقعی موجودی را بنویسید. "
+            "عدد صفر فقط برای شمارش فیزیکی مجاز است."
+        ),
+    )
+    reason = forms.CharField(
+        label="دلیل عملیات",
+        max_length=500,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        operation = cleaned_data.get("operation")
+        quantity = cleaned_data.get("quantity")
+        if operation in {"increase", "decrease"} and quantity == 0:
+            self.add_error(
+                "quantity",
+                "برای افزایش یا کاهش، تعداد باید بیشتر از صفر باشد.",
+            )
+        return cleaned_data
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "<path:object_id>/inventory/",
+                self.admin_site.admin_view(self.inventory_view),
+                name="catalog_product_inventory",
+            )
+        ]
+        return custom_urls + super().get_urls()
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        if obj is not None and request.user.has_perm("catalog.change_product"):
+            for index, (title, options) in enumerate(fieldsets):
+                if title == "قیمت و موجودی":
+                    updated_options = options.copy()
+                    updated_options["fields"] = tuple(options["fields"]) + (
+                        "inventory_management_link",
+                    )
+                    fieldsets[index] = (title, updated_options)
+                    break
+        return fieldsets
+
+    @admin.display(description="عملیات انبار")
+    def inventory_management_link(self, obj):
+        if obj is None:
+            return "پس از ثبت محصول، عملیات موجودی در دسترس خواهد بود."
+        return format_html(
+            '<a class="button" href="{}">مدیریت موجودی و ثبت شمارش فیزیکی</a>',
+            reverse("admin:catalog_product_inventory", args=[obj.pk]),
+        )
+
+    def inventory_view(self, request, object_id):
+        product = get_object_or_404(self.get_queryset(request), pk=object_id)
+        if not self.has_change_permission(request, product):
+            raise PermissionDenied
+
+        form = InventoryOperationForm(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            operation = form.cleaned_data["operation"]
+            quantity = form.cleaned_data["quantity"]
+            reason = form.cleaned_data["reason"]
+            try:
+                if operation == "increase":
+                    product, movement = adjust_product_stock(
+                        product_id=product.pk,
+                        delta=quantity,
+                        reason=reason,
+                        actor=request.user,
+                    )
+                elif operation == "decrease":
+                    product, movement = adjust_product_stock(
+                        product_id=product.pk,
+                        delta=-quantity,
+                        reason=reason,
+                        actor=request.user,
+                    )
+                else:
+                    product, movement = record_physical_stock_count(
+                        product_id=product.pk,
+                        physical_count=quantity,
+                        reason=reason,
+                        actor=request.user,
+                    )
+            except ValidationError as exc:
+                form.add_error(None, exc)
+            else:
+                messages.success(
+                    request,
+                    (
+                        f"گردش موجودی ثبت شد؛ موجودی از "
+                        f"{movement.quantity_before} به {movement.quantity_after} رسید."
+                    ),
+                )
+                return redirect(
+                    "admin:catalog_product_inventory",
+                    object_id=product.pk,
+                )
+
+        product.refresh_from_db()
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": f"مدیریت موجودی: {product.name}",
+            "product": product,
+            "form": form,
+            "change_url": reverse(
+                "admin:catalog_product_change",
+                args=[product.pk],
+            ),
+            "movements": product.inventory_movements.select_related("actor")[:20],
+        }
+        return TemplateResponse(
+            request,
+            "admin/catalog/product/inventory.html",
+            context,
+        )
+
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.cart_items.exists():
             return False
@@ -148,7 +290,7 @@ class ProductAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     inlines = [ProductImageInline, ProductSpecificationInline]
     ordering = ("-updated",)
-    readonly_fields = ("stock", "is_available_status", "created", "updated")
+    readonly_fields = ("stock", "is_available_status", "created", "updated", "inventory_management_link")
     fieldsets = (
         (
             "اطلاعات اصلی محصول",
