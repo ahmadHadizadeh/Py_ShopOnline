@@ -146,7 +146,9 @@ class ProductAdmin(admin.ModelAdmin):
         if not self.has_change_permission(request, product):
             raise PermissionDenied
 
-        form = InventoryOperationForm(request.POST or None)
+        form = InventoryOperationForm(
+            request.POST if request.method == "POST" else None
+        )
         if request.method == "POST" and form.is_valid():
             operation = form.cleaned_data["operation"]
             quantity = form.cleaned_data["quantity"]
@@ -192,6 +194,7 @@ class ProductAdmin(admin.ModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
+            "bodyclass": "inventory-operation",
             "title": f"مدیریت موجودی: {product.name}",
             "product": product,
             "form": form,
