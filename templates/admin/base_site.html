@@ -130,7 +130,7 @@
                     <span>مشتریان و کاربران</span>
                 </caption>
                 <tbody>
-                    {% if perms.auth.view_user or perms.auth.change_user %}
+                    {% if request.user.is_superuser and perms.auth.view_user or request.user.is_superuser and perms.auth.change_user %}
                     <tr><th scope="row"><a href="{% url 'admin:auth_user_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'auth_user_changelist' or request.resolver_match.url_name == 'auth_user_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2.5 21v-2a6.5 6.5 0 0 1 13 0v2M17 5.5a3.5 3.5 0 0 1 0 6.5M19 15a4 4 0 0 1 2.5 3.7V21"/></svg><span>حساب‌های کاربری</span></a></th></tr>
                     {% endif %}
                     {% if perms.accounts.view_address or perms.accounts.change_address %}
@@ -164,7 +164,7 @@
             </table>
             {% endif %}
 
-            {% if perms.auth.view_group or perms.auth.change_group or perms.auth.add_group %}
+            {% if request.user.is_superuser and perms.auth.view_group or request.user.is_superuser and perms.auth.change_group or request.user.is_superuser and perms.auth.add_group %}
             <table class="module store-nav-module">
                 <caption>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
