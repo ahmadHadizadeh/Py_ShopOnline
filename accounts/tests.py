@@ -926,6 +926,24 @@ class StoreManagerAssignmentLimitTests(TransactionTestCase):
         with self.assertRaises(ValidationError):
             self.owner.groups.add(self.manager_group)
 
+    def test_inactive_users_cannot_be_assigned_as_store_manager_through_either_m2m_side(self):
+        self.first_candidate.is_active = False
+        self.first_candidate.save(update_fields=["is_active"])
+        self.second_candidate.is_active = False
+        self.second_candidate.save(update_fields=["is_active"])
+
+        with self.assertRaisesMessage(ValidationError, "حساب کاربری باید فعال باشد"):
+            self.first_candidate.groups.add(self.manager_group)
+        with self.assertRaisesMessage(ValidationError, "حساب کاربری باید فعال باشد"):
+            self.manager_group.user_set.add(self.second_candidate)
+
+        self.assertFalse(
+            self.first_candidate.groups.filter(pk=self.manager_group.pk).exists()
+        )
+        self.assertFalse(
+            self.second_candidate.groups.filter(pk=self.manager_group.pk).exists()
+        )
+
     def _manager_change_form(self, user, *, assign_role, staff_checked=False):
         user_admin = admin.site._registry[get_user_model()]
         request = RequestFactory().post("/")
