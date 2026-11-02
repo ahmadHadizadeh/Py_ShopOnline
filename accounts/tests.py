@@ -10,7 +10,7 @@ import jdatetime
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import NoReverseMatch, reverse
 
 from accounts.models import Address, Profile
@@ -697,6 +697,35 @@ class StoreIdentityAdminPermissionTests(TestCase):
         self.assertFalse(admin.site.is_registered(Group))
         with self.assertRaises(NoReverseMatch):
             reverse("admin:auth_group_changelist")
+
+    def test_owner_add_form_has_no_raw_permission_controls(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("admin:auth_user_add"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="id_is_superuser"')
+        self.assertNotContains(response, 'id="id_user_permissions"')
+
+    def test_user_edit_preserves_existing_non_manager_group_memberships(self):
+        legacy_group = Group.objects.create(name="Legacy permissions group")
+        manager_group = Group.objects.get(name=STORE_MANAGER_GROUP_NAME)
+        self.customer.groups.add(legacy_group)
+
+        class UserEditForm:
+            instance = self.customer
+
+            def save_m2m(self):
+                self.instance.groups.set([manager_group.pk])
+
+        request = RequestFactory().post(
+            reverse("admin:auth_user_change", args=[self.customer.pk])
+        )
+        user_admin = admin.site._registry[get_user_model()]
+        user_admin.save_related(request, UserEditForm(), [], change=True)
+
+        self.assertSetEqual(
+            set(self.customer.groups.values_list("pk", flat=True)),
+            {legacy_group.pk, manager_group.pk},
+        )
 
 
 class StoreManagerGroupProvisioningTests(TestCase):
