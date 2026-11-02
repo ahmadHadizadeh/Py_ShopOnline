@@ -1,16 +1,21 @@
 import pytest
 from json import dumps
+
+from django.apps import apps
+from django.contrib import admin
 from unittest.mock import patch
 from decimal import Decimal
 
 import jdatetime
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
+from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 
 from accounts.models import Address, Profile
+from accounts.apps import STORE_MANAGER_GROUP_NAME
+from accounts.signals import ensure_store_manager_group
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderAddressSnapshot, OrderItem, ShippingMethod
 from catalog.models.category import Category
@@ -646,52 +651,156 @@ class StoreIdentityAdminPermissionTests(TestCase):
             email="store-customer-identity@example.test",
             password="CustomerPassword123!",
         )
-
-        # Even an accidental direct grant of every auth User/Group permission
-        # must not let the store operator manage accounts or elevate privileges.
         identity_permissions = Permission.objects.filter(
             content_type__app_label="auth",
             content_type__model__in=("user", "group"),
             codename__in=(
-                "view_user",
-                "add_user",
-                "change_user",
-                "delete_user",
-                "view_group",
-                "add_group",
-                "change_group",
-                "delete_group",
+                "view_user", "add_user", "change_user", "delete_user",
+                "view_group", "add_group", "change_group", "delete_group",
             ),
         )
         self.staff.user_permissions.set(identity_permissions)
 
-    def test_staff_cannot_manage_users_or_groups_even_with_auth_permissions(self):
+    def test_staff_cannot_manage_users_even_with_auth_permissions(self):
         self.client.force_login(self.staff)
-
         protected_urls = (
             reverse("admin:auth_user_changelist"),
             reverse("admin:auth_user_add"),
             reverse("admin:auth_user_change", args=[self.customer.pk]),
-            reverse("admin:auth_group_changelist"),
-            reverse("admin:auth_group_add"),
         )
         for url in protected_urls:
             with self.subTest(url=url):
-                response = self.client.get(url)
-                self.assertEqual(response.status_code, 403)
+                self.assertEqual(self.client.get(url).status_code, 403)
 
         dashboard = self.client.get(reverse("admin:index"))
         self.assertEqual(dashboard.status_code, 200)
         self.assertNotContains(dashboard, "حساب‌های کاربری")
         self.assertNotContains(dashboard, "گروه‌های دسترسی")
+        self.assertFalse(admin.site.is_registered(Group))
+        with self.assertRaises(NoReverseMatch):
+            reverse("admin:auth_group_changelist")
 
-    def test_store_owner_retains_user_and_group_management(self):
+    def test_owner_can_manage_users_without_a_permission_editor(self):
+        Group.objects.get_or_create(name="Other permissions group")
         self.client.force_login(self.owner)
-
         user_list = self.client.get(reverse("admin:auth_user_changelist"))
-        group_list = self.client.get(reverse("admin:auth_group_changelist"))
-
+        user_change = self.client.get(
+            reverse("admin:auth_user_change", args=[self.customer.pk])
+        )
         self.assertEqual(user_list.status_code, 200)
-        self.assertEqual(group_list.status_code, 200)
+        self.assertEqual(user_change.status_code, 200)
         self.assertContains(user_list, self.customer.username)
+        self.assertContains(user_change, STORE_MANAGER_GROUP_NAME)
+        self.assertNotContains(user_change, "Other permissions group")
+        self.assertNotContains(user_change, 'id="id_user_permissions"')
+        self.assertNotContains(user_change, 'id="id_is_superuser"')
+        self.assertFalse(admin.site.is_registered(Group))
+        with self.assertRaises(NoReverseMatch):
+            reverse("admin:auth_group_changelist")
+
+
+class StoreManagerGroupProvisioningTests(TestCase):
+    expected_permissions = {
+        ("catalog", "view_product"), ("catalog", "add_product"),
+        ("catalog", "change_product"), ("catalog", "view_category"),
+        ("catalog", "add_category"), ("catalog", "change_category"),
+        ("catalog", "view_productvariant"), ("catalog", "add_productvariant"),
+        ("catalog", "change_productvariant"), ("catalog", "view_productimage"),
+        ("catalog", "add_productimage"), ("catalog", "change_productimage"),
+        ("catalog", "delete_productimage"), ("catalog", "view_productspecification"),
+        ("catalog", "add_productspecification"),
+        ("catalog", "change_productspecification"),
+        ("catalog", "delete_productspecification"), ("catalog", "view_review"),
+        ("catalog", "change_review"), ("catalog", "view_inventorymovement"),
+        ("orders", "view_order"), ("orders", "change_order"),
+        ("orders", "view_payment"), ("orders", "view_orderitem"),
+        ("orders", "view_orderaddresssnapshot"),
+    }
+
+    def setUp(self):
+        self.group = Group.objects.get(name=STORE_MANAGER_GROUP_NAME)
+
+    def test_group_contains_exactly_the_source_controlled_permissions(self):
+        actual = set(self.group.permissions.values_list(
+            "content_type__app_label", "codename"
+        ))
+        self.assertSetEqual(actual, self.expected_permissions)
+
+    def test_permission_drift_fails_closed_without_rewriting_group(self):
+        unexpected = Permission.objects.get(
+            content_type__app_label="auth", codename="view_user"
+        )
+        self.group.permissions.add(unexpected)
+        with self.assertRaisesMessage(RuntimeError, "مطابقت ندارد"):
+            ensure_store_manager_group(
+                sender=apps.get_app_config("orders"), using="default"
+            )
+        self.assertTrue(self.group.permissions.filter(pk=unexpected.pk).exists())
+
+
+class StoreManagerAdminAccessTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.manager = User.objects.create_user(
+            username="store-manager-operational",
+            email="store-manager-operational@example.test",
+            password="ManagerPassword123!",
+            is_staff=True,
+        )
+        self.manager.groups.add(Group.objects.get(name=STORE_MANAGER_GROUP_NAME))
+        category = Category.objects.create(
+            name="Manager access category", slug="manager-access-category"
+        )
+        self.product = Product.objects.create(
+            name="Manager access product", slug="manager-access-product",
+            price=100000, stock=5, is_active=True, category=category,
+        )
+
+    def test_manager_can_access_intended_store_operations_only(self):
+        self.client.force_login(self.manager)
+        allowed_urls = (
+            reverse("admin:catalog_product_changelist"),
+            reverse("admin:catalog_product_add"),
+            reverse("admin:catalog_category_changelist"),
+            reverse("admin:catalog_category_add"),
+            reverse("admin:catalog_productvariant_changelist"),
+            reverse("admin:catalog_review_changelist"),
+            reverse("admin:catalog_inventorymovement_changelist"),
+            reverse("admin:orders_order_changelist"),
+            reverse("admin:orders_orderitem_changelist"),
+            reverse("admin:orders_orderaddresssnapshot_changelist"),
+            reverse("admin:orders_payment_changelist"),
+            reverse("admin:catalog_product_inventory", args=[self.product.pk]),
+        )
+        for url in allowed_urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+        product_change = self.client.get(
+            reverse("admin:catalog_product_change", args=[self.product.pk])
+        )
+        self.assertEqual(product_change.status_code, 200)
+        self.assertContains(product_change, "images-TOTAL_FORMS")
+        self.assertContains(product_change, "specs-TOTAL_FORMS")
+
+        denied_urls = (
+            reverse("admin:orders_shippingmethod_changelist"),
+            reverse("admin:cart_cart_changelist"),
+            reverse("admin:accounts_address_changelist"),
+            reverse("admin:catalog_wishlist_changelist"),
+            reverse("admin:auth_user_changelist"),
+        )
+        for url in denied_urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)
+
+        for permission in (
+            "orders.change_payment", "catalog.delete_product",
+            "catalog.delete_category", "catalog.delete_productvariant",
+            "orders.delete_order", "orders.add_payment", "cart.view_cart",
+            "accounts.view_address", "orders.change_shippingmethod",
+            "auth.change_user",
+        ):
+            with self.subTest(permission=permission):
+                self.assertFalse(self.manager.has_perm(permission))
 

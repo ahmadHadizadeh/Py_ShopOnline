@@ -1,6 +1,9 @@
 from django.apps import AppConfig
 
 
+STORE_MANAGER_GROUP_NAME = "مدیر فروشگاه"
+
+
 class AccountsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "accounts"

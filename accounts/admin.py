@@ -1,10 +1,10 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
-from django.contrib.auth.admin import GroupAdmin as DjangoGroupAdmin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import Group
 from django.utils.html import format_html
 
+from .apps import STORE_MANAGER_GROUP_NAME
 from .models.address import Address
 from .models.profile import Profile
 
@@ -114,15 +114,50 @@ class StoreOwnerOnlyAdminMixin:
 
 
 class StoreOwnerUserAdmin(StoreOwnerOnlyAdminMixin, DjangoUserAdmin):
-    pass
+    # Hide Django's raw permission editor and expose one predefined store role.
+    fieldsets = (
+        (None, {"fields": ("username", "password")}),
+        ("اطلاعات شخصی", {"fields": ("first_name", "last_name", "email")}),
+        ("دسترسی پنل فروشگاه", {"fields": ("is_active", "is_staff", "groups")}),
+        ("زمان‌های مهم", {"fields": ("last_login", "date_joined")}),
+    )
+    filter_horizontal = ("groups",)
+    list_filter = ("is_active", "is_staff")
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "groups":
+            kwargs["queryset"] = Group.objects.filter(name=STORE_MANAGER_GROUP_NAME)
+        field = super().formfield_for_manytomany(db_field, request, **kwargs)
+        if field and db_field.name == "groups":
+            field.label = "نقش فروشگاه"
+            field.help_text = (
+                "تنها نقش قابل تخصیص، گروه ثابت «مدیر فروشگاه» است. "
+                "عضویت‌های قدیمی در گروه‌های دیگر هنگام ویرایش این حساب حفظ می‌شوند."
+            )
+        return field
+
+    def formfield_for_booleanfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_booleanfield(db_field, request, **kwargs)
+        if field and db_field.name == "is_staff":
+            field.label = "دسترسی به پنل مدیریت"
+            field.help_text = "برای کاربری که نقش «مدیر فروشگاه» می‌گیرد فعال باشد."
+        return field
+
+    def save_related(self, request, form, formsets, change):
+        # The fixed-role UI must not silently strip historical group memberships.
+        preserved_group_ids = []
+        if change and form.instance.pk:
+            preserved_group_ids = list(
+                form.instance.groups.exclude(name=STORE_MANAGER_GROUP_NAME)
+                .values_list("pk", flat=True)
+            )
+        super().save_related(request, form, formsets, change)
+        if preserved_group_ids:
+            form.instance.groups.add(*preserved_group_ids)
 
 
-class StoreOwnerGroupAdmin(StoreOwnerOnlyAdminMixin, DjangoGroupAdmin):
-    pass
-
-
-# A shop administrator must never be able to grant themselves staff or
-# superuser access by using Django's built-in User or Group administration.
+# The Group editor is intentionally removed. Owners assign the one predefined
+# role from the user's "نقش فروشگاه" field instead of editing Django permissions.
 User = get_user_model()
 if admin.site.is_registered(User):
     admin.site.unregister(User)
@@ -130,5 +165,4 @@ admin.site.register(User, StoreOwnerUserAdmin)
 
 if admin.site.is_registered(Group):
     admin.site.unregister(Group)
-admin.site.register(Group, StoreOwnerGroupAdmin)
 

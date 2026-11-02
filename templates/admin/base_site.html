@@ -164,21 +164,6 @@
             </table>
             {% endif %}
 
-            {% if request.user.is_superuser and perms.auth.view_group or request.user.is_superuser and perms.auth.change_group or request.user.is_superuser and perms.auth.add_group %}
-            <table class="module store-nav-module">
-                <caption>
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
-                    <span>دسترسی و امنیت</span>
-                </caption>
-                <tbody>
-                    {% if perms.auth.view_group or perms.auth.change_group %}
-                    <tr><th scope="row"><a href="{% url 'admin:auth_group_changelist' %}" class="store-sidebar-link{% if request.resolver_match.url_name == 'auth_group_changelist' or request.resolver_match.url_name == 'auth_group_change' %} is-active{% endif %}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M15 15a5 5 0 0 1 6.5 5"/></svg><span>گروه‌های دسترسی</span></a></th></tr>
-                    {% elif perms.auth.add_group %}
-                    <tr><th scope="row"><a href="{% url 'admin:auth_group_add' %}" class="store-sidebar-link"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 7v6M16 10h6"/></svg><span>افزودن گروه دسترسی</span></a></th></tr>
-                    {% endif %}
-                </tbody>
-            </table>
-            {% endif %}
         </div>
 
         <div class="store-sidebar-footer">
