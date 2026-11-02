@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils.html import format_html
 from .models.category import Category
@@ -68,6 +69,38 @@ class ProductAdmin(admin.ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
+    def save_model(self, request, obj, form, change):
+        if not change:
+            super().save_model(request, obj, form, change)
+            return
+
+        # A product form may have been built from a stale row while a payment
+        # callback reduces stock. Lock the current row and persist only fields
+        # actually changed by this form; never write the stale stock snapshot.
+        changed_fields = set(form.changed_data)
+        concrete_fields = {field.name for field in obj._meta.concrete_fields}
+        update_fields = (
+            changed_fields & concrete_fields
+        ) - {"stock", "is_available_status", "created", "updated"}
+
+        with transaction.atomic():
+            locked_product = Product.objects.select_for_update().get(pk=obj.pk)
+            for field_name in update_fields:
+                setattr(locked_product, field_name, getattr(obj, field_name))
+
+            locked_product.update_availability_status_on_save()
+            locked_product.save(
+                update_fields=sorted(
+                    update_fields | {"is_available_status", "updated"}
+                )
+            )
+
+            # Keep the admin's in-memory object consistent for logging and
+            # subsequent save_related processing.
+            obj.stock = locked_product.stock
+            obj.is_available_status = locked_product.is_available_status
+            obj.updated = locked_product.updated
+
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         field_labels = {
@@ -105,7 +138,6 @@ class ProductAdmin(admin.ModelAdmin):
         "is_active",
         "updated",
     )
-    list_editable = ("price", "stock")
     list_filter = ("is_active", "category", "brand", AvailabilityFilter)
     search_fields = ("name", "name_en", "brand", "slug")
     list_select_related = ("category",)
@@ -115,7 +147,7 @@ class ProductAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     inlines = [ProductImageInline, ProductSpecificationInline]
     ordering = ("-updated",)
-    readonly_fields = ("is_available_status", "created", "updated")
+    readonly_fields = ("stock", "is_available_status", "created", "updated")
     fieldsets = (
         (
             "اطلاعات اصلی محصول",
