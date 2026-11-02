@@ -6,6 +6,8 @@ from decimal import Decimal
 import jdatetime
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Address, Profile
@@ -622,3 +624,74 @@ def test_otp_development_uses_console_instead_of_smsir():
     assert ok is True
     assert "تستی" in message
     mocked_post.assert_not_called()
+
+
+
+class StoreIdentityAdminPermissionTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_superuser(
+            username="store-owner-identity-admin",
+            email="store-owner-identity@example.test",
+            password="OwnerPassword123!",
+        )
+        self.staff = User.objects.create_user(
+            username="store-operator-identity-admin",
+            email="store-operator-identity@example.test",
+            password="StaffPassword123!",
+            is_staff=True,
+        )
+        self.customer = User.objects.create_user(
+            username="store-customer-identity",
+            email="store-customer-identity@example.test",
+            password="CustomerPassword123!",
+        )
+
+        # Even an accidental direct grant of every auth User/Group permission
+        # must not let the store operator manage accounts or elevate privileges.
+        identity_permissions = Permission.objects.filter(
+            content_type__app_label="auth",
+            content_type__model__in=("user", "group"),
+            codename__in=(
+                "view_user",
+                "add_user",
+                "change_user",
+                "delete_user",
+                "view_group",
+                "add_group",
+                "change_group",
+                "delete_group",
+            ),
+        )
+        self.staff.user_permissions.set(identity_permissions)
+
+    def test_staff_cannot_manage_users_or_groups_even_with_auth_permissions(self):
+        self.client.force_login(self.staff)
+
+        protected_urls = (
+            reverse("admin:auth_user_changelist"),
+            reverse("admin:auth_user_add"),
+            reverse("admin:auth_user_change", args=[self.customer.pk]),
+            reverse("admin:auth_group_changelist"),
+            reverse("admin:auth_group_add"),
+        )
+        for url in protected_urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 403)
+
+        dashboard = self.client.get(reverse("admin:index"))
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertNotContains(dashboard, "حساب‌های کاربری")
+        self.assertNotContains(dashboard, "گروه‌های دسترسی")
+
+    def test_store_owner_retains_user_and_group_management(self):
+        self.client.force_login(self.owner)
+
+        user_list = self.client.get(reverse("admin:auth_user_changelist"))
+        group_list = self.client.get(reverse("admin:auth_group_changelist"))
+
+        self.assertEqual(user_list.status_code, 200)
+        self.assertEqual(group_list.status_code, 200)
+        self.assertContains(user_list, self.customer.username)
+
