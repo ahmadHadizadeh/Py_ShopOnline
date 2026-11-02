@@ -1,12 +1,14 @@
 """Real PostgreSQL concurrency and transaction tests for payment finalization."""
 
 from decimal import Decimal
+from types import SimpleNamespace
 import threading
 from uuid import uuid4
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection
-from django.test import TransactionTestCase
+from django.test import RequestFactory, TransactionTestCase
 from unittest import skipUnless
 
 from accounts.models.profile import Profile
@@ -171,6 +173,44 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         self.assertFalse(alive, f"Callback workers did not finish: {alive}")
         self.assertFalse(errors, f"Concurrent callback errors: {errors}")
         return outcomes
+
+    def test_stale_admin_product_save_does_not_restore_stock_after_payment_callback(self):
+        product = self._create_product(name="Stale Admin Save Product", stock=3)
+        order, payment = self._create_order_and_payment(products=[(product, 1)])
+
+        # Simulate a Product instance loaded by the admin form before the
+        # callback commits its inventory decrement.
+        stale_product = Product.objects.get(pk=product.pk)
+        stale_product.name = "Seller Updated Product Name"
+
+        outcome = PaymentService.handle_callback(
+            gateway_name=self.gateway_name,
+            data={"transaction_id": payment.transaction_code},
+        )
+        self.assertTrue(outcome.success)
+
+        admin_user = get_user_model().objects.create_superuser(
+            username=f"stale-admin-{uuid4().hex[:10]}",
+            email=f"stale-admin-{uuid4().hex[:10]}@example.test",
+            password="TestPassword123!",
+        )
+        request = RequestFactory().post("/admin/catalog/product/")
+        request.user = admin_user
+        product_admin = admin.site._registry[Product]
+        product_admin.save_model(
+            request,
+            stale_product,
+            SimpleNamespace(changed_data=["name"]),
+            change=True,
+        )
+
+        product.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(product.name, "Seller Updated Product Name")
+        self.assertEqual(product.stock, 2)
+        self.assertTrue(product.is_available_status)
+        self.assertEqual(order.status, Order.Status.PAID)
+        self.assertTrue(order.stock_reduced)
 
     def test_admin_cancellation_during_provider_verification_prevents_fulfillment(self):
         product = self._create_product(name="Cancel Callback Race Product", stock=3)
