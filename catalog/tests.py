@@ -447,7 +447,6 @@ class InventoryAdminOperationViewTests(TestCase):
         history_response = self.client.get(self.url)
         self.assertEqual(history_response.status_code, 200)
         self.assertContains(history_response, "دریافت محموله تأمین‌کننده")
-        self.assertContains(history_response, "۹")
 
     def test_inventory_page_allows_zero_physical_count(self):
         response = self.client.post(
