@@ -3,6 +3,8 @@
 
 {% block title %}{{ title }} | {{ site_title }}{% endblock %}
 
+{% block bodyclass %}inventory-operation{% endblock %}
+
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">خانه</a>
@@ -14,6 +16,7 @@
 
 {% block content %}
 <div id="content-main" dir="rtl">
+    <h1>{{ title }}</h1>
     <div class="module">
         <h2>وضعیت فعلی محصول</h2>
         <p><strong>{{ product.name }}</strong></p>
