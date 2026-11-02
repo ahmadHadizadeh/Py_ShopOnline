@@ -201,21 +201,21 @@ class Order(models.Model):
                     f"موجودی: {product.stock}, مقدار موردنیاز: {required_quantity}"
                 )
 
-        # فقط پس از اعتبارسنجی مجموع موجودی، برای هر Product یک‌بار کاهش انجام می‌شود.
+        # Only after every product is validated do we apply the decrements.
+        # The shared helper updates Product and writes its audit movement inside
+        # this existing order/payment transaction; all Product locks are already held.
+        from catalog.models.inventory import InventoryMovement
+        from catalog.services import _record_locked_inventory_movement
+
         for product_id in sorted(required_quantities):
             required_quantity = required_quantities[product_id]
             product = locked_products[product_id]
-            product.stock -= required_quantity
-
-            if product.stock == 0:
-                product.is_available_status = False
-
-            product.save(
-                update_fields=[
-                    "stock",
-                    "is_available_status",
-                    "updated",
-                ]
+            _record_locked_inventory_movement(
+                product=product,
+                delta=-required_quantity,
+                source=InventoryMovement.Source.ORDER_PAYMENT,
+                reason=f"کاهش موجودی پس از پرداخت موفق سفارش {self.order_number}",
+                order_number=self.order_number,
             )
 
         if self.status in (
