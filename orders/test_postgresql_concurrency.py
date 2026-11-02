@@ -15,6 +15,8 @@ from accounts.models.profile import Profile
 from cart.models import Cart
 from catalog.models.category import Category
 from catalog.models.product import Product
+from catalog.models.inventory import InventoryMovement
+from catalog.services import adjust_product_stock
 from orders.models.orders import Order
 from orders.models.order_item import OrderItem
 from orders.models.payment import Payment
@@ -211,6 +213,75 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         self.assertTrue(product.is_available_status)
         self.assertEqual(order.status, Order.Status.PAID)
         self.assertTrue(order.stock_reduced)
+
+    def test_manual_inventory_adjustment_races_payment_callback_without_lost_update(self):
+        product = self._create_product(name="Manual Payment Race Product", stock=3)
+        order, payment = self._create_order_and_payment(products=[(product, 1)])
+        manager = get_user_model().objects.create_superuser(
+            username=f"inventory-race-{uuid4().hex[:10]}",
+            email=f"inventory-race-{uuid4().hex[:10]}@example.test",
+            password="TestPassword123!",
+        )
+        self.gateway.barrier = threading.Barrier(2, timeout=10)
+        manual_errors = []
+
+        def manual_adjustment_worker():
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET lock_timeout = '5s'")
+                    cursor.execute("SET statement_timeout = '20s'")
+                worker_manager = get_user_model().objects.get(pk=manager.pk)
+                # Synchronize the manual write with the callback's provider
+                # verification boundary, then let both contend for Product.
+                self.gateway.barrier.wait(timeout=10)
+                adjust_product_stock(
+                    product_id=product.pk,
+                    delta=4,
+                    reason="ورود هم‌زمان محموله جدید",
+                    actor=worker_manager,
+                )
+            except BaseException as exc:
+                manual_errors.append(repr(exc))
+            finally:
+                connection.close()
+
+        manual_worker = threading.Thread(
+            target=manual_adjustment_worker,
+            daemon=True,
+        )
+        manual_worker.start()
+        outcomes = self._run_callbacks([payment.transaction_code])
+        manual_worker.join(timeout=25)
+
+        self.assertFalse(manual_worker.is_alive(), "Manual inventory worker did not finish.")
+        self.assertFalse(manual_errors, f"Manual inventory errors: {manual_errors}")
+        self.assertEqual(len(outcomes), 1)
+        self.assertTrue(outcomes[0].success)
+
+        order.refresh_from_db()
+        product.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)
+        self.assertTrue(order.stock_reduced)
+        self.assertEqual(product.stock, 6)
+
+        movements = list(
+            InventoryMovement.objects.filter(product=product).order_by("pk")
+        )
+        self.assertEqual(len(movements), 2)
+        self.assertEqual(
+            {movement.source for movement in movements},
+            {
+                InventoryMovement.Source.MANUAL_ADJUSTMENT,
+                InventoryMovement.Source.ORDER_PAYMENT,
+            },
+        )
+        self.assertEqual(sum(movement.delta for movement in movements), 3)
+        for movement in movements:
+            self.assertEqual(
+                movement.quantity_after - movement.quantity_before,
+                movement.delta,
+            )
 
     def test_admin_cancellation_during_provider_verification_prevents_fulfillment(self):
         product = self._create_product(name="Cancel Callback Race Product", stock=3)
