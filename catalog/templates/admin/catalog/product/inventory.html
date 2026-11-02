@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+{% load humanize %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">خانه</a>
+    &rsaquo; <a href="{% url 'admin:catalog_product_changelist' %}">محصولات</a>
+    &rsaquo; <a href="{{ change_url }}">{{ product.name }}</a>
+    &rsaquo; مدیریت موجودی
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" dir="rtl">
+    <div class="module">
+        <h2>وضعیت فعلی محصول</h2>
+        <p><strong>{{ product.name }}</strong></p>
+        <p>
+            موجودی ثبت‌شده در سامانه:
+            <strong>{{ product.stock|intcomma }}</strong>
+            عدد
+        </p>
+        <p class="help">
+            موجودی را از طریق عملیات زیر تغییر دهید. ویرایش مستقیم عدد موجودی در فرم محصول غیرفعال است.
+        </p>
+    </div>
+
+    <div class="module aligned">
+        <h2>ثبت عملیات موجودی</h2>
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+            {% for field in form %}
+                <div class="form-row">
+                    {{ field.errors }}
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}
+                        <div class="help">{{ field.help_text }}</div>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            <div class="submit-row">
+                <button type="submit" class="default">ثبت عملیات</button>
+                <a href="{{ change_url }}" class="button cancel-link">بازگشت به محصول</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="module">
+        <h2>آخرین گردش‌های موجودی</h2>
+        <p class="help">۲۰ عملیات اخیر این محصول؛ شامل تغییر دستی، شمارش فیزیکی و کاهش موجودی سفارش‌های پرداخت‌شده.</p>
+        {% if movements %}
+            <div class="results">
+                <table id="result_list">
+                    <thead>
+                        <tr>
+                            <th scope="col">زمان</th>
+                            <th scope="col">نوع عملیات</th>
+                            <th scope="col">تغییر</th>
+                            <th scope="col">قبل</th>
+                            <th scope="col">بعد</th>
+                            <th scope="col">ثبت‌کننده</th>
+                            <th scope="col">شماره سفارش</th>
+                            <th scope="col">دلیل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for movement in movements %}
+                            <tr>
+                                <td>{{ movement.created_at|date:"Y-m-d H:i" }}</td>
+                                <td>{{ movement.get_source_display }}</td>
+                                <td>
+                                    {% if movement.delta > 0 %}+{% endif %}{{ movement.delta|intcomma }}
+                                </td>
+                                <td>{{ movement.quantity_before|intcomma }}</td>
+                                <td>{{ movement.quantity_after|intcomma }}</td>
+                                <td>{{ movement.actor_label|default:"—" }}</td>
+                                <td>{{ movement.order_number|default:"—" }}</td>
+                                <td>{{ movement.reason }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>هنوز گردش موجودی برای این محصول ثبت نشده است.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
