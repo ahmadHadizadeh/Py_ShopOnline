@@ -1,14 +1,21 @@
 from decimal import Decimal
 # فایل: catalog/tests.py
 from django.test import TestCase, Client
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib import admin
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from catalog.models.product import Product
+from catalog.models.inventory import InventoryMovement
 from catalog.models.category import Category
 from catalog.models.review import Review
 from catalog.models.variant import ProductVariant
-from catalog.services import save_product_review, toggle_wishlist
+from catalog.services import (
+    adjust_product_stock,
+    record_physical_stock_count,
+    save_product_review,
+    toggle_wishlist,
+)
 
 User = get_user_model()
 
@@ -196,6 +203,171 @@ class ProductAdminUsabilityTests(TestCase):
         self.assertNotContains(form_response, ">Category<")
         self.assertNotContains(form_response, ">Image<")
         self.assertNotContains(form_response, ">Slug<")
+
+
+
+class InventoryServiceTests(TestCase):
+    def setUp(self):
+        self.manager = User.objects.create_superuser(
+            username="inventory-manager",
+            email="inventory-manager@example.test",
+            password="TestPassword123!",
+        )
+        self.category = Category.objects.create(
+            name="Inventory Category",
+            slug="inventory-category",
+        )
+        self.product = Product.objects.create(
+            name="Inventory Product",
+            slug="inventory-product",
+            category=self.category,
+            stock=5,
+            is_active=True,
+        )
+
+    def test_relative_increase_and_decrease_record_auditable_movements(self):
+        product, increase = adjust_product_stock(
+            product_id=self.product.pk,
+            delta=3,
+            reason="دریافت محموله جدید",
+            actor=self.manager,
+        )
+        self.assertEqual(product.stock, 8)
+        self.assertEqual(increase.quantity_before, 5)
+        self.assertEqual(increase.quantity_after, 8)
+        self.assertEqual(increase.delta, 3)
+        self.assertEqual(increase.source, InventoryMovement.Source.MANUAL_ADJUSTMENT)
+        self.assertEqual(increase.actor, self.manager)
+        self.assertEqual(increase.actor_label, self.manager.get_username())
+
+        product, decrease = adjust_product_stock(
+            product_id=self.product.pk,
+            delta=-2,
+            reason="ثبت کالای آسیب‌دیده",
+            actor=self.manager,
+        )
+        self.assertEqual(product.stock, 6)
+        self.assertEqual(decrease.quantity_before, 8)
+        self.assertEqual(decrease.quantity_after, 6)
+        self.assertEqual(decrease.delta, -2)
+
+        self.assertEqual(
+            InventoryMovement.objects.filter(product=self.product).count(),
+            2,
+        )
+
+    def test_decrease_to_zero_updates_derived_availability(self):
+        product, movement = adjust_product_stock(
+            product_id=self.product.pk,
+            delta=-5,
+            reason="خروج کامل موجودی",
+            actor=self.manager,
+        )
+
+        self.assertEqual(product.stock, 0)
+        self.assertFalse(product.is_available_status)
+        self.assertFalse(product.is_available)
+        self.assertEqual(movement.quantity_after, 0)
+
+    def test_adjustment_cannot_make_stock_negative_or_create_a_movement(self):
+        with self.assertRaises(ValidationError):
+            adjust_product_stock(
+                product_id=self.product.pk,
+                delta=-6,
+                reason="کاهش بیش از موجودی",
+                actor=self.manager,
+            )
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 5)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+    def test_zero_manual_adjustment_and_empty_reason_are_rejected(self):
+        for delta, reason in ((0, "عملیات صفر"), (1, "   ")):
+            with self.subTest(delta=delta, reason=reason):
+                with self.assertRaises(ValidationError):
+                    adjust_product_stock(
+                        product_id=self.product.pk,
+                        delta=delta,
+                        reason=reason,
+                        actor=self.manager,
+                    )
+
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+    def test_physical_count_records_delta_and_zero_delta_count(self):
+        product, correction = record_physical_stock_count(
+            product_id=self.product.pk,
+            physical_count=3,
+            reason="شمارش پایان شیفت",
+            actor=self.manager,
+        )
+        self.assertEqual(product.stock, 3)
+        self.assertEqual(correction.delta, -2)
+        self.assertEqual(correction.source, InventoryMovement.Source.PHYSICAL_COUNT)
+
+        product, confirmation = record_physical_stock_count(
+            product_id=self.product.pk,
+            physical_count=3,
+            reason="تأیید شمارش مجدد",
+            actor=self.manager,
+        )
+        self.assertEqual(product.stock, 3)
+        self.assertEqual(confirmation.delta, 0)
+        self.assertEqual(confirmation.quantity_before, 3)
+        self.assertEqual(confirmation.quantity_after, 3)
+        self.assertEqual(InventoryMovement.objects.count(), 2)
+
+    def test_physical_count_rejects_negative_or_non_integer_values(self):
+        for physical_count in (-1, 1.5, True):
+            with self.subTest(physical_count=physical_count):
+                with self.assertRaises(ValidationError):
+                    record_physical_stock_count(
+                        product_id=self.product.pk,
+                        physical_count=physical_count,
+                        reason="شمارش فیزیکی",
+                        actor=self.manager,
+                    )
+
+        self.assertEqual(self.product.stock, 5)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+    def test_stock_operations_require_product_change_permission(self):
+        unprivileged_user = User.objects.create_user(
+            username="inventory-no-permission",
+            password="TestPassword123!",
+        )
+
+        with self.assertRaises(PermissionDenied):
+            adjust_product_stock(
+                product_id=self.product.pk,
+                delta=1,
+                reason="نباید اجرا شود",
+                actor=unprivileged_user,
+            )
+
+        self.assertEqual(self.product.stock, 5)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+    def test_product_deactivation_remains_effective_after_stock_increase(self):
+        inactive_product = Product.objects.create(
+            name="Inactive Inventory Product",
+            slug="inactive-inventory-product",
+            category=self.category,
+            stock=0,
+            is_active=False,
+        )
+
+        product, _movement = adjust_product_stock(
+            product_id=inactive_product.pk,
+            delta=4,
+            reason="ورود موجودی برای محصول غیرفعال",
+            actor=self.manager,
+        )
+
+        self.assertEqual(product.stock, 4)
+        self.assertFalse(product.is_available_status)
+        self.assertFalse(product.is_available)
 
 
 
