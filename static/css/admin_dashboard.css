@@ -1704,3 +1704,32 @@ body.change-form .inline-group {
         min-width: 38rem;
     }
 }
+
+
+/* Responsive inventory-operation history table. */
+body.inventory-operation #content-main {
+    max-width: 100%;
+    min-width: 0;
+}
+
+body.inventory-operation .store-inventory-history {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+
+body.inventory-operation .store-inventory-history table {
+    min-width: 64rem;
+    width: 100%;
+}
+
+body.inventory-operation .store-inventory-history th,
+body.inventory-operation .store-inventory-history td {
+    white-space: nowrap;
+    vertical-align: top;
+}
+
+body.inventory-operation .store-inventory-history td:last-child {
+    min-width: 15rem;
+    white-space: normal;
+}
