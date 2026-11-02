@@ -123,7 +123,7 @@ class ProductAdminUsabilityTests(TestCase):
 
         self.assertEqual(
             tuple(product_admin.readonly_fields),
-            ("stock", "is_available_status", "created", "updated"),
+            ("stock", "is_available_status", "created", "updated", "inventory_management_link"),
         )
         self.assertEqual(tuple(product_admin.list_editable), ())
         self.assertEqual(
