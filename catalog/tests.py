@@ -200,6 +200,7 @@ class ProductAdminUsabilityTests(TestCase):
         self.assertContains(form_response, "تصویر اصلی محصول")
         self.assertContains(form_response, "نشانی محصول")
         self.assertContains(form_response, "برای انتخاب چند محصول")
+        self.assertContains(form_response, "مدیریت موجودی و ثبت شمارش فیزیکی")
         self.assertNotContains(form_response, ">Category<")
         self.assertNotContains(form_response, ">Image<")
         self.assertNotContains(form_response, ">Slug<")
@@ -386,6 +387,114 @@ class InventoryServiceTests(TestCase):
         self.assertEqual(product.stock, 4)
         self.assertFalse(product.is_available_status)
         self.assertFalse(product.is_available)
+
+
+
+class InventoryAdminOperationViewTests(TestCase):
+    def setUp(self):
+        self.manager = User.objects.create_superuser(
+            username="inventory-page-manager",
+            email="inventory-page-manager@example.test",
+            password="TestPassword123!",
+        )
+        category = Category.objects.create(
+            name="Inventory Page Category",
+            slug="inventory-page-category",
+        )
+        self.product = Product.objects.create(
+            name="Inventory Page Product",
+            slug="inventory-page-product",
+            category=category,
+            stock=5,
+            is_active=True,
+        )
+        self.client.force_login(self.manager)
+        self.url = reverse(
+            "admin:catalog_product_inventory",
+            args=[self.product.pk],
+        )
+
+    def test_inventory_page_displays_operations_and_recent_history(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "موجودی ثبت‌شده در سامانه")
+        self.assertContains(response, "افزایش موجودی (ورود کالا)")
+        self.assertContains(response, "کاهش موجودی")
+        self.assertContains(response, "ثبت شمارش فیزیکی")
+        self.assertContains(response, "آخرین گردش‌های موجودی")
+
+    def test_inventory_page_posts_relative_increase_and_shows_history(self):
+        response = self.client.post(
+            self.url,
+            {
+                "operation": "increase",
+                "quantity": "4",
+                "reason": "دریافت محموله تأمین‌کننده",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 9)
+
+        movement = InventoryMovement.objects.get(product=self.product)
+        self.assertEqual(movement.delta, 4)
+        self.assertEqual(movement.quantity_before, 5)
+        self.assertEqual(movement.quantity_after, 9)
+        self.assertEqual(movement.actor, self.manager)
+
+        history_response = self.client.get(self.url)
+        self.assertEqual(history_response.status_code, 200)
+        self.assertContains(history_response, "دریافت محموله تأمین‌کننده")
+        self.assertContains(history_response, "۹")
+
+    def test_inventory_page_allows_zero_physical_count(self):
+        response = self.client.post(
+            self.url,
+            {
+                "operation": "physical_count",
+                "quantity": "0",
+                "reason": "شمارش قفسه و تأیید اتمام موجودی",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 0)
+        movement = InventoryMovement.objects.get(product=self.product)
+        self.assertEqual(movement.source, InventoryMovement.Source.PHYSICAL_COUNT)
+        self.assertEqual(movement.delta, -5)
+
+    def test_inventory_page_rejects_zero_relative_adjustment(self):
+        response = self.client.post(
+            self.url,
+            {
+                "operation": "decrease",
+                "quantity": "0",
+                "reason": "تعداد نامعتبر",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "تعداد باید بیشتر از صفر باشد.")
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 5)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
+
+    def test_inventory_page_denies_staff_without_product_change_permission(self):
+        read_only_staff = User.objects.create_user(
+            username="inventory-read-only-staff",
+            password="TestPassword123!",
+            is_staff=True,
+        )
+        self.client.force_login(read_only_staff)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.product.stock, 5)
+        self.assertEqual(InventoryMovement.objects.count(), 0)
 
 
 
