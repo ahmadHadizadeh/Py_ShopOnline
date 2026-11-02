@@ -128,6 +128,8 @@ def enforce_single_store_manager(sender, instance, action, reverse, model, pk_se
     candidates = User.objects.using(using).filter(pk__in=candidate_user_ids)
     if candidates.filter(is_superuser=True).exists():
         raise ValidationError("صاحب فروشگاه نمی‌تواند عضو نقش مدیر فروشگاه باشد.")
+    if candidates.filter(is_active=False).exists():
+        raise ValidationError("برای تعیین مدیر فروشگاه، حساب کاربری باید فعال باشد.")
     if candidates.count() > 1:
         raise ValidationError("در هر فروشگاه فقط یک مدیر قابل تخصیص است.")
     if candidates.filter(user_permissions__isnull=False).exists():
