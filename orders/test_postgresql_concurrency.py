@@ -18,6 +18,7 @@ from orders.models.order_item import OrderItem
 from orders.models.payment import Payment
 from orders.payment.gateways import GatewayCallbackResult, PaymentGatewayRegistry
 from orders.payment.services import PaymentService
+from orders.services import OrderService
 
 
 @skipUnless(
@@ -38,6 +39,8 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         def __init__(self, name):
             self.name = name
             self.barrier = None
+            self.verification_started = None
+            self.allow_verification = None
 
         def extract_transaction_id(self, *, data):
             return str(data["transaction_id"])
@@ -45,6 +48,10 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         def verify_callback(self, *, payment, data):
             if self.barrier is not None:
                 self.barrier.wait(timeout=10)
+            if self.verification_started is not None:
+                self.verification_started.set()
+                if not self.allow_verification.wait(timeout=10):
+                    raise RuntimeError("Callback verification release timed out.")
             return GatewayCallbackResult(
                 transaction_id=payment.transaction_code,
                 success=True,
@@ -164,6 +171,66 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
         self.assertFalse(alive, f"Callback workers did not finish: {alive}")
         self.assertFalse(errors, f"Concurrent callback errors: {errors}")
         return outcomes
+
+    def test_admin_cancellation_during_provider_verification_prevents_fulfillment(self):
+        product = self._create_product(name="Cancel Callback Race Product", stock=3)
+        order, payment = self._create_order_and_payment(products=[(product, 1)])
+        self.gateway.verification_started = threading.Event()
+        self.gateway.allow_verification = threading.Event()
+
+        outcomes = []
+        errors = []
+
+        def callback_worker():
+            close_old_connections()
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET lock_timeout = '5s'")
+                    cursor.execute("SET statement_timeout = '20s'")
+                outcomes.append(
+                    PaymentService.handle_callback(
+                        gateway_name=self.gateway_name,
+                        data={"transaction_id": payment.transaction_code},
+                    )
+                )
+            except BaseException as exc:
+                errors.append(repr(exc))
+            finally:
+                connection.close()
+
+        worker = threading.Thread(target=callback_worker, daemon=True)
+        worker.start()
+        verification_started = self.gateway.verification_started.wait(timeout=10)
+
+        try:
+            self.assertTrue(
+                verification_started,
+                "The callback did not reach the external-verification boundary.",
+            )
+            # The provider call is blocked outside any DB transaction. Cancel the
+            # unpaid order and commit before allowing callback finalization.
+            OrderService.transition_status(
+                order_id=order.pk,
+                new_status=Order.Status.CANCELLED,
+            )
+        finally:
+            self.gateway.allow_verification.set()
+
+        worker.join(timeout=25)
+        self.assertFalse(worker.is_alive(), "Callback worker did not finish.")
+        self.assertFalse(errors, f"Callback worker failed: {errors}")
+        self.assertEqual(len(outcomes), 1)
+        self.assertTrue(outcomes[0].success)
+
+        payment.refresh_from_db()
+        order.refresh_from_db()
+        product.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.SUCCESS)
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertIsNotNone(order.cancelled_at)
+        self.assertIsNone(order.paid_at)
+        self.assertFalse(order.stock_reduced)
+        self.assertEqual(product.stock, 3)
 
     def test_duplicate_success_callbacks_reduce_stock_exactly_once(self):
         product = self._create_product(name="Duplicate Callback Product", stock=3)
