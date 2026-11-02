@@ -1,6 +1,6 @@
 from decimal import Decimal
 # فایل: catalog/tests.py
-from django.test import TestCase, Client
+from django.test import TestCase, Client, RequestFactory
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib import admin
 from django.urls import reverse
@@ -203,7 +203,25 @@ class ProductAdminUsabilityTests(TestCase):
         self.assertNotContains(form_response, ">Category<")
         self.assertNotContains(form_response, ">Image<")
         self.assertNotContains(form_response, ">Slug<")
+        self.assertNotIn("stock", form_response.context["adminform"].form.fields)
 
+
+
+class InventoryMovementAdminTests(TestCase):
+    def test_inventory_movement_admin_is_read_only(self):
+        admin_user = User.objects.create_superuser(
+            username="inventory-audit-admin",
+            email="inventory-audit-admin@example.test",
+            password="TestPassword123!",
+        )
+        request = RequestFactory().get("/admin/catalog/inventorymovement/")
+        request.user = admin_user
+        movement_admin = admin.site._registry[InventoryMovement]
+
+        self.assertTrue(movement_admin.has_view_permission(request))
+        self.assertFalse(movement_admin.has_add_permission(request))
+        self.assertFalse(movement_admin.has_change_permission(request))
+        self.assertFalse(movement_admin.has_delete_permission(request))
 
 
 class InventoryServiceTests(TestCase):
