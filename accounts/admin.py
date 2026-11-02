@@ -218,6 +218,7 @@ class StoreOwnerUserAdmin(StoreOwnerOnlyAdminMixin, DjangoUserAdmin):
         ("زمان‌های مهم", {"fields": ("last_login", "date_joined")}),
     )
     filter_horizontal = ("groups",)
+    readonly_fields = ("last_login", "date_joined")
     list_filter = ("is_active", "is_staff")
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):

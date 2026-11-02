@@ -1265,7 +1265,7 @@ class SharedProductVariantStockTests(TestCase):
 
     def test_add_rejects_total_across_variants_above_stock(self):
         self.add_item(self.red, 3)
-        with self.assertRaisesMessage(ValidationError, "تمام واریانت‌ها"):
+        with self.assertRaisesMessage(ValidationError, "مجموع تعداد"):
             add_product_to_cart(
                 self.cart, self.product, quantity=3, variant=self.blue
             )

@@ -414,6 +414,24 @@ class CategoryAdmin(admin.ModelAdmin):
             return False
         return super().has_delete_permission(request, obj)
 
+    def get_deleted_objects(self, objs, request):
+        category_ids = [obj.pk for obj in objs]
+        if Category.objects.filter(
+            pk__in=category_ids,
+            products__isnull=False,
+        ).exists():
+            raise PermissionDenied(
+                "دسته‌بندی دارای محصول را نمی‌توان حذف کرد؛ ابتدا محصولات را منتقل کنید."
+            )
+        return super().get_deleted_objects(objs, request)
+
+    def delete_queryset(self, request, queryset):
+        if queryset.filter(products__isnull=False).exists():
+            raise PermissionDenied(
+                "دسته‌بندی دارای محصول را نمی‌توان حذف کرد؛ ابتدا محصولات را منتقل کنید."
+            )
+        return super().delete_queryset(request, queryset)
+
     list_display = ("name", "parent", "is_active", "slug")
     list_filter = ("is_active", "parent")
     search_fields = ("name", "slug")
