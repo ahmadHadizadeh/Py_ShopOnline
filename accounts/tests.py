@@ -29,7 +29,9 @@ from catalog.models.product import Product
 def test_address_model_accepts_form_phone_number_lengths(
     phone_number, django_user_model
 ):
-    user = django_user_model.objects.create_user(username=f"address-valid-{phone_number}")
+    user = django_user_model.objects.create_user(
+        username=f"address-valid-{phone_number}"
+    )
     address = Address(
         user=user,
         recipient_name="Test recipient",
@@ -47,7 +49,9 @@ def test_address_model_accepts_form_phone_number_lengths(
 def test_address_model_rejects_phone_number_lengths_not_supported_by_form(
     phone_number, django_user_model
 ):
-    user = django_user_model.objects.create_user(username=f"address-invalid-{phone_number}")
+    user = django_user_model.objects.create_user(
+        username=f"address-invalid-{phone_number}"
+    )
     address = Address(
         user=user,
         recipient_name="Test recipient",
