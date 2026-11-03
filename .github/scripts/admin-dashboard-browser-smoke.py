@@ -261,7 +261,7 @@ def main() -> None:
                 page.screenshot(path=str(mobile_screenshot), full_page=True)
                 report["screenshots"].append(str(mobile_screenshot.relative_to(ROOT)))
 
-                # Exercise the explicitly selected dark theme as well as the system-auto path.
+                # Exercise the explicitly selected dark theme.
                 page.evaluate("() => localStorage.setItem('theme', 'dark')")
                 response = page.goto(
                     f"{BASE_URL}/admin/catalog/product/",
@@ -314,6 +314,22 @@ def main() -> None:
                 assert dark_theme_contrast.get("theme") == "dark", dark_theme_contrast
                 assert dark_theme_contrast.get("ratio", 0) >= 4.5, (
                     f"Dark-theme table text contrast is below WCAG AA: {dark_theme_contrast}"
+                )
+
+                # Also cover automatic dark mode when the operating system prefers dark.
+                page.emulate_media(color_scheme="dark")
+                page.evaluate(
+                    """() => {
+                        localStorage.setItem("theme", "auto");
+                        document.documentElement.dataset.theme = "auto";
+                    }"""
+                )
+                auto_dark_row_background = page.locator(
+                    "#changelist table tbody tr"
+                ).first.evaluate("(row) => getComputedStyle(row).backgroundColor")
+                assert auto_dark_row_background == "rgb(255, 255, 255)", (
+                    "System-auto dark mode did not retain readable light table rows: "
+                    f"{auto_dark_row_background}"
                 )
                 product_list_diagnostics = page.evaluate(
                     """() => {
