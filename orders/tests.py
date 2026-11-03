@@ -2237,6 +2237,43 @@ class OrderAdminActionAuditLogTests(TestCase):
             ).exists()
         )
 
+    def test_audit_log_failure_rolls_back_order_status_transition(self):
+        order = self.create_order(
+            status=Order.Status.PAID,
+            payment_status=Payment.Status.SUCCESS,
+            stock_reduced=True,
+        )
+        order_admin = admin.site._registry[Order]
+        request = RequestFactory().post(reverse("admin:orders_order_changelist"))
+        request.user = self.staff
+
+        with (
+            patch.object(
+                order_admin,
+                "log_change",
+                side_effect=RuntimeError("audit log write failed"),
+            ),
+            patch.object(order_admin, "message_user"),
+        ):
+            _transition_orders_with_audit_log(
+                order_admin,
+                request,
+                [order],
+                Order.Status.PROCESSING,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)
+        self.assertFalse(
+            LogEntry.objects.filter(
+                user=self.staff,
+                content_type__app_label="orders",
+                content_type__model="order",
+                object_id=str(order.pk),
+                action_flag=CHANGE,
+            ).exists()
+        )
+
     def test_view_only_staff_cannot_expose_or_execute_status_actions(self):
         order = self.create_order(
             status=Order.Status.PAID,
