@@ -5,6 +5,7 @@ on:
     branches:
       - phase-3-8-admin-dashboard-ux
       - phase-3-8-dashboard-payment-integration
+      - fix/admin-ui-ux-2026-11-03
   pull_request:
     branches:
       - main
