@@ -1462,7 +1462,7 @@ class ProcessPaymentViewTests(TestCase):
         )
 
     def test_initiate_payment_creates_single_pending_payment(self):
-        response = self.client.get(self.url)
+        response = self.client.post(self.url)
 
         self.assertEqual(
             response.status_code,
@@ -1504,7 +1504,7 @@ class ProcessPaymentViewTests(TestCase):
         )
 
     def test_repeated_initiate_payment_reuses_existing_payment(self):
-        first_response = self.client.get(self.url)
+        first_response = self.client.post(self.url)
 
         self.assertEqual(
             first_response.status_code,
@@ -1512,7 +1512,7 @@ class ProcessPaymentViewTests(TestCase):
         )
 
         first_payment = Payment.objects.get(order=self.order)
-        second_response = self.client.get(self.url)
+        second_response = self.client.post(self.url)
 
         self.assertEqual(
             second_response.status_code,
