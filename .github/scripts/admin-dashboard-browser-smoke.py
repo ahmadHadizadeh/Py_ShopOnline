@@ -248,9 +248,9 @@ def main() -> None:
                 sidebar_toggle = page.locator("#toggle-nav-sidebar")
                 assert mobile_sidebar.is_visible(), "Custom admin sidebar is hidden on mobile"
                 sidebar_toggle.click()
-                assert mobile_sidebar.is_hidden(), "Mobile sidebar toggle did not close the sidebar"
+                mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 sidebar_toggle.click()
-                assert mobile_sidebar.is_visible(), "Mobile sidebar toggle did not reopen the sidebar"
+                mobile_sidebar.wait_for(state="visible", timeout=1500)
                 mobile_dimensions = page.evaluate(
                     "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
                 )
@@ -283,7 +283,7 @@ def main() -> None:
                             return {error: "No readable product cell available for contrast check"};
                         }
                         const textElement = cell.querySelector("a") || cell;
-                        const rgb = value => (value.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+                        const rgb = value => (value.match(/[0-9.]+/g) || []).slice(0, 3).map(Number);
                         const linear = channel => {
                             channel /= 255;
                             return channel <= 0.04045
