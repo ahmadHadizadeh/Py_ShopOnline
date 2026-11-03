@@ -4,6 +4,8 @@ from django.db import models, router, transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+ADDRESS_PHONE_NUMBER_LENGTHS = (10, 11)
+
 class Address(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -69,8 +71,18 @@ class Address(models.Model):
     def clean(self):
         super().clean()
         # اعتبارسنجی اولیه برای شماره تماس
-        if not self.phone_number or not self.phone_number.isdigit() or len(self.phone_number) < 10:
-             raise ValidationError({'phone_number': 'شماره تماس باید حداقل ۱۰ رقم و شامل اعداد باشد.'})
+        if (
+            not self.phone_number
+            or not self.phone_number.isdigit()
+            or len(self.phone_number) not in ADDRESS_PHONE_NUMBER_LENGTHS
+        ):
+            raise ValidationError(
+                {
+                    "phone_number": (
+                        "شماره تماس باید ۱۰ یا ۱۱ رقم و شامل اعداد باشد."
+                    )
+                }
+            )
         # اعتبارسنجی اولیه برای کد پستی
         if not self.postal_code or not self.postal_code.isdigit() or len(self.postal_code) != 10:
             raise ValidationError({'postal_code': 'کد پستی باید دقیقاً ۱۰ رقم و شامل اعداد باشد.'})

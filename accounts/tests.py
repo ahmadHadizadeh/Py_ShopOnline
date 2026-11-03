@@ -16,12 +16,81 @@ from django.test import RequestFactory, TestCase, TransactionTestCase
 from django.urls import NoReverseMatch, reverse
 
 from accounts.models import Address, Profile
+from accounts.forms import AddressForm
 from accounts.apps import STORE_MANAGER_GROUP_NAME
 from accounts.signals import ensure_store_manager_group
 from cart.models import Cart, CartItem
 from orders.models import Order, OrderAddressSnapshot, OrderItem, ShippingMethod
 from catalog.models.category import Category
 from catalog.models.product import Product
+
+
+@pytest.mark.parametrize("phone_number", ["0912345678", "09123456789"])
+def test_address_model_accepts_form_phone_number_lengths(
+    phone_number, django_user_model
+):
+    user = django_user_model.objects.create_user(
+        username=f"address-valid-{phone_number}"
+    )
+    address = Address(
+        user=user,
+        recipient_name="Test recipient",
+        phone_number=phone_number,
+        postal_code="1234567890",
+        province="تهران",
+        city="تهران",
+        address_line="Test address",
+    )
+
+    address.full_clean()
+
+
+@pytest.mark.parametrize("phone_number", ["091234567", "091234567890"])
+def test_address_model_rejects_phone_number_lengths_not_supported_by_form(
+    phone_number, django_user_model
+):
+    user = django_user_model.objects.create_user(
+        username=f"address-invalid-{phone_number}"
+    )
+    address = Address(
+        user=user,
+        recipient_name="Test recipient",
+        phone_number=phone_number,
+        postal_code="1234567890",
+        province="تهران",
+        city="تهران",
+        address_line="Test address",
+    )
+
+    with pytest.raises(ValidationError, match="شماره تماس"):
+        address.full_clean()
+
+
+@pytest.mark.parametrize(
+    ("phone_number", "is_valid"),
+    [
+        ("0912345678", True),
+        ("09123456789", True),
+        ("091234567", False),
+        ("091234567890", False),
+    ],
+)
+def test_address_form_and_model_share_phone_number_length_contract(
+    phone_number, is_valid
+):
+    form = AddressForm(
+        data={
+            "recipient_name": "Test recipient",
+            "phone_number": phone_number,
+            "postal_code": "1234567890",
+            "province": "تهران",
+            "city": "تهران",
+            "address_line": "Test address",
+            "is_default": "",
+        }
+    )
+
+    assert form.is_valid() is is_valid
 
 
 @pytest.mark.django_db
