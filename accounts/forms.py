@@ -1,6 +1,7 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 from .models import Address
+from .models.address import ADDRESS_PHONE_NUMBER_LENGTHS
 
 PROVINCES_AND_CITIES = {
     "آذربایجان شرقی": [
@@ -749,7 +750,7 @@ class AddressForm(forms.ModelForm):
         phone = self.cleaned_data.get("phone_number")
         if phone:
             phone = "".join(filter(str.isdigit, phone))
-            if len(phone) not in (10, 11):
+            if len(phone) not in ADDRESS_PHONE_NUMBER_LENGTHS:
                 raise forms.ValidationError(_("شماره تماس باید ۱۰ یا ۱۱ رقم باشد."))
         return phone
 
