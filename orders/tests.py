@@ -1540,7 +1540,7 @@ class ProcessPaymentViewTests(TestCase):
         self.order.status = Order.Status.PAID
         self.order.save(update_fields=["status"])
 
-        response = self.client.get(self.url)
+        response = self.client.post(self.url)
 
         self.assertRedirects(response, reverse("accounts:dashboard_orders"))
         self.assertFalse(Payment.objects.filter(order=self.order).exists())
@@ -1558,7 +1558,7 @@ class ProcessPaymentViewTests(TestCase):
             reference_code="PAID-ORDER-EXISTING-REF",
         )
 
-        response = self.client.get(self.url)
+        response = self.client.post(self.url)
 
         self.assertRedirects(
             response,
