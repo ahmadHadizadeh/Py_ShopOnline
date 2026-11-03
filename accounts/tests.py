@@ -26,8 +26,12 @@ from catalog.models.product import Product
 
 
 @pytest.mark.parametrize("phone_number", ["0912345678", "09123456789"])
-def test_address_model_accepts_form_phone_number_lengths(phone_number):
+def test_address_model_accepts_form_phone_number_lengths(
+    phone_number, django_user_model
+):
+    user = django_user_model.objects.create_user(username=f"address-valid-{phone_number}")
     address = Address(
+        user=user,
         recipient_name="Test recipient",
         phone_number=phone_number,
         postal_code="1234567890",
@@ -40,8 +44,12 @@ def test_address_model_accepts_form_phone_number_lengths(phone_number):
 
 
 @pytest.mark.parametrize("phone_number", ["091234567", "091234567890"])
-def test_address_model_rejects_phone_number_lengths_not_supported_by_form(phone_number):
+def test_address_model_rejects_phone_number_lengths_not_supported_by_form(
+    phone_number, django_user_model
+):
+    user = django_user_model.objects.create_user(username=f"address-invalid-{phone_number}")
     address = Address(
+        user=user,
         recipient_name="Test recipient",
         phone_number=phone_number,
         postal_code="1234567890",
