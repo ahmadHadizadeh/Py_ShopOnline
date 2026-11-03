@@ -75,7 +75,11 @@ def _transition_orders_with_audit_log(modeladmin, request, queryset, new_status)
         try:
             # Keep the state transition and its audit record in one transaction.
             with transaction.atomic():
-                previous_status = selected_order.get_status_display()
+                # Read the previous state only after acquiring the order lock.
+                locked_order = Order.objects.select_for_update().get(
+                    pk=selected_order.pk
+                )
+                previous_status = locked_order.get_status_display()
                 updated_order = OrderService.transition_status(
                     order_id=selected_order.pk,
                     new_status=new_status,

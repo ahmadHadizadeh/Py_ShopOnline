@@ -25,6 +25,7 @@ from orders.models.order_item import OrderItem
 from orders.models.order_address_snapshot import OrderAddressSnapshot
 from orders.models.payment import Payment
 from orders.models.shipping import ShippingMethod
+from orders.admin import _transition_orders_with_audit_log
 from orders.payment.services import PaymentService
 from orders.services import OrderService
 
@@ -2159,6 +2160,46 @@ class OrderAdminActionAuditLogTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.COMPLETED)
         self.assert_action_was_logged(order)
+
+    def test_audit_log_uses_locked_previous_status_not_stale_queryset_object(self):
+        order = self.create_order(
+            status=Order.Status.PAID,
+            payment_status=Payment.Status.SUCCESS,
+            stock_reduced=True,
+        )
+        stale_order = Order.objects.get(pk=order.pk)
+        Order.objects.filter(pk=order.pk).update(status=Order.Status.PROCESSING)
+
+        request = RequestFactory().post(reverse("admin:orders_order_changelist"))
+        request.user = self.staff
+        order_admin = admin.site._registry[Order]
+
+        with patch.object(order_admin, "message_user"):
+            _transition_orders_with_audit_log(
+                order_admin,
+                request,
+                [stale_order],
+                Order.Status.COMPLETED,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.COMPLETED)
+        entry = LogEntry.objects.get(
+            user=self.staff,
+            content_type__app_label="orders",
+            content_type__model="order",
+            object_id=str(order.pk),
+            action_flag=CHANGE,
+        )
+        self.assertIn(
+            f"از «{Order.Status.PROCESSING.label}» به "
+            f"«{Order.Status.COMPLETED.label}»",
+            entry.change_message,
+        )
+        self.assertNotIn(
+            f"از «{Order.Status.PAID.label}»",
+            entry.change_message,
+        )
 
     def test_cancellation_action_records_actor_and_status_change(self):
         order = self.create_order(
