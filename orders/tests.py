@@ -2482,6 +2482,44 @@ class PaymentPresentationContractTests(TestCase):
 
         self.assertRedirects(response, reverse("accounts:dashboard_orders"))
 
+    def test_payment_initiation_get_is_rejected_without_mutating_payment(self):
+        transaction_code = self.payment.transaction_code
+        payment_url = reverse(
+            "orders:initiate_payment",
+            kwargs={"order_number": self.order.order_number},
+        )
+
+        response = self.client.get(payment_url)
+
+        self.assertEqual(response.status_code, 405)
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.PENDING)
+        self.assertEqual(self.payment.transaction_code, transaction_code)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+
+    def test_failed_payment_receipt_retries_with_csrf_protected_post_form(self):
+        self.payment.status = Payment.Status.FAILED
+        self.payment.save(update_fields=["status", "updated"])
+        payment_url = reverse(
+            "orders:initiate_payment",
+            kwargs={"order_number": self.order.order_number},
+        )
+
+        response = self.client.get(
+            reverse(
+                "orders:payment_failed",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn(f'action="{payment_url}"', content)
+        self.assertIn('method="post"', content.lower())
+        self.assertIn('name="csrfmiddlewaretoken"', content)
+        self.assertNotIn(f'href="{payment_url}"', content)
+
     def test_success_receipt_message_matches_paid_processing_and_completed_states(self):
         self.payment.status = Payment.Status.SUCCESS
         self.payment.save(update_fields=["status", "updated"])
