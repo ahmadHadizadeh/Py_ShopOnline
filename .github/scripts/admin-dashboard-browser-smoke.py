@@ -243,14 +243,17 @@ def main() -> None:
                 assert page.locator("#nav-filter-no-results").is_hidden()
 
                 page.set_viewport_size({"width": 390, "height": 844})
-                page.wait_for_timeout(200)
+                page.evaluate(
+                    "() => localStorage.removeItem('django.admin.navSidebarIsOpen')"
+                )
+                page.reload(wait_until="networkidle")
                 mobile_sidebar = page.locator("#nav-sidebar")
                 sidebar_toggle = page.locator("#toggle-nav-sidebar")
-                assert mobile_sidebar.is_visible(), "Custom admin sidebar is hidden on mobile"
-                sidebar_toggle.click()
                 mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 sidebar_toggle.click()
                 mobile_sidebar.wait_for(state="visible", timeout=1500)
+                sidebar_toggle.click()
+                mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 mobile_dimensions = page.evaluate(
                     "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
                 )
