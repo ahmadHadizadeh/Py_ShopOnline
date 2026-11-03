@@ -283,7 +283,7 @@ def main() -> None:
                             return {error: "No readable product cell available for contrast check"};
                         }
                         const textElement = cell.querySelector("a") || cell;
-                        const rgb = value => (value.match(/[\\d.]+/g) || []).slice(0, 3).map(Number);
+                        const rgb = value => (value.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
                         const linear = channel => {
                             channel /= 255;
                             return channel <= 0.04045
