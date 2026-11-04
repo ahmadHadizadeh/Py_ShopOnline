@@ -1536,6 +1536,26 @@ class ProcessPaymentViewTests(TestCase):
             Payment.Status.PENDING,
         )
 
+    def test_confirmation_post_preserves_method_when_starting_payment(self):
+        confirmation_url = reverse(
+            "orders:order_confirmation",
+            kwargs={"order_number": self.order.order_number},
+        )
+
+        response = self.client.post(
+            confirmation_url,
+            {"confirm_payment": "1"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[0], (self.url, 307))
+        self.assertEqual(len(response.redirect_chain), 2)
+
+        payment = Payment.objects.get(order=self.order)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertEqual(payment.gateway_name, "mock_gateway")
+
     def test_paid_order_without_successful_payment_is_sent_to_reconciliation_not_receipt(self):
         self.order.status = Order.Status.PAID
         self.order.save(update_fields=["status"])
