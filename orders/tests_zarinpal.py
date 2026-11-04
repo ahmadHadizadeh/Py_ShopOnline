@@ -256,6 +256,18 @@ class ZarinPalPaymentFlowTests(TestCase):
         )
 
     @patch("orders.payment.gateways.urlopen")
+    def test_get_initiation_is_rejected_without_creating_zarinpal_payment(
+        self, mocked_urlopen
+    ):
+        response = self.client.get(self.initiate_url)
+
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(Payment.objects.filter(order=self.order).exists())
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        mocked_urlopen.assert_not_called()
+
+    @patch("orders.payment.gateways.urlopen")
     def test_sandbox_initiation_is_restricted_to_staff(self, mocked_urlopen):
         nonstaff = User.objects.create_user(
             username="zarinpal-public-user",
@@ -263,7 +275,7 @@ class ZarinPalPaymentFlowTests(TestCase):
         )
         self.client.force_login(nonstaff)
 
-        response = self.client.get(self.initiate_url)
+        response = self.client.post(self.initiate_url)
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("cart:detail"))
@@ -297,7 +309,7 @@ class ZarinPalPaymentFlowTests(TestCase):
             ),
         ]
 
-        response = self.client.get(self.initiate_url)
+        response = self.client.post(self.initiate_url)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response["Location"],
@@ -356,7 +368,7 @@ class ZarinPalPaymentFlowTests(TestCase):
             }
         )
 
-        response = self.client.get(self.initiate_url)
+        response = self.client.post(self.initiate_url)
         self.assertEqual(response.status_code, 302)
 
         payment = Payment.objects.get(order=self.order)
