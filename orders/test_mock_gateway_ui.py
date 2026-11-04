@@ -128,7 +128,7 @@ class MockGatewayUIContractTests(TestCase):
     @override_settings(DEBUG=False, PAYMENT_DEFAULT_GATEWAY="mock_gateway")
     def test_production_does_not_create_mock_payment(self):
         self.payment.delete()
-        response = self.client.get(
+        response = self.client.post(
             reverse(
                 "orders:initiate_payment",
                 kwargs={"order_number": self.order.order_number},

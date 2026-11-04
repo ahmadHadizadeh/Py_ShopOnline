@@ -1462,7 +1462,7 @@ class ProcessPaymentViewTests(TestCase):
         )
 
     def test_initiate_payment_creates_single_pending_payment(self):
-        response = self.client.get(self.url)
+        response = self.client.post(self.url)
 
         self.assertEqual(
             response.status_code,
@@ -1504,7 +1504,7 @@ class ProcessPaymentViewTests(TestCase):
         )
 
     def test_repeated_initiate_payment_reuses_existing_payment(self):
-        first_response = self.client.get(self.url)
+        first_response = self.client.post(self.url)
 
         self.assertEqual(
             first_response.status_code,
@@ -1512,7 +1512,7 @@ class ProcessPaymentViewTests(TestCase):
         )
 
         first_payment = Payment.objects.get(order=self.order)
-        second_response = self.client.get(self.url)
+        second_response = self.client.post(self.url)
 
         self.assertEqual(
             second_response.status_code,
@@ -1536,11 +1536,31 @@ class ProcessPaymentViewTests(TestCase):
             Payment.Status.PENDING,
         )
 
+    def test_confirmation_post_preserves_method_when_starting_payment(self):
+        confirmation_url = reverse(
+            "orders:order_confirmation",
+            kwargs={"order_number": self.order.order_number},
+        )
+
+        response = self.client.post(
+            confirmation_url,
+            {"confirm_payment": "1"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[0], (self.url, 307))
+        self.assertEqual(len(response.redirect_chain), 2)
+
+        payment = Payment.objects.get(order=self.order)
+        self.assertEqual(payment.status, Payment.Status.PENDING)
+        self.assertEqual(payment.gateway_name, "mock_gateway")
+
     def test_paid_order_without_successful_payment_is_sent_to_reconciliation_not_receipt(self):
         self.order.status = Order.Status.PAID
         self.order.save(update_fields=["status"])
 
-        response = self.client.get(self.url)
+        response = self.client.post(self.url)
 
         self.assertRedirects(response, reverse("accounts:dashboard_orders"))
         self.assertFalse(Payment.objects.filter(order=self.order).exists())
@@ -1558,7 +1578,7 @@ class ProcessPaymentViewTests(TestCase):
             reference_code="PAID-ORDER-EXISTING-REF",
         )
 
-        response = self.client.get(self.url)
+        response = self.client.post(self.url)
 
         self.assertRedirects(
             response,
@@ -2237,6 +2257,44 @@ class OrderAdminActionAuditLogTests(TestCase):
             ).exists()
         )
 
+    def test_audit_log_failure_rolls_back_order_status_transition(self):
+        order = self.create_order(
+            status=Order.Status.PAID,
+            payment_status=Payment.Status.SUCCESS,
+            stock_reduced=True,
+        )
+        order_admin = admin.site._registry[Order]
+        request = RequestFactory().post(reverse("admin:orders_order_changelist"))
+        request.user = self.staff
+
+        with (
+            patch.object(
+                order_admin,
+                "log_change",
+                side_effect=RuntimeError("audit log write failed"),
+            ),
+            patch.object(order_admin, "message_user"),
+        ):
+            _transition_orders_with_audit_log(
+                order_admin,
+                request,
+                [order],
+                Order.Status.PROCESSING,
+            )
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PAID)
+        self.assertFalse(
+            LogEntry.objects.filter(
+                user=self.staff,
+                content_type__app_label="orders",
+                content_type__model="order",
+                object_id=str(order.pk),
+                action_flag=CHANGE,
+            ).exists()
+        )
+
+
     def test_view_only_staff_cannot_expose_or_execute_status_actions(self):
         order = self.create_order(
             status=Order.Status.PAID,
@@ -2481,6 +2539,44 @@ class PaymentPresentationContractTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("accounts:dashboard_orders"))
+
+    def test_payment_initiation_get_is_rejected_without_mutating_payment(self):
+        transaction_code = self.payment.transaction_code
+        payment_url = reverse(
+            "orders:initiate_payment",
+            kwargs={"order_number": self.order.order_number},
+        )
+
+        response = self.client.get(payment_url)
+
+        self.assertEqual(response.status_code, 405)
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.PENDING)
+        self.assertEqual(self.payment.transaction_code, transaction_code)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+
+    def test_failed_payment_receipt_retries_with_csrf_protected_post_form(self):
+        self.payment.status = Payment.Status.FAILED
+        self.payment.save(update_fields=["status", "updated"])
+        payment_url = reverse(
+            "orders:initiate_payment",
+            kwargs={"order_number": self.order.order_number},
+        )
+
+        response = self.client.get(
+            reverse(
+                "orders:payment_failed",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn(f'action="{payment_url}"', content)
+        self.assertIn('method="post"', content.lower())
+        self.assertIn('name="csrfmiddlewaretoken"', content)
+        self.assertNotIn(f'href="{payment_url}"', content)
 
     def test_success_receipt_message_matches_paid_processing_and_completed_states(self):
         self.payment.status = Payment.Status.SUCCESS

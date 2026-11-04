@@ -6,6 +6,19 @@
     <script src="{% static 'js/admin_sidebar.js' %}" defer></script>
 {% endblock %}
 
+{% block responsive %}
+    {{ block.super }}
+    <script>
+        // Keep the first mobile visit usable; respect an explicit saved preference.
+        if (
+            window.matchMedia("(max-width: 767px)").matches &&
+            localStorage.getItem("django.admin.navSidebarIsOpen") === null
+        ) {
+            localStorage.setItem("django.admin.navSidebarIsOpen", "false");
+        }
+    </script>
+{% endblock %}
+
 {% block title %}{{ title }} | پنل مدیریت فروشگاه{% endblock %}
 
 {% block extrastyle %}

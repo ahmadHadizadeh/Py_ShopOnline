@@ -1041,6 +1041,8 @@ div.breadcrumbs a {
     }
 
     #main > #nav-sidebar.store-admin-sidebar {
+        /* Override Django responsive.css, which otherwise hides the nav below 768px. */
+        display: block;
         position: fixed;
         right: calc(-1 * min(84vw, 280px));
         width: min(84vw, 280px);
@@ -1733,3 +1735,26 @@ body.inventory-operation .store-inventory-history td:last-child {
     min-width: 15rem;
     white-space: normal;
 }
+
+/* Keep changelist row contrast readable with Django's dark theme variables.
+   This admin skin uses light table surfaces in both themes; without these
+   overrides Django's darkened row backgrounds conflict with the fixed dark
+   text color above. */
+html[data-theme="dark"] body.change-list #changelist table tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+}
+
+html[data-theme="dark"] body.change-list #changelist table tbody tr:nth-child(even) {
+    background-color: #f8f9ff;
+}
+
+@media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] body.change-list #changelist table tbody tr:nth-child(odd) {
+        background-color: #ffffff;
+    }
+
+    html[data-theme="auto"] body.change-list #changelist table tbody tr:nth-child(even) {
+        background-color: #f8f9ff;
+    }
+}
+

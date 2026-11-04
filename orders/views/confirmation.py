@@ -2,11 +2,19 @@
 import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from orders.models.orders import Order
 from orders.models.payment import Payment
 
 logger = logging.getLogger(__name__)
+
+
+class HttpResponseMethodPreservingRedirect(HttpResponseRedirect):
+    """Temporary redirect that preserves the original request method."""
+
+    status_code = 307
 
 
 @login_required
@@ -41,8 +49,12 @@ def order_confirmation_view(request, order_number):
         return redirect("accounts:dashboard_orders")
 
     if request.method == "POST":
-        # هدایت به شروع فرآیند پرداخت و اتصال به درگاه
-        return redirect("orders:initiate_payment", order_number=order.order_number)
+        # Preserve POST when forwarding the request to the POST-only payment view.
+        payment_url = reverse(
+            "orders:initiate_payment",
+            kwargs={"order_number": order.order_number},
+        )
+        return HttpResponseMethodPreservingRedirect(payment_url)
 
     context = {
         "order": order,

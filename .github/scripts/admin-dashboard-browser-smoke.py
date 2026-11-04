@@ -243,7 +243,17 @@ def main() -> None:
                 assert page.locator("#nav-filter-no-results").is_hidden()
 
                 page.set_viewport_size({"width": 390, "height": 844})
-                page.wait_for_timeout(150)
+                page.evaluate(
+                    "() => localStorage.removeItem('django.admin.navSidebarIsOpen')"
+                )
+                page.reload(wait_until="networkidle")
+                mobile_sidebar = page.locator("#nav-sidebar")
+                sidebar_toggle = page.locator("#toggle-nav-sidebar")
+                mobile_sidebar.wait_for(state="hidden", timeout=1500)
+                sidebar_toggle.click()
+                mobile_sidebar.wait_for(state="visible", timeout=1500)
+                sidebar_toggle.click()
+                mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 mobile_dimensions = page.evaluate(
                     "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
                 )
@@ -254,6 +264,8 @@ def main() -> None:
                 page.screenshot(path=str(mobile_screenshot), full_page=True)
                 report["screenshots"].append(str(mobile_screenshot.relative_to(ROOT)))
 
+                # Exercise the explicitly selected dark theme.
+                page.evaluate("() => localStorage.setItem('theme', 'dark')")
                 response = page.goto(
                     f"{BASE_URL}/admin/catalog/product/",
                     wait_until="networkidle",
@@ -262,6 +274,66 @@ def main() -> None:
                     raise AssertionError(
                         f"Product changelist failed: {None if response is None else response.status}"
                     )
+                dark_theme_contrast = page.evaluate(
+                    """() => {
+                        const row = document.querySelector("#changelist table tbody tr");
+                        if (!row) {
+                            return {error: "No product data row available for contrast check"};
+                        }
+                        const cell = Array.from(row.querySelectorAll("th, td"))
+                            .find(element => !element.classList.contains("action-checkbox"));
+                        if (!cell) {
+                            return {error: "No readable product cell available for contrast check"};
+                        }
+                        const textElement = cell.querySelector("a") || cell;
+                        const rgb = value => (value.match(/[0-9.]+/g) || []).slice(0, 3).map(Number);
+                        const linear = channel => {
+                            channel /= 255;
+                            return channel <= 0.04045
+                                ? channel / 12.92
+                                : Math.pow((channel + 0.055) / 1.055, 2.4);
+                        };
+                        const luminance = value => {
+                            const channels = rgb(value);
+                            if (channels.length !== 3) return null;
+                            const [red, green, blue] = channels.map(linear);
+                            return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+                        };
+                        const background = getComputedStyle(row).backgroundColor;
+                        const foreground = getComputedStyle(textElement).color;
+                        const light = luminance(background);
+                        const dark = luminance(foreground);
+                        if (light === null || dark === null) {
+                            return {error: "Could not resolve computed foreground/background colors"};
+                        }
+                        return {
+                            theme: document.documentElement.dataset.theme,
+                            background,
+                            foreground,
+                            ratio: (Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05),
+                        };
+                    }"""
+                )
+                assert dark_theme_contrast.get("theme") == "dark", dark_theme_contrast
+                assert dark_theme_contrast.get("ratio", 0) >= 4.5, (
+                    f"Dark-theme table text contrast is below WCAG AA: {dark_theme_contrast}"
+                )
+
+                # Also cover automatic dark mode when the operating system prefers dark.
+                page.emulate_media(color_scheme="dark")
+                page.evaluate(
+                    """() => {
+                        localStorage.setItem("theme", "auto");
+                        document.documentElement.dataset.theme = "auto";
+                    }"""
+                )
+                auto_dark_row_background = page.locator(
+                    "#changelist table tbody tr"
+                ).first.evaluate("(row) => getComputedStyle(row).backgroundColor")
+                assert auto_dark_row_background == "rgb(255, 255, 255)", (
+                    "System-auto dark mode did not retain readable light table rows: "
+                    f"{auto_dark_row_background}"
+                )
                 product_list_diagnostics = page.evaluate(
                     """() => {
                         const viewport = window.innerWidth;
@@ -433,6 +505,10 @@ def main() -> None:
                         assert page.locator(
                             "#content-main .store-inventory-history table#result_list"
                         ).count() == 1
+                        if body_class == "inventory-operation":
+                            assert page.locator("#content h1").count() == 1, (
+                                "Inventory page renders a duplicated page heading"
+                            )
                         assert page.get_by_role(
                             "heading", name="آخرین گردش‌های موجودی"
                         ).count() == 1

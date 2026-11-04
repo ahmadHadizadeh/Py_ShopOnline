@@ -28,9 +28,6 @@ logger = logging.getLogger(__name__)
 class ProcessPaymentView(LoginRequiredMixin, View):
     login_url = "/accounts/login/"
 
-    def get(self, request, order_number):
-        return self._start_payment(request, order_number)
-
     def post(self, request, order_number):
         return self._start_payment(request, order_number)
 
