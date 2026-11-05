@@ -2121,3 +2121,53 @@ body.store-sidebar-drawer-open {
         scroll-behavior: auto !important;
     }
 }
+
+
+/* Keep the 64px compact rail usable: preserve a real icon-sized content box. */
+#main:not(.shifted) > #nav-sidebar.store-admin-sidebar {
+    padding: 0.65rem 0.25rem 0.7rem;
+}
+
+#main:not(.shifted) > #nav-sidebar .store-sidebar-brand {
+    margin-inline: 0;
+    padding-inline: 0;
+}
+
+#main:not(.shifted) > #nav-sidebar .store-sidebar-brand-mark {
+    flex-basis: 2.25rem;
+    width: 2.25rem;
+    height: 2.25rem;
+}
+
+#main:not(.shifted) > #nav-sidebar .store-sidebar-menu,
+#main:not(.shifted) > #nav-sidebar .store-nav-module,
+#main:not(.shifted) > #nav-sidebar .store-nav-module tbody,
+#main:not(.shifted) > #nav-sidebar .store-nav-module tr,
+#main:not(.shifted) > #nav-sidebar .store-nav-module th {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+}
+
+#main:not(.shifted) > #nav-sidebar .store-nav-module caption {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding-inline: 0;
+}
+
+#main:not(.shifted) > #nav-sidebar .store-sidebar-link {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding-inline: 0;
+}
+
+#main:not(.shifted) > #nav-sidebar .store-sidebar-link svg,
+#main:not(.shifted) > #nav-sidebar .store-nav-module caption svg {
+    display: block;
+    flex: 0 0 1.2rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    margin-inline: auto;
+}
