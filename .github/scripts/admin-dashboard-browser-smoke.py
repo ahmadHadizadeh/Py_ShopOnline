@@ -197,6 +197,60 @@ def main() -> None:
                     state="visible", timeout=15000
                 )
 
+                # CSS regression checks for the desktop sidebar's open/closed states.
+                desktop_sidebar = page.locator("#nav-sidebar")
+                desktop_toggle = page.locator("#toggle-nav-sidebar")
+                page.wait_for_function(
+                    """() => document.getElementById("main")?.classList.contains("shifted")
+                        && getComputedStyle(document.getElementById("nav-sidebar")).visibility === "visible" """
+                )
+                desktop_sidebar_layout = page.evaluate(
+                    """() => {
+                        const element = document.getElementById("nav-sidebar");
+                        const rect = element.getBoundingClientRect();
+                        const style = getComputedStyle(element);
+                        return {
+                            left: rect.left, right: rect.right, width: rect.width,
+                            cssRight: style.right, visibility: style.visibility,
+                            viewport: window.innerWidth,
+                        };
+                    }"""
+                )
+                assert desktop_sidebar_layout["cssRight"] == "0px", desktop_sidebar_layout
+                assert desktop_sidebar_layout["left"] >= -1 and desktop_sidebar_layout["right"] <= desktop_sidebar_layout["viewport"] + 1, (
+                    f"Desktop sidebar is outside the viewport: {desktop_sidebar_layout}"
+                )
+
+                desktop_toggle.click()
+                page.wait_for_function(
+                    "() => !document.getElementById('main')?.classList.contains('shifted')"
+                )
+                assert page.evaluate(
+                    "() => getComputedStyle(document.getElementById('nav-sidebar')).visibility"
+                ) == "hidden"
+                desktop_toggle.click()
+                page.wait_for_function(
+                    "() => document.getElementById('main')?.classList.contains('shifted')"
+                )
+                desktop_sidebar_layout = page.evaluate(
+                    """() => {
+                        const element = document.getElementById("nav-sidebar");
+                        const rect = element.getBoundingClientRect();
+                        const style = getComputedStyle(element);
+                        return {
+                            left: rect.left, right: rect.right, width: rect.width,
+                            cssRight: style.right, visibility: style.visibility,
+                            viewport: window.innerWidth,
+                        };
+                    }"""
+                )
+                assert desktop_sidebar_layout["cssRight"] == "0px", desktop_sidebar_layout
+                assert desktop_sidebar_layout["left"] >= -1 and desktop_sidebar_layout["right"] <= desktop_sidebar_layout["viewport"] + 1, (
+                    f"Desktop sidebar did not return inside the viewport: {desktop_sidebar_layout}"
+                )
+                report["viewport_checks"]["desktop_sidebar_open"] = desktop_sidebar_layout
+                report["viewport_checks"]["desktop_sidebar_toggle"] = "open -> closed -> open"
+
                 assert page.locator("html").get_attribute("dir") == "rtl"
                 assert page.locator("html").get_attribute("lang") == "fa-ir"
                 assert page.get_by_text("جمع پرداخت‌های موفق", exact=True).is_visible()
@@ -211,6 +265,43 @@ def main() -> None:
                 desktop_screenshot = ARTIFACTS / "admin-dashboard-desktop.png"
                 page.screenshot(path=str(desktop_screenshot), full_page=True)
                 report["screenshots"].append(str(desktop_screenshot.relative_to(ROOT)))
+
+                # CSS regression check: RTL changelist filters must occupy the right column.
+                response = page.goto(f"{BASE_URL}/admin/catalog/product/", wait_until="networkidle")
+                if response is None or response.status != 200:
+                    raise AssertionError(
+                        f"Product changelist failed: {None if response is None else response.status}"
+                    )
+                filter_layout = page.evaluate(
+                    """() => {
+                        const filter = document.querySelector("#changelist-filter");
+                        const container = document.querySelector("#changelist .changelist-form-container");
+                        const content = container?.querySelector(":scope > div");
+                        if (!filter || !content) {
+                            return {error: "Product changelist filter/content structure missing"};
+                        }
+                        const filterRect = filter.getBoundingClientRect();
+                        const contentRect = content.getBoundingClientRect();
+                        return {
+                            direction: getComputedStyle(container).direction,
+                            filterOrder: getComputedStyle(filter).order,
+                            filterLeft: filterRect.left,
+                            filterRight: filterRect.right,
+                            contentLeft: contentRect.left,
+                            contentRight: contentRect.right,
+                        };
+                    }"""
+                )
+                assert "error" not in filter_layout, filter_layout
+                assert filter_layout["direction"] == "rtl", filter_layout
+                assert filter_layout["filterOrder"] == "0", filter_layout
+                assert filter_layout["filterLeft"] >= filter_layout["contentRight"] - 1, (
+                    f"RTL filter is not on the right of the changelist content: {filter_layout}"
+                )
+                report["viewport_checks"]["product_filter_desktop"] = filter_layout
+                desktop_products_screenshot = ARTIFACTS / "admin-products-desktop.png"
+                page.screenshot(path=str(desktop_products_screenshot), full_page=True)
+                report["screenshots"].append(str(desktop_products_screenshot.relative_to(ROOT)))
 
                 search = page.locator("#nav-filter")
                 order_group = page.locator(".store-nav-module").filter(has_text="فروش و سفارش‌ها").first
