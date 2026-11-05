@@ -87,6 +87,19 @@
         }
     });
 
+    sidebar.querySelectorAll(".store-nav-module caption").forEach((caption) => {
+        const label = caption.querySelector("span")?.textContent.trim();
+        if (label) {
+            if (!caption.hasAttribute("title")) {
+                caption.setAttribute("title", label);
+            }
+            if (!caption.hasAttribute("aria-label")) {
+                caption.setAttribute("aria-label", label);
+            }
+        }
+    });
+
+
     const brandLink = sidebar.querySelector(".store-sidebar-brand-link");
     if (brandLink && !brandLink.hasAttribute("aria-label")) {
         brandLink.setAttribute("aria-label", "نمای کلی فروشگاه");
@@ -114,8 +127,12 @@
 
     const isDrawerOpen = () => drawerMedia.matches && main.classList.contains("shifted");
 
+    toggle.setAttribute("aria-controls", "nav-sidebar");
+
     const syncDrawerState = () => {
-        const open = isDrawerOpen();
+        const expanded = main.classList.contains("shifted");
+        const open = drawerMedia.matches && expanded;
+        toggle.setAttribute("aria-expanded", String(expanded));
         backdrop.hidden = !open;
         document.body.classList.toggle("store-sidebar-drawer-open", open);
     };
