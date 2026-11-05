@@ -7,6 +7,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.html import format_html
 
+from core.admin_formatting import AdminDisplayFormattingMixin
+
 from .apps import STORE_MANAGER_GROUP_NAME
 from .models.address import Address
 from .models.profile import Profile
@@ -103,7 +105,7 @@ class StoreOwnerUserChangeForm(DjangoUserChangeForm):
 
 
 @admin.register(Address)
-class AddressAdmin(admin.ModelAdmin):
+class AddressAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     list_display = (
         "recipient_name",
         "user_email",
@@ -147,7 +149,7 @@ class AddressAdmin(admin.ModelAdmin):
     )
 
 @admin.register(Profile)
-class ProfileAdmin(admin.ModelAdmin):
+class ProfileAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     # OTP values and their timestamps are intentionally excluded from the admin UI.
     list_display = ("user_display", "phone_number", "verification_badge", "created_at")
     list_filter = ("is_verified", "created_at")
