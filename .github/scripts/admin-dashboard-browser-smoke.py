@@ -245,6 +245,10 @@ def main() -> None:
 
                 sidebar_toggle = page.locator("#toggle-nav-sidebar")
                 sidebar_toggle.click()
+                page.wait_for_function(
+                    "() => !document.getElementById('main').classList.contains('shifted') && Math.abs(document.getElementById('nav-sidebar').getBoundingClientRect().width - 64) <= 1",
+                    timeout=2500,
+                )
                 compact_width = page.locator("#nav-sidebar").evaluate(
                     "(element) => element.getBoundingClientRect().width"
                 )
@@ -267,6 +271,10 @@ def main() -> None:
                     "Compact navigation link is missing its tooltip"
                 )
                 sidebar_toggle.click()
+                page.wait_for_function(
+                    "() => document.getElementById('main').classList.contains('shifted') && Math.abs(document.getElementById('nav-sidebar').getBoundingClientRect().width - 260) <= 1",
+                    timeout=2500,
+                )
                 reopened_width = page.locator("#nav-sidebar").evaluate(
                     "(element) => element.getBoundingClientRect().width"
                 )
