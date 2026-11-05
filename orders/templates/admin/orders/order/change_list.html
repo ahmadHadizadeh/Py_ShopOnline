@@ -1,9 +1,0 @@
-{% extends "admin/change_list.html" %}
-
-{% block date_hierarchy %}
-  {% if order_date_hierarchy.show %}
-    {% with order_date_hierarchy as hierarchy %}
-      {% include "admin/date_hierarchy.html" with show=hierarchy.show back=hierarchy.back choices=hierarchy.choices %}
-    {% endwith %}
-  {% endif %}
-{% endblock %}
