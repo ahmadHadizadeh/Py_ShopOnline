@@ -7,6 +7,11 @@ from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
+
+from core.admin_formatting import (
+    AdminDisplayFormattingMixin,
+    format_jalali_datetime,
+)
 from .models.category import Category
 from .models.product import Product
 from .models.inventory import InventoryMovement
@@ -203,8 +208,16 @@ class ProductAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
                 "admin:catalog_product_change",
                 args=[product.pk],
             ),
-            "movements": product.inventory_movements.select_related("actor")[:20],
+            "movements": list(
+                product.inventory_movements.select_related("actor")[:20]
+            ),
         }
+        for movement in context["movements"]:
+            movement.admin_created_at = format_jalali_datetime(
+                movement.created_at,
+                owner=movement,
+            )
+
         return TemplateResponse(
             request,
             "admin/catalog/product/inventory.html",
