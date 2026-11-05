@@ -4,10 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches:
-      - phase-3-8-dashboard-payment-integration
-      - fix/admin-ui-ux-2026-11-03
-      - fix/admin-sidebar-desktop-and-rtl-filters
+    branches: [phase-3-8-dashboard-payment-integration, fix/admin-ui-ux-2026-11-03]
   workflow_dispatch:
 
 permissions:
@@ -51,7 +48,6 @@ jobs:
           name: admin-dashboard-browser-smoke
           path: |
             artifacts/admin-dashboard-desktop.png
-            artifacts/admin-products-desktop.png
             artifacts/admin-dashboard-mobile.png
             artifacts/admin-products-mobile.png
             artifacts/admin-product-form-mobile.png
