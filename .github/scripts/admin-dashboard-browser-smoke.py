@@ -273,6 +273,43 @@ def main() -> None:
                 assert page.locator("#nav-sidebar .store-nav-module caption").first.get_attribute("title"), (
                     "Compact navigation group is missing its tooltip"
                 )
+                compact_sidebar_diagnostics = page.locator("#nav-sidebar").evaluate(
+                    """sidebar => {
+                        const bounds = sidebar.getBoundingClientRect();
+                        const nodes = Array.from(sidebar.querySelectorAll(
+                            ".store-sidebar-brand-mark, .store-sidebar-link svg, .store-nav-module caption svg"
+                        )).map(element => {
+                            const rect = element.getBoundingClientRect();
+                            const style = getComputedStyle(element);
+                            return {
+                                selector: element.className?.baseVal || element.className || element.tagName.toLowerCase(),
+                                left: Math.round(rect.left * 100) / 100,
+                                right: Math.round(rect.right * 100) / 100,
+                                width: Math.round(rect.width * 100) / 100,
+                                display: style.display,
+                                visibility: style.visibility,
+                                insideSidebar: rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1,
+                            };
+                        });
+                        return {
+                            width: bounds.width,
+                            paddingLeft: getComputedStyle(sidebar).paddingLeft,
+                            paddingRight: getComputedStyle(sidebar).paddingRight,
+                            scrollWidth: sidebar.scrollWidth,
+                            clientWidth: sidebar.clientWidth,
+                            nodes,
+                        };
+                    }"""
+                )
+                clipped_icons = [
+                    node for node in compact_sidebar_diagnostics["nodes"]
+                    if not node["insideSidebar"] or node["width"] <= 0 or node["visibility"] != "visible"
+                ]
+                assert not clipped_icons, (
+                    "Compact rail clips its brand or navigation icons: "
+                    f"{compact_sidebar_diagnostics}"
+                )
+                report["viewport_checks"]["desktop_compact_sidebar"] = compact_sidebar_diagnostics
                 compact_screenshot = ARTIFACTS / "admin-dashboard-desktop-compact.png"
                 page.screenshot(path=str(compact_screenshot), full_page=True)
                 report["screenshots"].append(str(compact_screenshot.relative_to(ROOT)))
