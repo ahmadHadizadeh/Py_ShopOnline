@@ -487,7 +487,7 @@ class ReviewAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
     @admin.display(description="تاریخ ثبت", ordering="created")
     def created_display(self, obj):
-        return obj.created.strftime("%Y/%m/%d %H:%M")
+        return format_jalali_datetime(obj.created, owner=obj)
 
 
 
