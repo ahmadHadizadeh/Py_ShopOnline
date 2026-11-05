@@ -487,7 +487,8 @@ body {
     scrollbar-width: thin;
 }
 
-.main.shifted > #nav-sidebar.store-admin-sidebar {
+#main.shifted > #nav-sidebar.store-admin-sidebar {
+    right: 0;
     margin-left: 0;
     margin-right: 0;
     visibility: visible;
@@ -1461,6 +1462,7 @@ body.change-list #toolbar form input[type="submit"] {
 }
 
 body.change-list #changelist-filter {
+    order: 0;
     box-sizing: border-box;
     flex: 0 0 225px;
     width: 225px;
