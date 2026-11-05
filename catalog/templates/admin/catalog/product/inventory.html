@@ -72,7 +72,7 @@
                     <tbody>
                         {% for movement in movements %}
                             <tr>
-                                <td>{{ movement.created_at|date:"Y-m-d H:i" }}</td>
+                                <td>{{ movement.admin_created_at }}</td>
                                 <td>{{ movement.get_source_display }}</td>
                                 <td>
                                     {% if movement.delta > 0 %}+{% endif %}{{ movement.delta|intcomma }}
