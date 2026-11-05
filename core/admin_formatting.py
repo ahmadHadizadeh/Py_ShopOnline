@@ -234,7 +234,10 @@ class AdminDisplayFormattingMixin:
 
     def get_list_display(self, request):
         fields = list(super().get_list_display(request))
-        request_cache = {}
+        request_cache = getattr(request, "_admin_display_format_cache", None)
+        if request_cache is None:
+            request_cache = {}
+            request._admin_display_format_cache = request_cache
 
         formatted_fields = []
         for field_name in fields:
