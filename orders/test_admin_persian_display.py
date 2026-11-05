@@ -5,7 +5,11 @@ from types import SimpleNamespace
 from django.contrib import admin
 from django.test import SimpleTestCase
 
-from orders.admin import OrderAdmin, _jalali_period_label
+from orders.admin import (
+    OrderAdmin,
+    _jalali_date_hierarchy_label,
+    _jalali_period_label,
+)
 from orders.models import Order
 
 
@@ -31,6 +35,18 @@ class OrderAdminPersianDisplayTests(SimpleTestCase):
         self.assertEqual(
             self.model_admin.get_final_amount_display(order),
             "489,000,000 تومان",
+        )
+
+    def test_date_hierarchy_link_keeps_gregorian_filter_but_shows_jalali_label(self):
+        link = "?created__year=2026&created__month=10&created__day=14"
+
+        self.assertEqual(
+            _jalali_date_hierarchy_label(link),
+            "۲۲ مهر ۱۴۰۵",
+        )
+        self.assertEqual(
+            _jalali_date_hierarchy_label("?status=paid"),
+            "همه تاریخ‌ها",
         )
 
     def test_gregorian_hierarchy_scopes_are_labeled_with_matching_jalali_dates(self):
