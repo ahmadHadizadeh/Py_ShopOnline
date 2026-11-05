@@ -2,9 +2,9 @@ name: Admin dashboard browser smoke
 
 on:
   pull_request:
-    branches: [main, phase-3-8-dashboard-payment-integration]
+    branches: [main]
   push:
-    branches: [phase-3-8-dashboard-payment-integration, fix/admin-ui-ux-2026-11-03, feat/admin-shell-visual-refresh]
+    branches: [phase-3-8-dashboard-payment-integration, fix/admin-ui-ux-2026-11-03]
   workflow_dispatch:
 
 permissions:
@@ -48,9 +48,6 @@ jobs:
           name: admin-dashboard-browser-smoke
           path: |
             artifacts/admin-dashboard-desktop.png
-            artifacts/admin-dashboard-desktop-compact.png
-            artifacts/admin-dashboard-tablet-drawer.png
-            artifacts/admin-dashboard-mobile-drawer.png
             artifacts/admin-dashboard-mobile.png
             artifacts/admin-products-mobile.png
             artifacts/admin-product-form-mobile.png
