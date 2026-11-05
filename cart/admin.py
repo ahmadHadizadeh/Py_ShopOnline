@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.humanize.templatetags.humanize import intcomma
 
 from cart.models import Cart, CartItem
+from core.admin_formatting import AdminDisplayFormattingMixin, format_toman
 
 
 class CartItemInline(admin.TabularInline):
@@ -21,7 +22,7 @@ class CartItemInline(admin.TabularInline):
     def subtotal_display(self, obj):
         if obj.unit_price_snapshot is None or not obj.quantity:
             return "—"
-        return f"{intcomma(int(obj.subtotal))} تومان"
+        return format_toman(obj.subtotal, owner=obj)
 
     def get_readonly_fields(self, request, obj=None):
         if obj and obj.status == Cart.STATUS_ORDERED:
@@ -38,7 +39,7 @@ class CartItemInline(admin.TabularInline):
 
 
 @admin.register(Cart)
-class CartAdmin(admin.ModelAdmin):
+class CartAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     list_display = (
         "id",
         "user_display",
@@ -79,7 +80,7 @@ class CartAdmin(admin.ModelAdmin):
 
     @admin.display(description="جمع اقلام فعال (تومان)")
     def total_price_display(self, obj):
-        return f"{intcomma(int(obj.total_price))} تومان"
+        return format_toman(obj.total_price, owner=obj)
 
     def has_delete_permission(self, request, obj=None):
         if obj and obj.status == Cart.STATUS_ORDERED:
@@ -88,7 +89,7 @@ class CartAdmin(admin.ModelAdmin):
 
 
 @admin.register(CartItem)
-class CartItemAdmin(admin.ModelAdmin):
+class CartItemAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     list_display = (
         "cart",
         "product",
@@ -125,7 +126,7 @@ class CartItemAdmin(admin.ModelAdmin):
 
     @admin.display(description="قیمت هر عدد (تومان)", ordering="unit_price_snapshot")
     def unit_price_display(self, obj):
-        return f"{intcomma(int(obj.unit_price_snapshot))} تومان"
+        return format_toman(obj.unit_price_snapshot, owner=obj)
 
     @admin.display(description="جمع ردیف (تومان)")
     def subtotal_display(self, obj):
