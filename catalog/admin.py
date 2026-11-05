@@ -115,6 +115,7 @@ class InventoryOperationForm(forms.Form):
 @admin.register(Product)
 class ProductAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     money_display_fields = {"price", "old_price"}
+
     def get_urls(self):
         custom_urls = [
             path(
@@ -409,6 +410,7 @@ class InventoryMovementAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 @admin.register(ProductVariant)
 class ProductVariantAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     money_display_fields = {"price_adjustment"}
+
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.cart_items.exists():
             return False
