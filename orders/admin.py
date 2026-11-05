@@ -339,6 +339,10 @@ class OrderAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
             obj.get_status_display(),
         )
 
+    @admin.display(description="مبلغ نهایی", ordering="final_amount")
+    def get_final_amount_display(self, obj):
+        return format_toman(obj.final_amount, owner=obj)
+
     @admin.display(description="وضعیت پرداخت", ordering="payment__status")
     def get_payment_status_display(self, obj):
         try:
@@ -492,6 +496,10 @@ class PaymentAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
         ),
     )
 
+    @admin.display(description="مبلغ پرداخت", ordering="amount")
+    def amount_display(self, obj):
+        return format_toman(obj.amount, owner=obj)
+
     @admin.display(description="وضعیت پرداخت", ordering="status")
     def status_badge(self, obj):
         return format_html(
@@ -610,6 +618,10 @@ class ShippingMethodAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
             },
         ),
     )
+
+    @admin.display(description="هزینه ارسال (تومان)", ordering="cost")
+    def get_cost_display(self, obj):
+        return format_toman(obj.cost, owner=obj)
 
     @admin.display(description="حداقل خرید برای ارسال رایگان")
     def get_threshold_display(self, obj):
