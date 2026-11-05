@@ -1,7 +1,6 @@
 import calendar
 from datetime import date, timedelta
 from urllib.parse import urlsplit
-from zoneinfo import ZoneInfo
 
 import jdatetime
 from django.contrib import admin
@@ -18,7 +17,6 @@ from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMet
 from .services import OrderService
 
 
-IRAN_TIME_ZONE = ZoneInfo("Asia/Tehran")
 JALALI_MONTH_NAMES = (
     "فروردین",
     "اردیبهشت",
@@ -439,7 +437,7 @@ class OrderAdmin(admin.ModelAdmin):
 
     @admin.display(description="زمان ایجاد", ordering="created")
     def created_jalali_display(self, obj):
-        local_created = timezone.localtime(obj.created, IRAN_TIME_ZONE)
+        local_created = timezone.localtime(obj.created)
         jalali_created = jdatetime.datetime.fromgregorian(
             datetime=local_created,
             locale=jdatetime.FA_LOCALE,
@@ -453,27 +451,24 @@ class OrderAdmin(admin.ModelAdmin):
         )
 
     def changelist_view(self, request, extra_context=None):
-        # Keep the order admin's date filters and date hierarchy in Iran time
-        # without changing TIME_ZONE or timestamps in any other admin section.
-        with timezone.override(IRAN_TIME_ZONE):
-            response = super().changelist_view(
-                request,
-                extra_context=extra_context,
-            )
-            context = getattr(response, "context_data", None)
-            if context is not None and context.get("cl") is not None:
-                hierarchy = date_hierarchy(context["cl"])
-                if hierarchy.get("back"):
-                    hierarchy["back"]["title"] = _jalali_date_hierarchy_label(
-                        hierarchy["back"].get("link")
-                    )
-                for choice in hierarchy.get("choices", ()):
-                    choice["title"] = _jalali_date_hierarchy_label(
-                        choice.get("link"),
-                        fallback_params=context["cl"].params,
-                    )
-                context["order_date_hierarchy"] = hierarchy
-            return response
+        response = super().changelist_view(
+            request,
+            extra_context=extra_context,
+        )
+        context = getattr(response, "context_data", None)
+        if context is not None and context.get("cl") is not None:
+            hierarchy = date_hierarchy(context["cl"])
+            if hierarchy.get("back"):
+                hierarchy["back"]["title"] = _jalali_date_hierarchy_label(
+                    hierarchy["back"].get("link")
+                )
+            for choice in hierarchy.get("choices", ()):
+                choice["title"] = _jalali_date_hierarchy_label(
+                    choice.get("link"),
+                    fallback_params=context["cl"].params,
+                )
+            context["order_date_hierarchy"] = hierarchy
+        return response
 
     @admin.display(description="وضعیت پرداخت", ordering="payment__status")
     def get_payment_status_display(self, obj):
