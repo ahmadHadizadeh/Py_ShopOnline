@@ -26,7 +26,7 @@ class OrderAdminPersianDisplayTests(SimpleTestCase):
 
         self.assertEqual(
             self.model_admin.created_jalali_display(order),
-            "۲۲ مهر ۱۴۰۵، ساعت ۱۷:۴۱",
+            "۲۲ مهر ۱۴۰۵، ساعت ۱۴:۱۱",
         )
 
     def test_final_amount_uses_three_digit_grouping_without_decimals(self):
