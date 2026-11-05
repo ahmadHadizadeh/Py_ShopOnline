@@ -42,7 +42,9 @@ def _cached(cache, key, factory):
     if cache is None:
         return factory()
     try:
-        return cache.setdefault(key, factory())
+        if key not in cache:
+            cache[key] = factory()
+        return cache[key]
     except TypeError:
         # A value that cannot be used as a dictionary key is still formatted
         # correctly; it simply skips caching.
@@ -225,11 +227,16 @@ class AdminDisplayFormattingMixin:
                 formatted_fields.append(field_name)
                 continue
 
-            if field_name in self.money_display_fields:
+            money_source = (
+                self.money_display_fields.get(field_name)
+                if isinstance(self.money_display_fields, dict)
+                else field_name if field_name in self.money_display_fields else None
+            )
+            if money_source is not None:
                 formatted_fields.append(
                     self._make_admin_display(
                         field_name,
-                        field_name,
+                        money_source,
                         "money",
                         request_cache,
                     )
