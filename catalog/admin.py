@@ -7,6 +7,11 @@ from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
+
+from core.admin_formatting import (
+    AdminDisplayFormattingMixin,
+    format_jalali_datetime,
+)
 from .models.category import Category
 from .models.product import Product
 from .models.inventory import InventoryMovement
@@ -108,7 +113,9 @@ class InventoryOperationForm(forms.Form):
 
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"price", "old_price"}
+
     def get_urls(self):
         custom_urls = [
             path(
@@ -202,8 +209,16 @@ class ProductAdmin(admin.ModelAdmin):
                 "admin:catalog_product_change",
                 args=[product.pk],
             ),
-            "movements": product.inventory_movements.select_related("actor")[:20],
+            "movements": list(
+                product.inventory_movements.select_related("actor")[:20]
+            ),
         }
+        for movement in context["movements"]:
+            movement.admin_created_at = format_jalali_datetime(
+                movement.created_at,
+                owner=movement,
+            )
+
         return TemplateResponse(
             request,
             "admin/catalog/product/inventory.html",
@@ -344,7 +359,7 @@ class ProductAdmin(admin.ModelAdmin):
 
 
 @admin.register(InventoryMovement)
-class InventoryMovementAdmin(admin.ModelAdmin):
+class InventoryMovementAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     list_display = (
         "product_name",
         "movement_type_display",
@@ -393,7 +408,9 @@ class InventoryMovementAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProductVariant)
-class ProductVariantAdmin(admin.ModelAdmin):
+class ProductVariantAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"price_adjustment"}
+
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.cart_items.exists():
             return False
@@ -460,7 +477,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(Review)
-class ReviewAdmin(admin.ModelAdmin):
+class ReviewAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    date_display_fields = {"created_display": "created"}
     list_display = ("product", "user", "rating", "is_approved", "created_display")
     list_filter = ("is_approved", "created")
     list_editable = ("is_approved",)
@@ -471,7 +489,7 @@ class ReviewAdmin(admin.ModelAdmin):
 
     @admin.display(description="تاریخ ثبت", ordering="created")
     def created_display(self, obj):
-        return obj.created.strftime("%Y/%m/%d %H:%M")
+        return format_jalali_datetime(obj.created, owner=obj)
 
 
 

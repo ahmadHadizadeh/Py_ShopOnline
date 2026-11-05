@@ -1,8 +1,9 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.contrib.humanize.templatetags.humanize import intcomma
 from django.db import transaction
 from django.utils.html import format_html
+
+from core.admin_formatting import AdminDisplayFormattingMixin, format_toman
 
 from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
 from .services import OrderService
@@ -156,7 +157,8 @@ class StockReductionFilter(admin.SimpleListFilter):
 
 
 @admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
+class OrderAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"get_final_amount_display": "final_amount"}
     list_per_page = 25
     date_hierarchy = "created"
     list_display = (
@@ -339,7 +341,7 @@ class OrderAdmin(admin.ModelAdmin):
 
     @admin.display(description="مبلغ نهایی", ordering="final_amount")
     def get_final_amount_display(self, obj):
-        return f"{intcomma(int(obj.final_amount))} تومان"
+        return format_toman(obj.final_amount, owner=obj)
 
     @admin.display(description="وضعیت پرداخت", ordering="payment__status")
     def get_payment_status_display(self, obj):
@@ -377,7 +379,11 @@ class OrderAdmin(admin.ModelAdmin):
 
 
 @admin.register(OrderItem)
-class OrderItemAdmin(admin.ModelAdmin):
+class OrderItemAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {
+        "unit_price": "unit_price",
+        "subtotal_price": "subtotal_price",
+    }
     list_per_page = 25
     list_display = (
         "order",
@@ -418,7 +424,8 @@ class OrderItemAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"amount_display": "amount"}
     list_per_page = 25
     date_hierarchy = "created"
     list_display = (
@@ -491,7 +498,7 @@ class PaymentAdmin(admin.ModelAdmin):
 
     @admin.display(description="مبلغ پرداخت", ordering="amount")
     def amount_display(self, obj):
-        return f"{intcomma(int(obj.amount))} تومان"
+        return format_toman(obj.amount, owner=obj)
 
     @admin.display(description="وضعیت پرداخت", ordering="status")
     def status_badge(self, obj):
@@ -509,7 +516,7 @@ class PaymentAdmin(admin.ModelAdmin):
 
 
 @admin.register(OrderAddressSnapshot)
-class OrderAddressSnapshotAdmin(admin.ModelAdmin):
+class OrderAddressSnapshotAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     list_per_page = 25
     date_hierarchy = "created"
     list_display = (
@@ -549,7 +556,9 @@ class OrderAddressSnapshotAdmin(admin.ModelAdmin):
 
 
 @admin.register(ShippingMethod)
-class ShippingMethodAdmin(admin.ModelAdmin):
+class ShippingMethodAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"get_cost_display": "cost"}
+
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.orders.exists():
             return False
@@ -610,12 +619,12 @@ class ShippingMethodAdmin(admin.ModelAdmin):
         ),
     )
 
-    @admin.display(description="هزینه ارسال (تومان)")
+    @admin.display(description="هزینه ارسال (تومان)", ordering="cost")
     def get_cost_display(self, obj):
-        return f"{intcomma(int(obj.cost))} تومان"
+        return format_toman(obj.cost, owner=obj)
 
     @admin.display(description="حداقل خرید برای ارسال رایگان")
     def get_threshold_display(self, obj):
         if obj.free_shipping_threshold:
-            return f"{intcomma(int(obj.free_shipping_threshold))} تومان"
+            return format_toman(obj.free_shipping_threshold, owner=obj)
         return "بدون سقف"
