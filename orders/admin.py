@@ -70,6 +70,16 @@ def _jalali_period_label(year, month=None, day=None):
                 jalali_months.append(item)
             current_day += timedelta(days=1)
 
+        if len({year for year, _ in jalali_months}) == 1:
+            month_names = " و ".join(
+                JALALI_MONTH_NAMES[jalali_month - 1]
+                for _, jalali_month in jalali_months
+            )
+            return (
+                f"{month_names} "
+                f"{_persian_digits(jalali_months[0][0])}"
+            )
+
         return " و ".join(
             f"{JALALI_MONTH_NAMES[jalali_month - 1]} "
             f"{_persian_digits(jalali_year)}"
