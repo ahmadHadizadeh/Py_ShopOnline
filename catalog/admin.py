@@ -108,7 +108,8 @@ class InventoryOperationForm(forms.Form):
 
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"price", "old_price"}
     def get_urls(self):
         custom_urls = [
             path(
@@ -344,7 +345,7 @@ class ProductAdmin(admin.ModelAdmin):
 
 
 @admin.register(InventoryMovement)
-class InventoryMovementAdmin(admin.ModelAdmin):
+class InventoryMovementAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     list_display = (
         "product_name",
         "movement_type_display",
@@ -393,7 +394,8 @@ class InventoryMovementAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProductVariant)
-class ProductVariantAdmin(admin.ModelAdmin):
+class ProductVariantAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"price_adjustment"}
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.cart_items.exists():
             return False
@@ -460,7 +462,8 @@ class CategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(Review)
-class ReviewAdmin(admin.ModelAdmin):
+class ReviewAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    date_display_fields = {"created_display": "created"}
     list_display = ("product", "user", "rating", "is_approved", "created_display")
     list_filter = ("is_approved", "created")
     list_editable = ("is_approved",)
