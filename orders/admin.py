@@ -376,7 +376,10 @@ class OrderAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
-    money_display_fields = {"unit_price": "unit_price", "subtotal_price": "subtotal_price"}
+    money_display_fields = {
+        "unit_price": "unit_price",
+        "subtotal_price": "subtotal_price",
+    }
     list_per_page = 25
     list_display = (
         "order",
