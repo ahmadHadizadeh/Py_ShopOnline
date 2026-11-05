@@ -2,7 +2,7 @@ name: Admin dashboard browser smoke
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, phase-3-8-dashboard-payment-integration]
   push:
     branches: [phase-3-8-dashboard-payment-integration, fix/admin-ui-ux-2026-11-03, feat/admin-shell-visual-refresh]
   workflow_dispatch:
