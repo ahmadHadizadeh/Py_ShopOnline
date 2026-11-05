@@ -296,7 +296,8 @@ class AdminDisplayFormattingMixin:
 
         display_value.__name__ = f"_admin_{kind}_{display_name}"
         original = getattr(self, display_name, None)
-        description = getattr(original, "short_description", None)
+        original_function = getattr(original, "__func__", original)
+        description = getattr(original_function, "short_description", None)
         if description is None:
             try:
                 description = self.model._meta.get_field(source_name).verbose_name
