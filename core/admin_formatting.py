@@ -147,33 +147,33 @@ def _jalali_period_label(year, month=None, day=None, *, cache=None):
                 f"{_persian_digits(jalali.year)}"
             )
 
-        jalali_months = []
-        days_in_month = calendar.monthrange(year, month)[1]
-        for gregorian_day in range(1, days_in_month + 1):
-            gregorian_date = date(year, month, gregorian_day)
+        first_day = date(year, month, 1)
+        last_day = date(year, month, calendar.monthrange(year, month)[1])
+        jalali_periods = []
+        for gregorian_day in (first_day, last_day):
             jalali = _cached(
                 cache,
-                ("gregorian-to-jalali", gregorian_date),
-                lambda gregorian_date=gregorian_date: _jalali_date(
-                    gregorian_date, cache
+                ("gregorian-to-jalali", gregorian_day),
+                lambda gregorian_day=gregorian_day: _jalali_date(
+                    gregorian_day, cache
                 ),
             )
-            item = (jalali.year, jalali.month)
-            if item not in jalali_months:
-                jalali_months.append(item)
+            period = (jalali.year, jalali.month)
+            if not jalali_periods or jalali_periods[-1] != period:
+                jalali_periods.append(period)
 
-        years = {jalali_year for jalali_year, _ in jalali_months}
+        years = {jalali_year for jalali_year, _ in jalali_periods}
         if len(years) == 1:
             month_names = " و ".join(
                 JALALI_MONTH_NAMES[jalali_month - 1]
-                for _, jalali_month in jalali_months
+                for _, jalali_month in jalali_periods
             )
-            return f"{month_names} {_persian_digits(jalali_months[0][0])}"
+            return f"{month_names} {_persian_digits(jalali_periods[0][0])}"
 
         return " و ".join(
             f"{JALALI_MONTH_NAMES[jalali_month - 1]} "
             f"{_persian_digits(jalali_year)}"
-            for jalali_year, jalali_month in jalali_months
+            for jalali_year, jalali_month in jalali_periods
         )
 
     first_day = date(year, 1, 1)
