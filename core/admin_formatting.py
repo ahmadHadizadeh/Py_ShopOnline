@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import jdatetime
 from django.contrib import admin
 from django.contrib.admin.templatetags.admin_list import date_hierarchy
+from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.http import QueryDict
 from django.utils import timezone
@@ -51,10 +52,22 @@ def _cached(cache, key, factory):
         return factory()
 
 
-def format_jalali_datetime(value, *, cache=None):
+def _owner_cache(owner):
+    if owner is None:
+        return None
+    cache = getattr(owner, "_admin_display_format_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(owner, "_admin_display_format_cache", cache)
+    return cache
+
+
+def format_jalali_datetime(value, *, cache=None, owner=None):
     """Format a date/datetime in the Jalali calendar, preserving local time."""
     if value is None:
         return _NO_VALUE
+    if cache is None:
+        cache = _owner_cache(owner)
 
     def build():
         if isinstance(value, datetime):
@@ -88,10 +101,12 @@ def format_jalali_datetime(value, *, cache=None):
     return _cached(cache, ("jalali-date", value), build)
 
 
-def format_toman(value, *, cache=None):
+def format_toman(value, *, cache=None, owner=None):
     """Format a toman amount with grouping and no visible fractional digits."""
     if value is None:
         return _NO_VALUE
+    if cache is None:
+        cache = _owner_cache(owner)
 
     def build():
         try:
