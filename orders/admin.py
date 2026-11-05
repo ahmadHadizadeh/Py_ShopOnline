@@ -1,114 +1,12 @@
-import calendar
-from datetime import date, timedelta
-from urllib.parse import urlsplit
-
-import jdatetime
 from django.contrib import admin
 from django.contrib import messages
-from django.contrib.admin.templatetags.admin_list import date_hierarchy
-from django.contrib.humanize.templatetags.humanize import intcomma
 from django.db import transaction
-from django.http import QueryDict
-from django.utils import timezone
 from django.utils.html import format_html
 
+from core.admin_formatting import AdminDisplayFormattingMixin, format_toman
 
 from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
 from .services import OrderService
-
-
-JALALI_MONTH_NAMES = (
-    "فروردین",
-    "اردیبهشت",
-    "خرداد",
-    "تیر",
-    "مرداد",
-    "شهریور",
-    "مهر",
-    "آبان",
-    "آذر",
-    "دی",
-    "بهمن",
-    "اسفند",
-)
-PERSIAN_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
-
-
-def _persian_digits(value):
-    return str(value).translate(PERSIAN_DIGITS)
-
-
-def _jalali_date_for_gregorian(value):
-    return jdatetime.date.fromgregorian(
-        date=value,
-        locale=jdatetime.FA_LOCALE,
-    )
-
-
-def _jalali_period_label(year, month=None, day=None):
-    """Return the Persian-calendar label for a Gregorian date-hierarchy scope."""
-    year = int(year)
-    if month is not None:
-        month = int(month)
-        if day is not None:
-            day = int(day)
-            jalali = _jalali_date_for_gregorian(date(year, month, day))
-            return (
-                f"{_persian_digits(jalali.day)} "
-                f"{JALALI_MONTH_NAMES[jalali.month - 1]} "
-                f"{_persian_digits(jalali.year)}"
-            )
-
-        first_day = date(year, month, 1)
-        last_day = date(year, month, calendar.monthrange(year, month)[1])
-        jalali_months = []
-        current_day = first_day
-        while current_day <= last_day:
-            jalali = _jalali_date_for_gregorian(current_day)
-            item = (jalali.year, jalali.month)
-            if item not in jalali_months:
-                jalali_months.append(item)
-            current_day += timedelta(days=1)
-
-        if len({year for year, _ in jalali_months}) == 1:
-            month_names = " و ".join(
-                JALALI_MONTH_NAMES[jalali_month - 1]
-                for _, jalali_month in jalali_months
-            )
-            return (
-                f"{month_names} "
-                f"{_persian_digits(jalali_months[0][0])}"
-            )
-
-        return " و ".join(
-            f"{JALALI_MONTH_NAMES[jalali_month - 1]} "
-            f"{_persian_digits(jalali_year)}"
-            for jalali_year, jalali_month in jalali_months
-        )
-
-    jalali_years = {
-        _jalali_date_for_gregorian(date(year, 1, 1)).year,
-        _jalali_date_for_gregorian(date(year, 12, 31)).year,
-    }
-    return "–".join(_persian_digits(item) for item in sorted(jalali_years))
-
-
-def _jalali_date_hierarchy_label(link, fallback_params=None):
-    query = QueryDict(urlsplit(link or "").query)
-    if not query and fallback_params:
-        query = QueryDict("", mutable=True)
-        for key, value in fallback_params.items():
-            query[key] = value
-
-    year = query.get("created__year")
-    if not year:
-        return "همه تاریخ‌ها"
-
-    return _jalali_period_label(
-        year,
-        query.get("created__month"),
-        query.get("created__day"),
-    )
 
 
 class OrderItemInline(admin.TabularInline):
@@ -259,10 +157,10 @@ class StockReductionFilter(admin.SimpleListFilter):
 
 
 @admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
+class OrderAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"get_final_amount_display": "final_amount"}
     list_per_page = 25
     date_hierarchy = "created"
-    change_list_template = "admin/orders/order/change_list.html"
     list_display = (
         "order_number",
         "recipient_name_display",
@@ -272,7 +170,7 @@ class OrderAdmin(admin.ModelAdmin):
         "get_final_amount_display",
         "get_payment_status_display",
         "stock_reduced_display",
-        "created_jalali_display",
+        "created",
     )
     list_filter = (
         "status",
@@ -441,45 +339,6 @@ class OrderAdmin(admin.ModelAdmin):
             obj.get_status_display(),
         )
 
-    @admin.display(description="مبلغ نهایی", ordering="final_amount")
-    def get_final_amount_display(self, obj):
-        return f"{intcomma(int(obj.final_amount), use_l10n=False)} تومان"
-
-    @admin.display(description="زمان ایجاد", ordering="created")
-    def created_jalali_display(self, obj):
-        local_created = timezone.localtime(obj.created)
-        jalali_created = jdatetime.datetime.fromgregorian(
-            datetime=local_created,
-            locale=jdatetime.FA_LOCALE,
-        )
-        time_label = f"{local_created.hour:02d}:{local_created.minute:02d}"
-        return (
-            f"{_persian_digits(jalali_created.day)} "
-            f"{JALALI_MONTH_NAMES[jalali_created.month - 1]} "
-            f"{_persian_digits(jalali_created.year)}، ساعت "
-            f"{_persian_digits(time_label)}"
-        )
-
-    def changelist_view(self, request, extra_context=None):
-        response = super().changelist_view(
-            request,
-            extra_context=extra_context,
-        )
-        context = getattr(response, "context_data", None)
-        if context is not None and context.get("cl") is not None:
-            hierarchy = date_hierarchy(context["cl"])
-            if hierarchy.get("back"):
-                hierarchy["back"]["title"] = _jalali_date_hierarchy_label(
-                    hierarchy["back"].get("link")
-                )
-            for choice in hierarchy.get("choices", ()):
-                choice["title"] = _jalali_date_hierarchy_label(
-                    choice.get("link"),
-                    fallback_params=context["cl"].params,
-                )
-            context["order_date_hierarchy"] = hierarchy
-        return response
-
     @admin.display(description="وضعیت پرداخت", ordering="payment__status")
     def get_payment_status_display(self, obj):
         try:
@@ -516,7 +375,8 @@ class OrderAdmin(admin.ModelAdmin):
 
 
 @admin.register(OrderItem)
-class OrderItemAdmin(admin.ModelAdmin):
+class OrderItemAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"unit_price": "unit_price", "subtotal_price": "subtotal_price"}
     list_per_page = 25
     list_display = (
         "order",
@@ -557,7 +417,8 @@ class OrderItemAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"amount_display": "amount"}
     list_per_page = 25
     date_hierarchy = "created"
     list_display = (
@@ -628,10 +489,6 @@ class PaymentAdmin(admin.ModelAdmin):
         ),
     )
 
-    @admin.display(description="مبلغ پرداخت", ordering="amount")
-    def amount_display(self, obj):
-        return f"{intcomma(int(obj.amount))} تومان"
-
     @admin.display(description="وضعیت پرداخت", ordering="status")
     def status_badge(self, obj):
         return format_html(
@@ -648,7 +505,7 @@ class PaymentAdmin(admin.ModelAdmin):
 
 
 @admin.register(OrderAddressSnapshot)
-class OrderAddressSnapshotAdmin(admin.ModelAdmin):
+class OrderAddressSnapshotAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     list_per_page = 25
     date_hierarchy = "created"
     list_display = (
@@ -688,7 +545,9 @@ class OrderAddressSnapshotAdmin(admin.ModelAdmin):
 
 
 @admin.register(ShippingMethod)
-class ShippingMethodAdmin(admin.ModelAdmin):
+class ShippingMethodAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    money_display_fields = {"get_cost_display": "cost"}
+
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.orders.exists():
             return False
@@ -749,12 +608,8 @@ class ShippingMethodAdmin(admin.ModelAdmin):
         ),
     )
 
-    @admin.display(description="هزینه ارسال (تومان)")
-    def get_cost_display(self, obj):
-        return f"{intcomma(int(obj.cost))} تومان"
-
     @admin.display(description="حداقل خرید برای ارسال رایگان")
     def get_threshold_display(self, obj):
         if obj.free_shipping_threshold:
-            return f"{intcomma(int(obj.free_shipping_threshold))} تومان"
+            return format_toman(obj.free_shipping_threshold, owner=obj)
         return "بدون سقف"
