@@ -70,6 +70,15 @@ class AdminPersianFormattingTests(SimpleTestCase):
             "همه تاریخ‌ها",
         )
 
+    def test_gregorian_month_crossing_norooz_shows_both_jalali_years(self):
+        self.assertEqual(
+            jalali_date_hierarchy_label(
+                "?created__year=2026&created__month=3",
+                date_field="created",
+            ),
+            "اسفند ۱۴۰۴ و فروردین ۱۴۰۵",
+        )
+
     def test_gregorian_year_hierarchy_can_span_two_jalali_years(self):
         self.assertEqual(
             jalali_date_hierarchy_label(
@@ -99,6 +108,34 @@ class AdminPersianFormattingTests(SimpleTestCase):
         self.assertEqual(stock_column, "stock")
         self.assertEqual(created_column.admin_order_field, "created")
         self.assertEqual(amount_column.admin_order_field, "final_amount")
+
+    def test_order_and_payment_amount_columns_use_shared_formatter(self):
+        from orders.admin import OrderAdmin, PaymentAdmin
+        from orders.models import Payment
+
+        order_request = SimpleNamespace(
+            user=SimpleNamespace(
+                is_superuser=True,
+                has_perm=lambda permission: True,
+            )
+        )
+        order_admin = OrderAdmin(Order, admin.site)
+        order_columns = order_admin.get_list_display(order_request)
+        order_amount = next(
+            column for column in order_columns
+            if getattr(column, "__name__", "") == "_admin_money_get_final_amount_display"
+        )
+        row = SimpleNamespace(final_amount=Decimal("489000000.00"))
+        self.assertEqual(order_amount(row), "489,000,000 تومان")
+
+        payment_admin = PaymentAdmin(Payment, admin.site)
+        payment_columns = payment_admin.get_list_display(SimpleNamespace())
+        payment_amount = next(
+            column for column in payment_columns
+            if getattr(column, "__name__", "") == "_admin_money_amount_display"
+        )
+        payment_row = SimpleNamespace(amount=Decimal("489000000"))
+        self.assertEqual(payment_amount(payment_row), "489,000,000 تومان")
 
     def test_central_mixin_is_attached_to_every_affected_changelist(self):
         from accounts.admin import AddressAdmin, ProfileAdmin
