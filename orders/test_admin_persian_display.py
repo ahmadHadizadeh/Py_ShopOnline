@@ -17,7 +17,7 @@ class OrderAdminPersianDisplayTests(SimpleTestCase):
     def setUp(self):
         self.model_admin = OrderAdmin(Order, admin.site)
 
-    def test_created_timestamp_is_shown_as_tehran_jalali_date(self):
+    def test_created_timestamp_is_jalali_without_changing_existing_time(self):
         order = SimpleNamespace(
             created=datetime(
                 2026, 10, 14, 14, 11, tzinfo=datetime_timezone.utc
