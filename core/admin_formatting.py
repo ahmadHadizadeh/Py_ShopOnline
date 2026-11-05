@@ -247,7 +247,7 @@ class AdminDisplayFormattingMixin:
             if date_source is None:
                 try:
                     model_field = self.model._meta.get_field(field_name)
-                except (LookupError, AttributeError):
+                except (FieldDoesNotExist, LookupError, AttributeError):
                     model_field = None
                 if isinstance(model_field, (models.DateField, models.DateTimeField)):
                     date_source = field_name
