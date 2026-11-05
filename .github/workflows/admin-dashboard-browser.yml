@@ -48,6 +48,9 @@ jobs:
           name: admin-dashboard-browser-smoke
           path: |
             artifacts/admin-dashboard-desktop.png
+            artifacts/admin-dashboard-desktop-compact.png
+            artifacts/admin-dashboard-tablet-drawer.png
+            artifacts/admin-dashboard-mobile-drawer.png
             artifacts/admin-dashboard-mobile.png
             artifacts/admin-products-mobile.png
             artifacts/admin-product-form-mobile.png
