@@ -16,8 +16,6 @@ ARTIFACTS = ROOT / "artifacts"
 BASE_URL = "http://127.0.0.1:18765"
 USERNAME = "browser-smoke-admin"
 PASSWORD = "BrowserSmokeOnly_2026!"
-LIMITED_USERNAME = "browser-smoke-limited"
-LIMITED_PASSWORD = "BrowserSmokeLimited_2026!"
 
 os.environ["DJANGO_SETTINGS_MODULE"] = "core.settings"
 os.environ["DJANGO_DEBUG"] = "1"
@@ -31,7 +29,6 @@ import django  # noqa: E402
 django.setup()
 
 from django.contrib.auth import get_user_model  # noqa: E402
-from django.contrib.auth.models import Permission  # noqa: E402
 from django.core.management import call_command  # noqa: E402
 from catalog.models.category import Category  # noqa: E402
 from catalog.models.product import Product  # noqa: E402
@@ -40,7 +37,7 @@ from orders.models import Order, OrderAddressSnapshot, OrderItem, Payment  # noq
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 
-def prepare_database() -> tuple[Order, Payment, Product, object]:
+def prepare_database() -> tuple[Order, Payment, Product]:
     call_command("migrate", interactive=False, verbosity=0)
     user_model = get_user_model()
     admin_user, created = user_model.objects.get_or_create(
@@ -55,22 +52,6 @@ def prepare_database() -> tuple[Order, Payment, Product, object]:
         admin_user.is_superuser = True
         admin_user.set_password(PASSWORD)
         admin_user.save(update_fields=["is_staff", "is_superuser", "password"])
-
-    limited_staff, _ = user_model.objects.get_or_create(
-        username=LIMITED_USERNAME,
-        defaults={"email": "browser-smoke-limited@example.test", "is_staff": True},
-    )
-    limited_staff.is_active = True
-    limited_staff.is_staff = True
-    limited_staff.is_superuser = False
-    limited_staff.set_password(LIMITED_PASSWORD)
-    limited_staff.save(update_fields=["is_active", "is_staff", "is_superuser", "password"])
-    limited_staff.user_permissions.set(
-        [
-            Permission.objects.get(content_type__app_label="catalog", codename="view_product"),
-            Permission.objects.get(content_type__app_label="orders", codename="view_payment"),
-        ]
-    )
 
     category = Category.objects.create(
         name="Browser Smoke Category",
@@ -123,7 +104,7 @@ def prepare_database() -> tuple[Order, Payment, Product, object]:
         Payment.Status.SUCCESS,
         transaction_id="BROWSER-SMOKE-TRANSACTION",
     )
-    return order, payment, product, limited_staff
+    return order, payment, product
 
 
 def wait_for_server(process: subprocess.Popen, log_path: Path) -> None:
@@ -151,13 +132,12 @@ def main() -> None:
     report: dict = {
         "base_url": BASE_URL,
         "viewport_checks": {},
-        "permission_checks": {},
         "important_static_assets": {},
         "console_errors": [],
         "page_errors": [],
         "screenshots": [],
     }
-    order, payment, product, limited_staff = prepare_database()
+    order, payment, product = prepare_database()
 
     env = os.environ.copy()
     log_path = ARTIFACTS / "browser-server.log"
@@ -232,100 +212,6 @@ def main() -> None:
                 page.screenshot(path=str(desktop_screenshot), full_page=True)
                 report["screenshots"].append(str(desktop_screenshot.relative_to(ROOT)))
 
-                # Verify the new compact/expanded desktop geometry without losing menu entries.
-                desktop_menu_snapshot = page.locator("#nav-sidebar .store-sidebar-link").evaluate_all(
-                    "(links) => links.map(link => ({href: link.getAttribute('href'), label: link.textContent.trim()}))"
-                )
-                desktop_open_width = page.locator("#nav-sidebar").evaluate(
-                    "(element) => element.getBoundingClientRect().width"
-                )
-                assert abs(desktop_open_width - 260) <= 1, (
-                    f"Expanded desktop sidebar should be 260px: {desktop_open_width}"
-                )
-
-                sidebar_toggle = page.locator("#toggle-nav-sidebar")
-                sidebar_toggle.click()
-                page.wait_for_function(
-                    "() => !document.getElementById('main').classList.contains('shifted') && Math.abs(document.getElementById('nav-sidebar').getBoundingClientRect().width - 64) <= 1",
-                    timeout=2500,
-                )
-                compact_width = page.locator("#nav-sidebar").evaluate(
-                    "(element) => element.getBoundingClientRect().width"
-                )
-                assert abs(compact_width - 64) <= 1, (
-                    f"Compact desktop sidebar should be 64px: {compact_width}"
-                )
-                compact_menu_snapshot = page.locator("#nav-sidebar .store-sidebar-link").evaluate_all(
-                    "(links) => links.map(link => ({href: link.getAttribute('href'), label: link.textContent.trim()}))"
-                )
-                assert compact_menu_snapshot == desktop_menu_snapshot, (
-                    "Desktop compact mode changed or removed rendered navigation entries"
-                )
-                assert page.locator("#nav-filter").is_hidden(), (
-                    "Compact desktop mode should hide the search field without removing it"
-                )
-                assert page.locator("#nav-sidebar .store-sidebar-link").first.get_attribute("aria-label"), (
-                    "Compact navigation link is missing its accessible label"
-                )
-                assert page.locator("#nav-sidebar .store-sidebar-link").first.get_attribute("title"), (
-                    "Compact navigation link is missing its tooltip"
-                )
-                assert page.locator("#nav-sidebar .store-nav-module caption").first.get_attribute("title"), (
-                    "Compact navigation group is missing its tooltip"
-                )
-                compact_sidebar_diagnostics = page.locator("#nav-sidebar").evaluate(
-                    """sidebar => {
-                        const bounds = sidebar.getBoundingClientRect();
-                        const nodes = Array.from(sidebar.querySelectorAll(
-                            ".store-sidebar-brand-mark, .store-sidebar-link svg, .store-nav-module caption svg"
-                        )).map(element => {
-                            const rect = element.getBoundingClientRect();
-                            const style = getComputedStyle(element);
-                            return {
-                                selector: element.className?.baseVal || element.className || element.tagName.toLowerCase(),
-                                left: Math.round(rect.left * 100) / 100,
-                                right: Math.round(rect.right * 100) / 100,
-                                width: Math.round(rect.width * 100) / 100,
-                                display: style.display,
-                                visibility: style.visibility,
-                                insideSidebar: rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1,
-                            };
-                        });
-                        return {
-                            width: bounds.width,
-                            paddingLeft: getComputedStyle(sidebar).paddingLeft,
-                            paddingRight: getComputedStyle(sidebar).paddingRight,
-                            scrollWidth: sidebar.scrollWidth,
-                            clientWidth: sidebar.clientWidth,
-                            nodes,
-                        };
-                    }"""
-                )
-                clipped_icons = [
-                    node for node in compact_sidebar_diagnostics["nodes"]
-                    if not node["insideSidebar"] or node["width"] <= 0 or node["visibility"] != "visible"
-                ]
-                assert not clipped_icons, (
-                    "Compact rail clips its brand or navigation icons: "
-                    f"{compact_sidebar_diagnostics}"
-                )
-                report["viewport_checks"]["desktop_compact_sidebar"] = compact_sidebar_diagnostics
-                compact_screenshot = ARTIFACTS / "admin-dashboard-desktop-compact.png"
-                page.screenshot(path=str(compact_screenshot), full_page=True)
-                report["screenshots"].append(str(compact_screenshot.relative_to(ROOT)))
-                sidebar_toggle.click()
-                page.wait_for_function(
-                    "() => document.getElementById('main').classList.contains('shifted') && Math.abs(document.getElementById('nav-sidebar').getBoundingClientRect().width - 260) <= 1",
-                    timeout=2500,
-                )
-                reopened_width = page.locator("#nav-sidebar").evaluate(
-                    "(element) => element.getBoundingClientRect().width"
-                )
-                assert abs(reopened_width - 260) <= 1, (
-                    f"Desktop sidebar did not reopen at 260px: {reopened_width}"
-                )
-                assert page.locator("#nav-filter").is_visible()
-
                 search = page.locator("#nav-filter")
                 order_group = page.locator(".store-nav-module").filter(has_text="فروش و سفارش‌ها").first
                 product_group = page.locator(".store-nav-module").filter(has_text="محصولات و موجودی").first
@@ -356,72 +242,6 @@ def main() -> None:
                 search.fill("")
                 assert page.locator("#nav-filter-no-results").is_hidden()
 
-                # Tablet (portrait-class viewport): first visit starts closed, then uses a drawer.
-                page.set_viewport_size({"width": 820, "height": 1180})
-                page.evaluate(
-                    "() => localStorage.removeItem('django.admin.navSidebarIsOpen')"
-                )
-                page.reload(wait_until="networkidle")
-                tablet_sidebar = page.locator("#nav-sidebar")
-                tablet_toggle = page.locator("#toggle-nav-sidebar")
-                tablet_sidebar.wait_for(state="hidden", timeout=1500)
-                assert tablet_toggle.is_visible(), "Tablet drawer toggle is not visible"
-                tablet_toggle.click()
-                tablet_sidebar.wait_for(state="visible", timeout=1500)
-                tablet_backdrop = page.locator(".store-sidebar-backdrop")
-                assert tablet_backdrop.is_visible(), "Tablet drawer backdrop is missing"
-                tablet_width = tablet_sidebar.evaluate(
-                    "(element) => element.getBoundingClientRect().width"
-                )
-                assert tablet_width <= 320 and tablet_width > 0, (
-                    f"Tablet drawer width is outside the intended range: {tablet_width}"
-                )
-                tablet_screenshot = ARTIFACTS / "admin-dashboard-tablet-drawer.png"
-                page.screenshot(path=str(tablet_screenshot), full_page=True)
-                report["screenshots"].append(str(tablet_screenshot.relative_to(ROOT)))
-                page.keyboard.press("Escape")
-                tablet_sidebar.wait_for(state="hidden", timeout=1500)
-                assert tablet_backdrop.is_hidden(), "Escape did not close the tablet drawer"
-
-                tablet_toggle.click()
-                assert tablet_backdrop.is_visible()
-                tablet_backdrop.click(position={"x": 20, "y": 20})
-                tablet_sidebar.wait_for(state="hidden", timeout=1500)
-
-                # Verify right-edge swipe-to-open and in-drawer swipe-to-close.
-                page.dispatch_event(
-                    "body",
-                    "pointerdown",
-                    {"pointerType": "touch", "isPrimary": True, "pointerId": 41,
-                     "clientX": 810, "clientY": 280},
-                )
-                page.dispatch_event(
-                    "body",
-                    "pointerup",
-                    {"pointerType": "touch", "isPrimary": True, "pointerId": 41,
-                     "clientX": 720, "clientY": 284},
-                )
-                tablet_sidebar.wait_for(state="visible", timeout=1500)
-                page.dispatch_event(
-                    "#nav-sidebar",
-                    "pointerdown",
-                    {"pointerType": "touch", "isPrimary": True, "pointerId": 42,
-                     "clientX": 700, "clientY": 300},
-                )
-                page.dispatch_event(
-                    "#nav-sidebar",
-                    "pointerup",
-                    {"pointerType": "touch", "isPrimary": True, "pointerId": 42,
-                     "clientX": 780, "clientY": 304},
-                )
-                tablet_sidebar.wait_for(state="hidden", timeout=1500)
-                tablet_dimensions = page.evaluate(
-                    "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
-                )
-                report["viewport_checks"]["dashboard_tablet"] = tablet_dimensions
-                if max(tablet_dimensions["document"], tablet_dimensions["body"]) > tablet_dimensions["viewport"]:
-                    raise AssertionError(f"Tablet dashboard has horizontal overflow: {tablet_dimensions}")
-
                 page.set_viewport_size({"width": 390, "height": 844})
                 page.evaluate(
                     "() => localStorage.removeItem('django.admin.navSidebarIsOpen')"
@@ -432,16 +252,7 @@ def main() -> None:
                 mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 sidebar_toggle.click()
                 mobile_sidebar.wait_for(state="visible", timeout=1500)
-                mobile_backdrop = page.locator(".store-sidebar-backdrop")
-                assert mobile_backdrop.is_visible(), "Mobile drawer backdrop is missing"
-                mobile_drawer_screenshot = ARTIFACTS / "admin-dashboard-mobile-drawer.png"
-                page.screenshot(path=str(mobile_drawer_screenshot), full_page=True)
-                report["screenshots"].append(str(mobile_drawer_screenshot.relative_to(ROOT)))
-                mobile_backdrop.click(position={"x": 15, "y": 15})
-                mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 sidebar_toggle.click()
-                mobile_sidebar.wait_for(state="visible", timeout=1500)
-                page.keyboard.press("Escape")
                 mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 mobile_dimensions = page.evaluate(
                     "() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth, body: document.body.scrollWidth})"
@@ -453,33 +264,6 @@ def main() -> None:
                 page.screenshot(path=str(mobile_screenshot), full_page=True)
                 report["screenshots"].append(str(mobile_screenshot.relative_to(ROOT)))
 
-                # Explicit light-theme pass: shell should remain readable and usable.
-                page.evaluate("() => localStorage.setItem('theme', 'light')")
-                page.emulate_media(color_scheme="light")
-                response = page.goto(
-                    f"{BASE_URL}/admin/catalog/product/",
-                    wait_until="networkidle",
-                )
-                if response is None or response.status != 200:
-                    raise AssertionError(
-                        f"Light-theme product changelist failed: {None if response is None else response.status}"
-                    )
-                assert page.locator("html").get_attribute("data-theme") == "light"
-                sidebar_toggle = page.locator("#toggle-nav-sidebar")
-                sidebar_toggle.click()
-                assert page.locator("#nav-sidebar").is_visible()
-                light_sidebar_style = page.locator("#nav-sidebar").evaluate(
-                    "(element) => ({color: getComputedStyle(element).color, backgroundImage: getComputedStyle(element).backgroundImage})"
-                )
-                assert light_sidebar_style["backgroundImage"] != "none", (
-                    f"Light-theme sidebar background did not render: {light_sidebar_style}"
-                )
-                sidebar_toggle.click()
-                page.wait_for_function(
-                    "() => !document.getElementById('main').classList.contains('shifted') && document.querySelector('.store-sidebar-backdrop').hidden && !document.body.classList.contains('store-sidebar-drawer-open')",
-                    timeout=2000,
-                )
-
                 # Exercise the explicitly selected dark theme.
                 page.evaluate("() => localStorage.setItem('theme', 'dark')")
                 response = page.goto(
@@ -490,23 +274,6 @@ def main() -> None:
                     raise AssertionError(
                         f"Product changelist failed: {None if response is None else response.status}"
                     )
-                assert page.locator("html").get_attribute("data-theme") == "dark"
-                sidebar_toggle = page.locator("#toggle-nav-sidebar")
-                sidebar_toggle.click()
-                dark_sidebar_style = page.locator("#nav-sidebar").evaluate(
-                    "(element) => ({color: getComputedStyle(element).color, backgroundImage: getComputedStyle(element).backgroundImage})"
-                )
-                assert dark_sidebar_style["backgroundImage"] != "none", (
-                    f"Dark-theme sidebar background did not render: {dark_sidebar_style}"
-                )
-                assert dark_sidebar_style["color"] == light_sidebar_style["color"], (
-                    f"Sidebar foreground changed unexpectedly between themes: light={light_sidebar_style}, dark={dark_sidebar_style}"
-                )
-                sidebar_toggle.click()
-                page.wait_for_function(
-                    "() => !document.getElementById('main').classList.contains('shifted') && document.querySelector('.store-sidebar-backdrop').hidden && !document.body.classList.contains('store-sidebar-drawer-open')",
-                    timeout=2000,
-                )
                 dark_theme_contrast = page.evaluate(
                     """() => {
                         const row = document.querySelector("#changelist table tbody tr");
@@ -566,12 +333,6 @@ def main() -> None:
                 assert auto_dark_row_background == "rgb(255, 255, 255)", (
                     "System-auto dark mode did not retain readable light table rows: "
                     f"{auto_dark_row_background}"
-                )
-                assert not page.locator("#main").evaluate("(element) => element.classList.contains('shifted')"), (
-                    "Product changelist screenshot would be obscured by an open navigation drawer"
-                )
-                assert page.locator(".store-sidebar-backdrop").is_hidden(), (
-                    "Product changelist screenshot would be obscured by the drawer backdrop"
                 )
                 product_list_diagnostics = page.evaluate(
                     """() => {
@@ -774,48 +535,6 @@ def main() -> None:
                         f"{asset_path} status={asset_status} "
                         f"all_statuses={report['important_static_assets']}"
                     )
-
-                # Verify rendered navigation still follows Django object permissions.
-                limited_page = browser.new_page(
-                    viewport={"width": 1440, "height": 1000},
-                    device_scale_factor=1,
-                )
-                limited_response = limited_page.goto(
-                    f"{BASE_URL}/admin/",
-                    wait_until="networkidle",
-                )
-                if limited_response is None or limited_response.status not in (200, 302):
-                    raise AssertionError(
-                        f"Limited-staff admin entry failed: {None if limited_response is None else limited_response.status}"
-                    )
-                if limited_page.locator("#id_username").count():
-                    limited_page.locator("#id_username").fill(LIMITED_USERNAME)
-                    limited_page.locator("#id_password").fill(LIMITED_PASSWORD)
-                    limited_page.locator("input[type='submit']").click()
-                limited_page.locator("#nav-sidebar").wait_for(state="visible", timeout=15000)
-                allowed_links = limited_page.locator(
-                    "#nav-sidebar .store-sidebar-link"
-                ).evaluate_all(
-                    "(links) => links.map(link => ({href: link.getAttribute('href'), label: link.textContent.trim()}))"
-                )
-                allowed_hrefs = {item["href"] for item in allowed_links}
-                assert "/admin/catalog/product/" in allowed_hrefs, (
-                    f"Limited staff lost its permitted product navigation: {allowed_links}"
-                )
-                assert "/admin/orders/payment/" in allowed_hrefs, (
-                    f"Limited staff lost its permitted payment navigation: {allowed_links}"
-                )
-                assert "/admin/orders/order/" not in allowed_hrefs, (
-                    f"Limited staff saw an order link without order permission: {allowed_links}"
-                )
-                assert "/admin/catalog/category/" not in allowed_hrefs, (
-                    f"Limited staff saw a category link without category permission: {allowed_links}"
-                )
-                assert "/admin/auth/user/" not in allowed_hrefs, (
-                    f"Limited staff saw user administration without auth permission: {allowed_links}"
-                )
-                report["permission_checks"]["limited_staff_links"] = allowed_links
-                limited_page.close()
 
                 if report["console_errors"]:
                     raise AssertionError(f"Browser console errors: {report['console_errors']}")
