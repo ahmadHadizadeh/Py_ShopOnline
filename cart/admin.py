@@ -132,7 +132,7 @@ class CartItemAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     def subtotal_display(self, obj):
         if obj.unit_price_snapshot is None or not obj.quantity:
             return "—"
-        return f"{intcomma(int(obj.subtotal))} تومان"
+        return format_toman(obj.subtotal, owner=obj)
 
     def get_readonly_fields(self, request, obj=None):
         if obj and obj.cart_id and obj.cart.status == Cart.STATUS_ORDERED:
