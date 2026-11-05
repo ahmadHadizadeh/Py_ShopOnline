@@ -11,7 +11,7 @@
     <script>
         // Keep the first mobile visit usable; respect an explicit saved preference.
         if (
-            window.matchMedia("(max-width: 767px)").matches &&
+            window.matchMedia("(max-width: 1024px)").matches &&
             localStorage.getItem("django.admin.navSidebarIsOpen") === null
         ) {
             localStorage.setItem("django.admin.navSidebarIsOpen", "false");
