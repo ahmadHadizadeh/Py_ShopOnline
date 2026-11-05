@@ -270,6 +270,12 @@ def main() -> None:
                 assert page.locator("#nav-sidebar .store-sidebar-link").first.get_attribute("title"), (
                     "Compact navigation link is missing its tooltip"
                 )
+                assert page.locator("#nav-sidebar .store-nav-module caption").first.get_attribute("title"), (
+                    "Compact navigation group is missing its tooltip"
+                )
+                compact_screenshot = ARTIFACTS / "admin-dashboard-desktop-compact.png"
+                page.screenshot(path=str(compact_screenshot), full_page=True)
+                report["screenshots"].append(str(compact_screenshot.relative_to(ROOT)))
                 sidebar_toggle.click()
                 page.wait_for_function(
                     "() => document.getElementById('main').classList.contains('shifted') && Math.abs(document.getElementById('nav-sidebar').getBoundingClientRect().width - 260) <= 1",
@@ -333,6 +339,9 @@ def main() -> None:
                 assert tablet_width <= 320 and tablet_width > 0, (
                     f"Tablet drawer width is outside the intended range: {tablet_width}"
                 )
+                tablet_screenshot = ARTIFACTS / "admin-dashboard-tablet-drawer.png"
+                page.screenshot(path=str(tablet_screenshot), full_page=True)
+                report["screenshots"].append(str(tablet_screenshot.relative_to(ROOT)))
                 page.keyboard.press("Escape")
                 tablet_sidebar.wait_for(state="hidden", timeout=1500)
                 assert tablet_backdrop.is_hidden(), "Escape did not close the tablet drawer"
@@ -388,6 +397,9 @@ def main() -> None:
                 mobile_sidebar.wait_for(state="visible", timeout=1500)
                 mobile_backdrop = page.locator(".store-sidebar-backdrop")
                 assert mobile_backdrop.is_visible(), "Mobile drawer backdrop is missing"
+                mobile_drawer_screenshot = ARTIFACTS / "admin-dashboard-mobile-drawer.png"
+                page.screenshot(path=str(mobile_drawer_screenshot), full_page=True)
+                report["screenshots"].append(str(mobile_drawer_screenshot.relative_to(ROOT)))
                 mobile_backdrop.click(position={"x": 15, "y": 15})
                 mobile_sidebar.wait_for(state="hidden", timeout=1500)
                 sidebar_toggle.click()
@@ -426,6 +438,10 @@ def main() -> None:
                     f"Light-theme sidebar background did not render: {light_sidebar_style}"
                 )
                 sidebar_toggle.click()
+                page.wait_for_function(
+                    "() => !document.getElementById('main').classList.contains('shifted') && document.querySelector('.store-sidebar-backdrop').hidden && !document.body.classList.contains('store-sidebar-drawer-open')",
+                    timeout=2000,
+                )
 
                 # Exercise the explicitly selected dark theme.
                 page.evaluate("() => localStorage.setItem('theme', 'dark')")
@@ -450,6 +466,10 @@ def main() -> None:
                     f"Sidebar foreground changed unexpectedly between themes: light={light_sidebar_style}, dark={dark_sidebar_style}"
                 )
                 sidebar_toggle.click()
+                page.wait_for_function(
+                    "() => !document.getElementById('main').classList.contains('shifted') && document.querySelector('.store-sidebar-backdrop').hidden && !document.body.classList.contains('store-sidebar-drawer-open')",
+                    timeout=2000,
+                )
                 dark_theme_contrast = page.evaluate(
                     """() => {
                         const row = document.querySelector("#changelist table tbody tr");
@@ -509,6 +529,12 @@ def main() -> None:
                 assert auto_dark_row_background == "rgb(255, 255, 255)", (
                     "System-auto dark mode did not retain readable light table rows: "
                     f"{auto_dark_row_background}"
+                )
+                assert not page.locator("#main").evaluate("(element) => element.classList.contains('shifted')"), (
+                    "Product changelist screenshot would be obscured by an open navigation drawer"
+                )
+                assert page.locator(".store-sidebar-backdrop").is_hidden(), (
+                    "Product changelist screenshot would be obscured by the drawer backdrop"
                 )
                 product_list_diagnostics = page.evaluate(
                     """() => {
