@@ -300,7 +300,7 @@ class AdminDisplayFormattingMixin:
         if description is None:
             try:
                 description = self.model._meta.get_field(source_name).verbose_name
-            except (LookupError, AttributeError):
+            except (FieldDoesNotExist, LookupError, AttributeError):
                 description = display_name.replace("_", " ").capitalize()
 
         return admin.display(
