@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - phase-3-8-dashboard-payment-integration
+      - ui/storefront-header-search-navigation-2026-11-07
   pull_request:
     branches:
       - main
