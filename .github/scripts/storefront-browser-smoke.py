@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -113,16 +112,30 @@ with sync_playwright() as playwright:
             {
                 "name": "sessionid",
                 "value": SESSION_ID,
-                "url": BASE_URL,
+                "domain": "127.0.0.1",
+                "path": "/",
                 "httpOnly": True,
+                "secure": False,
                 "sameSite": "Lax",
             }
         ]
+    )
+    stored_session_cookies = authenticated_context.cookies(BASE_URL)
+    assert any(cookie["name"] == "sessionid" and cookie["value"] == SESSION_ID for cookie in stored_session_cookies), (
+        "Playwright did not retain the Django session cookie."
     )
     authenticated = authenticated_context.new_page()
     authenticated.on("pageerror", lambda error: page_errors.append(f"authenticated: {error}"))
     response = authenticated.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
     assert response is not None and response.status == 200
+    if authenticated.locator("#accountDropdown").count() != 1:
+        cookie_names = [cookie["name"] for cookie in authenticated_context.cookies(BASE_URL)]
+        body_excerpt = authenticated.locator("body").inner_text()[:500]
+        raise AssertionError(
+            "Django session cookie was not reflected in the rendered authenticated header. "
+            f"Cookie names: {cookie_names}; URL: {authenticated.url}; "
+            f"body excerpt: {body_excerpt!r}"
+        )
     expect_visible(authenticated, "#accountDropdown")
     authenticated.locator("#accountDropdown").focus()
     authenticated.keyboard.press("Enter")
