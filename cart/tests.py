@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from datetime import timedelta
 from django.core.exceptions import ValidationError
@@ -1365,9 +1367,14 @@ class CartVariantPriceGuardTests(TestCase):
 
         self.assertTrue(Cart.objects.filter(pk=guest_cart.pk).exists())
         self.assertTrue(CartItem.objects.filter(pk=guest_item.pk, cart=guest_cart).exists())
-        self.assertFalse(
-            Cart.objects.filter(user=self.user, status=Cart.STATUS_ACTIVE).exists()
+        self.assertTrue(
+            Cart.objects.filter(
+                pk=self.cart.pk,
+                user=self.user,
+                status=Cart.STATUS_ACTIVE,
+            ).exists()
         )
+        self.assertFalse(self.cart.items.exists())
 
     def test_cart_item_model_validation_rejects_negative_snapshot(self):
         item = CartItem(
