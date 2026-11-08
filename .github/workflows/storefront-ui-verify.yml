@@ -105,6 +105,22 @@ jobs:
               slug="browser-test-category",
               defaults={"name": "Browser Test", "is_active": True},
           )
+          for index in range(12):
+              Product.objects.update_or_create(
+                  slug=f"browser-test-product-{index:02d}",
+                  defaults={
+                      "name": "Browser Test Product",
+                      "name_en": "Browser Test Product",
+                      "brand": "NorthwindBrowser",
+                      "description": "Storefront browser smoke fixture",
+                      "highlights": "RTX Browser Test",
+                      "price": Decimal(str(1000 + index * 10)),
+                      "stock": 5,
+                      "is_active": True,
+                      "category": category,
+                  },
+              )
+
           Product.objects.update_or_create(
               slug="browser-test-product",
               defaults={
@@ -113,7 +129,7 @@ jobs:
                   "brand": "NorthwindBrowser",
                   "description": "Storefront browser smoke fixture",
                   "highlights": "RTX Browser Test",
-                  "price": Decimal("1499.00"),
+                  "price": Decimal("1500.00"),
                   "stock": 5,
                   "is_active": True,
                   "category": category,

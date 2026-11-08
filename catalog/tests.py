@@ -101,6 +101,104 @@ class ProductCatalogSearchTests(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.category.get_absolute_url())
 
+    def test_price_sorting_uses_only_supported_options(self):
+        cheaper = Product.objects.create(
+            name="Sortable cheaper item",
+            slug="sortable-cheaper-item",
+            price=Decimal("100.00"),
+            stock=2,
+            category=self.category,
+        )
+        expensive = Product.objects.create(
+            name="Sortable expensive item",
+            slug="sortable-expensive-item",
+            price=Decimal("900.00"),
+            stock=2,
+            category=self.category,
+        )
+
+        ascending = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": "Sortable", "sort": "price_asc"},
+        )
+        descending = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": "Sortable", "sort": "price_desc"},
+        )
+
+        self.assertEqual(ascending.context["sort"], "price_asc")
+        self.assertEqual(
+            list(ascending.context["products"].values_list("pk", flat=True)),
+            [cheaper.pk, expensive.pk],
+        )
+        self.assertEqual(
+            list(descending.context["products"].values_list("pk", flat=True)),
+            [expensive.pk, cheaper.pk],
+        )
+
+    def test_invalid_sort_falls_back_to_newest(self):
+        response = self.client.get(
+            reverse("catalog:product_list"),
+            {"sort": "unsupported-order"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["sort"], "newest")
+        self.assertEqual(
+            list(response.context["products"].values_list("pk", flat=True))[:2],
+            [self.searchable_product.pk, self.product1.pk],
+        )
+
+    def test_product_list_paginates_and_preserves_search_and_sort(self):
+        for index in range(13):
+            Product.objects.create(
+                name=f"PaginationProbe {index:02d}",
+                slug=f"pagination-probe-{index:02d}",
+                price=Decimal(1000 + index),
+                stock=1,
+                category=self.category,
+            )
+
+        response = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": "PaginationProbe", "sort": "price_desc", "page": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        page_obj = response.context["page_obj"]
+        self.assertEqual(page_obj.paginator.count, 13)
+        self.assertEqual(len(page_obj.object_list), 12)
+        self.assertEqual(page_obj.number, 1)
+        self.assertEqual(
+            response.context["pagination_query"],
+            "q=PaginationProbe&sort=price_desc",
+        )
+        self.assertContains(response, 'id="product-pagination"')
+        self.assertContains(response, "page=2")
+
+    def test_product_cards_expose_accessible_detail_links(self):
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'aria-label="مشاهده جزئیات {self.searchable_product.name}"',
+        )
+        self.assertContains(response, 'id="product-grid"')
+        self.assertContains(response, 'fa-regular fa-image')
+
+    def test_category_chips_preserve_search_and_sort_query(self):
+        response = self.client.get(
+            reverse("catalog:product_list_by_category", kwargs={"category_slug": self.category.slug}),
+            {"q": "Northwind", "sort": "price_desc", "page": "2"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'href="/?q=Northwind&amp;sort=price_desc"',
+        )
+
 
 class ReviewServiceTests(BaseTestCase):
     def test_save_review_unauthenticated_user(self):

@@ -53,9 +53,16 @@ with sync_playwright() as playwright:
     expect_hidden(mobile, "#desktop-search-form")
     expect_visible(mobile, "#mobile-search-toggle")
     assert_no_horizontal_overflow(mobile, 390)
-    for width in (320, 360):
+    assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
+    for width, expected_columns in ((320, 1), (360, 1), (390, 1), (640, 2), (768, 2), (1024, 3), (1280, 4), (1440, 4)):
         mobile.set_viewport_size({"width": width, "height": 844})
         assert_no_horizontal_overflow(mobile, width)
+        columns = mobile.locator("#product-grid").evaluate(
+            "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
+        )
+        assert columns == expected_columns, (
+            f"Unexpected product grid columns at {width}px: {columns}"
+        )
     mobile.set_viewport_size({"width": 390, "height": 844})
     mobile.screenshot(path=str(ARTIFACTS / "storefront-mobile-home.png"), full_page=True)
 
@@ -79,8 +86,27 @@ with sync_playwright() as playwright:
     mobile.wait_for_url("**/category/browser-test-category/?q=NorthwindBrowser")
     assert "نتایج جست‌وجو" in mobile.locator("#products-list h2").inner_text()
     expect_visible(mobile, "#products-list")
-    assert mobile.get_by_text("Browser Test Product", exact=True).count() >= 1
+    assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
+    assert mobile.locator("#product-grid article").count() == 12
     assert_no_horizontal_overflow(mobile, 390)
+
+    # Sorting is a GET form and keeps the active query/category.
+    mobile.locator("#product-sort").select_option("price_asc")
+    mobile.locator("#product-sort-apply").click()
+    mobile.wait_for_url("**/category/browser-test-category/?q=NorthwindBrowser&sort=price_asc")
+    ascending_prices = mobile.locator("#product-grid article").evaluate_all(
+        "(cards) => cards.map((card) => Number(card.dataset.productPrice))"
+    )
+    assert ascending_prices == sorted(ascending_prices), (
+        f"Price ascending order is incorrect: {ascending_prices}"
+    )
+    assert mobile.locator("#pagination-next").is_visible()
+    mobile.locator("#pagination-next").click()
+    mobile.wait_for_url("**/category/browser-test-category/?q=NorthwindBrowser&sort=price_asc&page=2")
+    assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
+    assert mobile.locator("#product-grid article").count() == 1
+    page_indicator = mobile.locator("#pagination-current").inner_text()
+    assert "2" in page_indicator or "۲" in page_indicator
 
     # Desktop header search remains visible and uses the same query contract.
     mobile.set_viewport_size({"width": 1440, "height": 900})
@@ -88,6 +114,8 @@ with sync_playwright() as playwright:
     assert response is not None and response.status == 200
     expect_visible(mobile, "#desktop-search-form")
     expect_hidden(mobile, "#mobile-nav-toggle")
+    assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
+    mobile.screenshot(path=str(ARTIFACTS / "storefront-desktop-home.png"), full_page=True)
     mobile.locator("#desktop-search-input").fill("NorthwindBrowser")
     mobile.locator("#desktop-search-form button[type='submit']").click()
     mobile.wait_for_url("**/?q=NorthwindBrowser")
