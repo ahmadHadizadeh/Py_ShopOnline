@@ -48,7 +48,7 @@ jobs:
             "${release_url}/sha256sums.txt" \
             --output "${RUNNER_TEMP}/tailwindcss-sha256sums.txt"
 
-          grep -E "[[:space:]]\\*?${asset}$" \
+          grep -E "[[:space:]]+[*]?${asset}$" \
             "${RUNNER_TEMP}/tailwindcss-sha256sums.txt" \
             > "${RUNNER_TEMP}/tailwindcss.sha256"
 
