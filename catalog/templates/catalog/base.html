@@ -51,11 +51,11 @@
 
     <!-- Header -->
     <header id="storefront-header" class="bg-white shadow-md sticky top-0 z-50">
-        <nav class="container mx-auto px-4 lg:px-8 py-3 flex items-center justify-between gap-3">
+        <nav class="container mx-auto px-3 sm:px-4 lg:px-8 py-3 flex items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-3 lg:gap-10">
                 <a href="{% url 'catalog:product_list' %}" class="flex items-center gap-2 text-xl sm:text-2xl font-extrabold text-indigo-700 hover:scale-105 transition-transform">
                     <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
-                    <span class="tracking-tight italic">آنلاین شاپ</span>
+                    <span class="whitespace-nowrap tracking-tight italic">آنلاین شاپ</span>
                 </a>
                 <ul class="hidden md:flex items-center gap-8 font-medium">
                     <li><a href="{% url 'catalog:product_list' %}" class="text-gray-600 hover:text-indigo-600 transition">خانه</a></li>
@@ -122,8 +122,9 @@
                         </div>
                     </div>
                 {% else %}
-                    <button type="button" data-otp-open aria-haspopup="dialog" aria-controls="otp-modal" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-lg shadow-indigo-200 transition active:scale-95">
-                        ورود / ثبت‌نام
+                    <button type="button" data-otp-open aria-haspopup="dialog" aria-controls="otp-modal" class="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-lg shadow-indigo-200 transition active:scale-95">
+                        <span class="sm:hidden">ورود</span>
+                        <span class="hidden sm:inline">ورود / ثبت‌نام</span>
                     </button>
                 {% endif %}
 

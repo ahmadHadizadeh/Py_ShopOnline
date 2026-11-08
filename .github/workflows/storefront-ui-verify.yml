@@ -99,7 +99,7 @@ jobs:
           )
           client = Client()
           client.force_login(user)
-          authenticated_response = client.get("/")
+          authenticated_response = client.get("/", HTTP_HOST="127.0.0.1")
           if not authenticated_response.wsgi_request.user.is_authenticated:
               raise SystemExit("Django test client did not retain the forced login session.")
           print(client.cookies[settings.SESSION_COOKIE_NAME].value)
