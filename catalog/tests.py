@@ -238,6 +238,40 @@ class ProductDetailViewTests(BaseTestCase):
         self.assertContains(response, f'value="{variant.pk}"')
         self.assertContains(response, 'required')
 
+    def test_guest_product_detail_uses_external_javascript_without_inline_handlers(self):
+        product = Product.objects.create(
+            name="Guest Detail Product",
+            slug="guest-detail-product",
+            is_active=True,
+            stock=2,
+            category=self.category,
+        )
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'src="/static/js/storefront/details.js"')
+        self.assertContains(response, 'data-quantity-action="decrease"')
+        self.assertContains(response, 'data-quantity-action="increase"')
+        self.assertContains(
+            response,
+            f'data-endpoint="{reverse("catalog:wishlist_toggle", kwargs={"slug": product.slug})}"',
+        )
+        self.assertNotContains(response, "onclick=")
+        self.assertNotRegex(response.content.decode("utf-8"), r"<script(?![^>]*src=)")
+        self.assertNotContains(response, 'id="review-form"')
+
+    def test_authenticated_product_detail_keeps_review_form_with_external_script(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": self.product1.slug})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'src="/static/js/storefront/details.js"')
+        self.assertContains(response, 'id="review-form"')
+        self.assertContains(response, 'id="rating-input"')
+        self.assertContains(response, 'id="reviews-container"')
+
     def test_product_detail_post_review_unauthenticated(self):
         url = reverse("catalog:product_detail", kwargs={"slug": self.product1.slug})
         response = self.client.post(url, {"rating": 5, "comment": "test"})

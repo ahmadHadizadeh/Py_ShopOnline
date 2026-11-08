@@ -53,6 +53,7 @@ jobs:
         run: |
           node --check static/js/storefront/base.js
           node --check static/js/storefront/otp.js
+          node --check static/js/storefront/details.js
 
       - name: Compile the production CSS
         run: npm run build:css
