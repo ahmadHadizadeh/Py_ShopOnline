@@ -27,6 +27,179 @@ class BaseTestCase(TestCase):
         self.product1 = Product.objects.create(name="P1", slug="p1", is_active=True, category=self.category)
         self.client = Client()
 
+class ProductCatalogSearchTests(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.searchable_product = Product.objects.create(
+            name="لپ تاپ گیمینگ",
+            name_en="Gaming Notebook",
+            brand="Northwind",
+            description="portable workstation",
+            highlights="RTX graphics",
+            stock=7,
+            category=self.category,
+        )
+
+    def test_search_matches_existing_product_text_fields(self):
+        for query in ("لپ تاپ", "Gaming", "Northwind", "portable workstation", "RTX graphics"):
+            with self.subTest(query=query):
+                response = self.client.get(reverse("catalog:product_list"), {"q": query})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    list(response.context["products"].values_list("pk", flat=True)),
+                    [self.searchable_product.pk],
+                )
+                self.assertEqual(response.context["search_query"], query)
+
+    def test_search_excludes_inactive_products(self):
+        Product.objects.create(
+            name="Inactive Northwind Device",
+            slug="inactive-northwind-device",
+            is_active=False,
+            stock=5,
+            category=self.category,
+        )
+        response = self.client.get(reverse("catalog:product_list"), {"q": "Northwind"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(response.context["products"].values_list("pk", flat=True)),
+            [self.searchable_product.pk],
+        )
+
+    def test_search_keeps_selected_category_filter(self):
+        other_category = Category.objects.create(name="Other Category", slug="other-category")
+        Product.objects.create(
+            name="Northwind Other Device",
+            slug="northwind-other-device",
+            brand="Northwind",
+            stock=3,
+            category=other_category,
+        )
+        response = self.client.get(
+            reverse("catalog:product_list_by_category", kwargs={"category_slug": self.category.slug}),
+            {"q": "Northwind"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(response.context["products"].values_list("pk", flat=True)),
+            [self.searchable_product.pk],
+        )
+
+    def test_search_trims_query_and_renders_header_controls(self):
+        response = self.client.get(reverse("catalog:product_list"), {"q": "  Northwind  "})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["search_query"], "Northwind")
+        self.assertContains(response, 'id="desktop-search-form"')
+        self.assertContains(response, 'id="mobile-search-panel"')
+        self.assertContains(response, 'id="mobile-navigation-panel"')
+        self.assertContains(response, 'name="q"')
+
+    def test_active_categories_are_available_in_header_on_product_detail(self):
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": self.searchable_product.slug})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.category.get_absolute_url())
+
+    def test_price_sorting_uses_only_supported_options(self):
+        cheaper = Product.objects.create(
+            name="Sortable cheaper item",
+            slug="sortable-cheaper-item",
+            price=Decimal("100.00"),
+            stock=2,
+            category=self.category,
+        )
+        expensive = Product.objects.create(
+            name="Sortable expensive item",
+            slug="sortable-expensive-item",
+            price=Decimal("900.00"),
+            stock=2,
+            category=self.category,
+        )
+
+        ascending = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": "Sortable", "sort": "price_asc"},
+        )
+        descending = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": "Sortable", "sort": "price_desc"},
+        )
+
+        self.assertEqual(ascending.context["sort"], "price_asc")
+        self.assertEqual(
+            list(ascending.context["products"].values_list("pk", flat=True)),
+            [cheaper.pk, expensive.pk],
+        )
+        self.assertEqual(
+            list(descending.context["products"].values_list("pk", flat=True)),
+            [expensive.pk, cheaper.pk],
+        )
+
+    def test_invalid_sort_falls_back_to_newest(self):
+        response = self.client.get(
+            reverse("catalog:product_list"),
+            {"sort": "unsupported-order"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["sort"], "newest")
+        self.assertEqual(
+            list(response.context["products"].values_list("pk", flat=True))[:2],
+            [self.searchable_product.pk, self.product1.pk],
+        )
+
+    def test_product_list_paginates_and_preserves_search_and_sort(self):
+        for index in range(13):
+            Product.objects.create(
+                name=f"PaginationProbe {index:02d}",
+                slug=f"pagination-probe-{index:02d}",
+                price=Decimal(1000 + index),
+                stock=1,
+                category=self.category,
+            )
+
+        response = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": "PaginationProbe", "sort": "price_desc", "page": "1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        page_obj = response.context["page_obj"]
+        self.assertEqual(page_obj.paginator.count, 13)
+        self.assertEqual(len(page_obj.object_list), 12)
+        self.assertEqual(page_obj.number, 1)
+        self.assertEqual(
+            response.context["pagination_query"],
+            "q=PaginationProbe&sort=price_desc",
+        )
+        self.assertContains(response, 'id="product-pagination"')
+        self.assertContains(response, "page=2")
+
+    def test_product_cards_expose_accessible_detail_links(self):
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'aria-label="مشاهده جزئیات {self.searchable_product.name}"',
+        )
+        self.assertContains(response, 'id="product-grid"')
+        self.assertContains(response, 'fa-regular fa-image')
+
+    def test_category_chips_preserve_search_and_sort_query(self):
+        response = self.client.get(
+            reverse("catalog:product_list_by_category", kwargs={"category_slug": self.category.slug}),
+            {"q": "Northwind", "sort": "price_desc", "page": "2"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'href="/?q=Northwind&amp;sort=price_desc"',
+        )
+
+
 class ReviewServiceTests(BaseTestCase):
     def test_save_review_unauthenticated_user(self):
         with self.assertRaisesMessage(ValueError, "برای ثبت نظر ابتدا وارد حساب کاربری شوید."):
@@ -38,6 +211,79 @@ class WishlistServiceTests(BaseTestCase):
             toggle_wishlist(None, self.product1.pk)
 
 class ProductDetailViewTests(BaseTestCase):
+    def test_product_detail_shows_discount_when_reference_price_exceeds_base_price(self):
+        product = Product.objects.create(
+            name="Discounted Detail Product",
+            slug="discounted-detail-product",
+            price=Decimal("1500.00"),
+            old_price=Decimal("2000.00"),
+            stock=5,
+            category=self.category,
+        )
+
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="product-old-price-display"')
+        self.assertContains(response, 'data-old-price="2000.00"')
+        self.assertContains(
+            response,
+            'class="text-base text-gray-400 line-through"',
+        )
+        self.assertContains(response, 'id="product-discount-badge"')
+        self.assertContains(
+            response,
+            'class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full"',
+        )
+
+    def test_product_detail_hides_discount_when_reference_price_is_not_higher(self):
+        for index, base_price in enumerate(("2000.00", "2100.00")):
+            with self.subTest(base_price=base_price):
+                product = Product.objects.create(
+                    name="No Discount Detail Product",
+                    slug=f"no-discount-detail-product-{index}",
+                    price=Decimal(base_price),
+                    old_price=Decimal("2000.00"),
+                    stock=5,
+                    category=self.category,
+                )
+
+                response = self.client.get(
+                    reverse("catalog:product_detail", kwargs={"slug": product.slug})
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'id="product-old-price-display"')
+                self.assertContains(response, 'data-old-price="2000.00"')
+                self.assertContains(
+                    response,
+                    'class="text-base text-gray-400 line-through hidden"',
+                )
+                self.assertContains(response, 'id="product-discount-badge"')
+                self.assertContains(
+                    response,
+                    'class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full hidden"',
+                )
+
+    def test_product_detail_does_not_render_discount_without_reference_price(self):
+        product = Product.objects.create(
+            name="No Reference Price Product",
+            slug="no-reference-price-product",
+            price=Decimal("1500.00"),
+            stock=5,
+            category=self.category,
+        )
+
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="product-old-price-display"')
+        self.assertNotContains(response, 'id="product-discount-badge"')
+
     def test_product_detail_renders_required_variant_selector(self):
         product = Product.objects.create(
             name="Variant Product",
@@ -64,6 +310,64 @@ class ProductDetailViewTests(BaseTestCase):
         self.assertContains(response, 'name="variant_id"')
         self.assertContains(response, f'value="{variant.pk}"')
         self.assertContains(response, 'required')
+
+    def test_product_detail_uses_cart_availability_rule_not_stock_alone(self):
+        product = Product.objects.create(
+            name="Unavailable Status Product",
+            slug="unavailable-status-product",
+            is_active=True,
+            stock=5,
+            category=self.category,
+        )
+        # Simulate a persisted availability flag that disagrees with positive stock.
+        Product.objects.filter(pk=product.pk).update(is_available_status=False)
+
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["product"].is_available)
+        self.assertContains(response, "ناموجود")
+        self.assertNotContains(response, "موجود در انبار (5)")
+        self.assertNotContains(
+            response,
+            f'action="{reverse("cart:add", args=[product.pk])}"',
+        )
+
+    def test_guest_product_detail_uses_external_javascript_without_inline_handlers(self):
+        product = Product.objects.create(
+            name="Guest Detail Product",
+            slug="guest-detail-product",
+            is_active=True,
+            stock=2,
+            category=self.category,
+        )
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'src="/static/js/storefront/details.js"')
+        self.assertContains(response, 'data-quantity-action="decrease"')
+        self.assertContains(response, 'data-quantity-action="increase"')
+        self.assertContains(
+            response,
+            f'data-endpoint="{reverse("catalog:wishlist_toggle", kwargs={"slug": product.slug})}"',
+        )
+        self.assertNotContains(response, "onclick=")
+        self.assertNotRegex(response.content.decode("utf-8"), r"<script(?![^>]*src=)")
+        self.assertNotContains(response, 'id="review-form"')
+
+    def test_authenticated_product_detail_keeps_review_form_with_external_script(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": self.product1.slug})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'src="/static/js/storefront/details.js"')
+        self.assertContains(response, 'id="review-form"')
+        self.assertContains(response, 'id="rating-input"')
+        self.assertContains(response, 'id="reviews-container"')
 
     def test_product_detail_post_review_unauthenticated(self):
         url = reverse("catalog:product_detail", kwargs={"slug": self.product1.slug})
@@ -116,6 +420,244 @@ class CategoryRootValidationRegressionTests(TestCase):
         category.full_clean()
         self.assertIsNone(category.parent_id)
 
+
+
+class ProductVariantPriceValidationTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(
+            name="Variant Price Category",
+            slug="variant-price-category",
+        )
+        self.product = Product.objects.create(
+            name="Variant Price Product",
+            slug="variant-price-product",
+            price=Decimal("100.00"),
+            stock=5,
+            category=self.category,
+        )
+
+    def test_variant_full_clean_rejects_negative_final_price(self):
+        variant = ProductVariant(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=Decimal("-100.01"),
+        )
+
+        with self.assertRaises(ValidationError) as raised:
+            variant.full_clean()
+
+        self.assertIn("price_adjustment", raised.exception.message_dict)
+
+    def test_variant_full_clean_allows_zero_final_price_and_negative_adjustment(self):
+        variant = ProductVariant(
+            product=self.product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=Decimal("-100.00"),
+        )
+
+        self.assertIsNone(variant.full_clean())
+
+    def test_product_full_clean_rejects_price_change_that_makes_variant_negative(self):
+        ProductVariant.objects.create(
+            product=self.product,
+            name="حافظه",
+            value="نسخه گران‌تر",
+            price_adjustment=Decimal("-150.00"),
+        )
+        self.product.price = Decimal("149.99")
+
+        with self.assertRaises(ValidationError) as raised:
+            self.product.full_clean()
+
+        self.assertIn("price", raised.exception.message_dict)
+
+    def test_product_full_clean_allows_price_change_that_keeps_variant_at_zero(self):
+        ProductVariant.objects.create(
+            product=self.product,
+            name="حافظه",
+            value="نسخه",
+            price_adjustment=Decimal("-150.00"),
+        )
+        self.product.price = Decimal("150.00")
+
+        self.assertIsNone(self.product.full_clean())
+
+    def test_variant_used_in_cart_cannot_be_reassigned_to_another_product(self):
+        from cart.models import Cart, CartItem
+
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="مشکی",
+            price_adjustment=Decimal("0.00"),
+        )
+        other_product = Product.objects.create(
+            name="Other Variant Product",
+            slug="other-variant-product",
+            price=Decimal("200.00"),
+            stock=5,
+            category=self.category,
+        )
+        cart = Cart.objects.create(session_key="variant-price-validation")
+        CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            variant=variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("100.00"),
+            status="saved",
+        )
+        variant.product = other_product
+
+        with self.assertRaises(ValidationError) as raised:
+            variant.full_clean()
+
+        self.assertIn("product", raised.exception.message_dict)
+
+
+class ProductVariantPriceAdminValidationTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="variant-price-admin",
+            email="variant-price-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.request = RequestFactory().post("/admin/")
+        self.request.user = self.admin_user
+        self.category = Category.objects.create(
+            name="Variant Admin Category",
+            slug="variant-admin-category",
+        )
+        self.product = Product.objects.create(
+            name="Variant Admin Product",
+            slug="variant-admin-product",
+            price=Decimal("100.00"),
+            stock=5,
+            category=self.category,
+        )
+
+    def _product_form_data(self, *, price):
+        return {
+            "name": self.product.name,
+            "name_en": self.product.name_en or "",
+            "brand": self.product.brand or "",
+            "slug": self.product.slug,
+            "image": "",
+            "description": self.product.description,
+            "review": self.product.review,
+            "price": str(price),
+            "old_price": "",
+            "stock": str(self.product.stock),
+            "is_active": "on" if self.product.is_active else "",
+            "highlights": self.product.highlights,
+            "guarantee": self.product.guarantee,
+            "delivery_info": self.product.delivery_info,
+            "category": str(self.product.category_id),
+            "related_products": [],
+        }
+
+    def test_product_admin_form_rejects_base_price_that_makes_existing_variant_negative(self):
+        ProductVariant.objects.create(
+            product=self.product,
+            name="حافظه",
+            value="نسخه",
+            price_adjustment=Decimal("-150.00"),
+        )
+        product_admin = admin.site._registry[Product]
+        form_class = product_admin.get_form(self.request, self.product)
+        form = form_class(
+            data=self._product_form_data(price=Decimal("50.00")),
+            instance=self.product,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("price", form.errors)
+
+    def test_variant_admin_form_rejects_negative_final_price(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=Decimal("-50.00"),
+        )
+        variant_admin = admin.site._registry[ProductVariant]
+        form_class = variant_admin.get_form(self.request, variant)
+        form = form_class(
+            data={
+                "product": str(self.product.pk),
+                "name": variant.name,
+                "value": variant.value,
+                "price_adjustment": "-100.01",
+            },
+            instance=variant,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("price_adjustment", form.errors)
+
+    def test_variant_admin_form_allows_zero_final_price(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=Decimal("-50.00"),
+        )
+        variant_admin = admin.site._registry[ProductVariant]
+        form_class = variant_admin.get_form(self.request, variant)
+        form = form_class(
+            data={
+                "product": str(self.product.pk),
+                "name": variant.name,
+                "value": variant.value,
+                "price_adjustment": "-100.00",
+            },
+            instance=variant,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_variant_admin_form_blocks_reassignment_when_variant_is_in_cart(self):
+        from cart.models import Cart, CartItem
+
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="سبز",
+            price_adjustment=Decimal("0.00"),
+        )
+        other_product = Product.objects.create(
+            name="Another Variant Admin Product",
+            slug="another-variant-admin-product",
+            price=Decimal("200.00"),
+            stock=5,
+            category=self.category,
+        )
+        cart = Cart.objects.create(session_key="variant-price-admin-validation")
+        CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            variant=variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("100.00"),
+            status="saved",
+        )
+
+        variant_admin = admin.site._registry[ProductVariant]
+        form_class = variant_admin.get_form(self.request, variant)
+        form = form_class(
+            data={
+                "product": str(other_product.pk),
+                "name": variant.name,
+                "value": variant.value,
+                "price_adjustment": "0.00",
+            },
+            instance=variant,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("product", form.errors)
 
 
 class ProductAdminUsabilityTests(TestCase):

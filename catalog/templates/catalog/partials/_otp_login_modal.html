@@ -1,10 +1,19 @@
 <!-- OTP Login Modal -->
 {% csrf_token %}
-<div id="otp-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden bg-black/60 backdrop-blur-sm transition-opacity duration-300">
+<div
+    id="otp-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-hidden="true"
+    aria-labelledby="otp-modal-title"
+    data-send-endpoint="{% url 'accounts:send_otp' %}"
+    data-verify-endpoint="{% url 'accounts:verify_otp' %}"
+    class="fixed inset-0 z-50 flex items-center justify-center hidden bg-black/60 backdrop-blur-sm transition-opacity duration-300"
+>
     <div class="relative w-full max-w-md p-6 mx-4 bg-white rounded-2xl shadow-2xl transform transition-all duration-300 scale-95 opacity-0" id="otp-modal-content">
         
         <!-- دکمه بستن -->
-        <button type="button" onclick="closeOtpModal()" class="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100">
+        <button type="button" data-otp-action="close" aria-label="بستن پنجره ورود" class="absolute top-4 left-4 text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-full hover:bg-gray-100">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
             </svg>
@@ -13,7 +22,7 @@
         <!-- مرحله اول: دریافت شماره موبایل -->
         <div id="otp-step-1" class="space-y-5">
             <div class="text-center">
-                <h3 class="text-xl font-bold text-gray-800">ورود / ثبت‌نام سریع</h3>
+                <h3 id="otp-modal-title" class="text-xl font-bold text-gray-800">ورود / ثبت‌نام سریع</h3>
                 <p class="text-sm text-gray-500 mt-2">شماره موبایل خود را جهت دریافت کد تأیید وارد کنید</p>
             </div>
 
@@ -24,7 +33,7 @@
                            class="w-full px-4 py-3 text-left border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base tracking-wider font-mono dir-ltr">
                 </div>
 
-                <button type="button" id="btn-send-otp" onclick="handleSendOtp()"
+                <button type="button" id="btn-send-otp" data-otp-action="send"
                         class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition duration-200 flex items-center justify-center space-x-2">
                     <span>ارسال کد تأیید</span>
                 </button>
@@ -66,18 +75,18 @@
             </div>
 
             <div class="flex items-center justify-between text-sm px-1">
-                <button type="button" onclick="goToStep1()" class="text-blue-600 hover:text-blue-800 transition">
+                <button type="button" data-otp-action="change-phone" class="text-blue-600 hover:text-blue-800 transition">
                     تغییر شماره موبایل
                 </button>
                 <div id="otp-timer-container" class="text-gray-500 text-xs">
                     ارسال مجدد کد پس از <span id="otp-timer" class="font-bold text-gray-700 font-mono">02:00</span>
                 </div>
-                <button type="button" id="btn-resend" onclick="handleSendOtp()" class="text-blue-600 hover:text-blue-800 transition hidden font-medium">
+                <button type="button" id="btn-resend" data-otp-action="send" class="text-blue-600 hover:text-blue-800 transition hidden font-medium">
                     ارسال مجدد کد
                 </button>
             </div>
 
-            <button type="button" id="btn-verify-otp" onclick="handleVerifyOtp()"
+            <button type="button" id="btn-verify-otp" data-otp-action="verify"
                     class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl transition duration-200 flex items-center justify-center space-x-2">
                 <span>تأیید و ورود</span>
             </button>
@@ -89,276 +98,6 @@
     </div>
 </div>
 
-<script>
-(() => {
-    let currentOtpPhone = "";
-    let timerInterval = null;
-    const ENDPOINT_SEND = "{% url 'accounts:send_otp' %}";
-    const ENDPOINT_VERIFY = "{% url 'accounts:verify_otp' %}";
 
-    const modal = document.getElementById("otp-modal");
-    const modalContent = document.getElementById("otp-modal-content");
-    const step1 = document.getElementById("otp-step-1");
-    const step2 = document.getElementById("otp-step-2");
-    const phoneInput = document.getElementById("otp-phone");
-    const displayPhone = document.getElementById("display-phone");
-    const alertBox = document.getElementById("otp-alert");
-    const digitInputs = document.querySelectorAll(".otp-digit");
-    const btnSend = document.getElementById("btn-send-otp");
-    const btnVerify = document.getElementById("btn-verify-otp");
-    const btnResend = document.getElementById("btn-resend");
-    const timerContainer = document.getElementById("otp-timer-container");
-    const timerElement = document.getElementById("otp-timer");
-
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== "") {
-            const cookies = document.cookie.split(";");
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + "=")) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
-            }
-        }
-        return cookieValue;
-    }
-
-    function toEnglishDigits(str) {
-        if (!str) return "";
-        return str.replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d))
-                  .replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-    }
-
-    function showAlert(message, isError = true) {
-        alertBox.textContent = message;
-        alertBox.className = "mt-4 p-3 rounded-xl text-sm transition duration-200 text-center " + 
-            (isError ? "bg-red-50 text-red-700 border border-red-200" : "bg-green-50 text-green-700 border border-green-200");
-        alertBox.classList.remove("hidden");
-    }
-
-    function clearAlert() {
-        alertBox.textContent = "";
-        alertBox.classList.add("hidden");
-    }
-
-    window.openOtpModal = function() {
-        clearAlert();
-        goToStep1();
-        modal.classList.remove("hidden");
-        setTimeout(() => {
-            modalContent.classList.remove("scale-95", "opacity-0");
-            modalContent.classList.add("scale-100", "opacity-100");
-            phoneInput.focus();
-        }, 10);
-    };
-
-    window.closeOtpModal = function() {
-        clearInterval(timerInterval);
-        modalContent.classList.remove("scale-100", "opacity-100");
-        modalContent.classList.add("scale-95", "opacity-0");
-        setTimeout(() => {
-            modal.classList.add("hidden");
-        }, 250);
-    };
-
-    window.goToStep1 = function() {
-        clearInterval(timerInterval);
-        step2.classList.add("hidden");
-        step1.classList.remove("hidden");
-        clearAlert();
-        phoneInput.focus();
-    };
-
-    function goToStep2(phone, cooldown) {
-        currentOtpPhone = phone;
-        displayPhone.textContent = phone;
-        step1.classList.add("hidden");
-        step2.classList.remove("hidden");
-        clearAlert();
-        digitInputs.forEach(input => input.value = "");
-        if (digitInputs.length > 0) digitInputs[0].focus();
-        startTimer(cooldown || 120);
-    }
-
-    function startTimer(seconds) {
-        clearInterval(timerInterval);
-        let timeLeft = parseInt(seconds, 10) || 120;
-        btnResend.classList.add("hidden");
-        timerContainer.classList.remove("hidden");
-
-        function update() {
-            const m = String(Math.floor(timeLeft / 60)).padStart(2, "0");
-            const s = String(timeLeft % 60).padStart(2, "0");
-            timerElement.textContent = `${m}:${s}`;
-
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-                timerContainer.classList.add("hidden");
-                btnResend.classList.remove("hidden");
-            }
-            timeLeft--;
-        }
-
-        update();
-        timerInterval = setInterval(update, 1000);
-    }
-
-    // مدیریت فوکوس و رفتارهای کیبورد در ۶ باکس
-    digitInputs.forEach((input, index) => {
-        input.addEventListener("input", (e) => {
-            const val = toEnglishDigits(e.target.value).replace(/\D/g, "");
-            e.target.value = val ? val[val.length - 1] : "";
-
-            if (e.target.value && index < digitInputs.length - 1) {
-                digitInputs[index + 1].focus();
-            }
-
-            const currentCode = Array.from(digitInputs).map(i => i.value).join("");
-            if (currentCode.length === digitInputs.length) {
-                handleVerifyOtp();
-            }
-        });
-
-        input.addEventListener("keydown", (e) => {
-            if (e.key === "Backspace" && !input.value && index > 0) {
-                e.preventDefault();
-                digitInputs[index - 1].focus();
-            } else if (e.key === "ArrowLeft" && index > 0) {
-                e.preventDefault();
-                digitInputs[index - 1].focus();
-            } else if (e.key === "ArrowRight" && index < digitInputs.length - 1) {
-                e.preventDefault();
-                digitInputs[index + 1].focus();
-            } else if (e.key === "Enter") {
-                handleVerifyOtp();
-            }
-        });
-        
-
-        input.addEventListener("paste", (e) => {
-            e.preventDefault();
-            const pasteData = toEnglishDigits((e.clipboardData || window.clipboardData).getData("text")).replace(/\D/g, "");
-            if (!pasteData) return;
-
-            const digits = pasteData.slice(0, digitInputs.length).split("");
-            digits.forEach((d, i) => {
-                digitInputs[i].value = d;
-            });
-
-            const nextFocus = Math.min(digits.length, digitInputs.length - 1);
-            digitInputs[nextFocus].focus();
-
-            if (digits.length === digitInputs.length) {
-                handleVerifyOtp();
-            }
-        });
-    });
-
-    window.handleSendOtp = async function() {
-        const phone = toEnglishDigits(phoneInput.value).trim() || currentOtpPhone;
-        clearAlert();
-
-        if (!/^09\d{9}$/.test(phone)) {
-            showAlert("لطفاً یک شماره موبایل معتبر ۱۱ رقمی وارد کنید (مثال: 09123456789).");
-            phoneInput.focus();
-            return;
-        }
-
-        btnSend.disabled = true;
-        btnSend.classList.add("opacity-60", "cursor-not-allowed");
-        const originalText = btnSend.innerHTML;
-        btnSend.innerHTML = "<span>در حال ارسال...</span>";
-
-        try {
-            const response = await fetch(ENDPOINT_SEND, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": getCookie("csrftoken"),
-                    "X-Requested-With": "XMLHttpRequest"
-                },
-                body: JSON.stringify({ phone: phone })
-            });
-
-            const data = await response.json();
-            if (response.ok && (data.success === true || data.status === "success" || !data.error)) {
-                goToStep2(phone, data.cooldown || 120);
-                showAlert(data.message || "کد تأیید ارسال شد.", false);
-            }  
-            else {
-                showAlert(data.message || "خطا در ارسال کد تأیید.");
-            }
-        } catch (err) {
-            showAlert("خطا در برقراری ارتباط با سرور.");
-        } finally {
-            btnSend.disabled = false;
-            btnSend.classList.remove("opacity-60", "cursor-not-allowed");
-            btnSend.innerHTML = originalText;
-        }
-    };
-
-    window.handleVerifyOtp = async function() {
-        const code = Array.from(digitInputs).map(i => toEnglishDigits(i.value)).join("");
-        clearAlert();
-
-        if (code.length !== digitInputs.length) {
-            showAlert(`لطفاً کد تأیید ${digitInputs.length} رقمی را به طور کامل وارد کنید.`);
-            return;
-        }
-
-        btnVerify.disabled = true;
-        btnVerify.classList.add("opacity-60", "cursor-not-allowed");
-        const originalText = btnVerify.innerHTML;
-        btnVerify.innerHTML = "<span>در حال اعتبارسنجی...</span>";
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const nextUrl = urlParams.get("next") || window.location.pathname;
-
-        try {
-            const response = await fetch(ENDPOINT_VERIFY, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": getCookie("csrftoken"),
-                    "X-Requested-With": "XMLHttpRequest"
-                },
-                body: JSON.stringify({
-                    phone: currentOtpPhone,
-                    code: code,
-                    next: nextUrl
-                })
-            });
-
-            const data = await response.json();
-
-            if (response.ok && (data.success === true || data.status === "success" || !data.error)) {
-                showAlert(data.message || "ورود موفقیت‌آمیز بود. در حال انتقال...", false);
-                setTimeout(() => {
-                    window.location.href = data.redirect_url || nextUrl || "/";
-                }, 600);
-            } else {
-                showAlert(data.message || "کد تأیید نامعتبر است.");
-                digitInputs.forEach(i => i.value = "");
-                digitInputs[0].focus();
-            }
-        } catch (err) {
-            showAlert("خطا در برقراری ارتباط با سرور.");
-        } finally {
-            btnVerify.disabled = false;
-            btnVerify.classList.remove("opacity-60", "cursor-not-allowed");
-            btnVerify.innerHTML = originalText;
-        }
-    };
-
-    // اینتر در اینپوت شماره
-    phoneInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            handleSendOtp();
-        }
-    });
-})();
-</script>
 
 

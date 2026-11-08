@@ -122,6 +122,19 @@ class OrderService:
         if not active_items:
             raise ValidationError("سبد خرید فعال فاقد آیتم قابل سفارش است.")
 
+        # Validate the locked cart price snapshots before any order/payment
+        # records or address snapshots are created. Never recalculate these
+        # values from the current catalog price: cart snapshots are contractual.
+        for item in active_items:
+            if (
+                item.unit_price_snapshot is None
+                or item.unit_price_snapshot < Decimal("0")
+            ):
+                raise ValidationError(
+                    "قیمت ثبت‌شده یکی از آیتم‌های فعال سبد معتبر نیست؛ "
+                    "سفارش تا بررسی قیمت قابل ثبت نیست."
+                )
+
         required_quantities = {}
         for item in active_items:
             if item.variant_id and item.variant.product_id != item.product_id:

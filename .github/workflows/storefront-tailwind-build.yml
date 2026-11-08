@@ -1,0 +1,106 @@
+name: Storefront Tailwind CSS build
+
+on:
+  push:
+    branches:
+      - "ui/storefront-header-search-navigation-2026-11-07"
+    paths:
+      - ".github/workflows/storefront-tailwind-build.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "tailwind.config.js"
+      - "frontend/tailwind.css"
+      - "accounts/templates/**/*.html"
+      - "cart/templates/**/*.html"
+      - "catalog/templates/catalog/**/*.html"
+      - "orders/templates/orders/payment/**/*.html"
+      - "static/js/**/*.js"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: storefront-tailwind-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the source branch
+        uses: actions/checkout@v4
+
+      - name: Set up the pinned Node.js runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Install the exact Tailwind dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
+
+          test "$(node -p "require('./node_modules/tailwindcss/package.json').version")" = "3.4.17"
+
+      - name: Check storefront JavaScript syntax
+        run: |
+          node --check static/js/storefront/base.js
+          node --check static/js/storefront/otp.js
+          node --check static/js/storefront/details.js
+
+      - name: Compile the production CSS
+        run: npm run build:css
+
+      - name: Verify representative storefront and runtime selectors
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          css = Path("static/css/tailwind.min.css").read_text(encoding="utf-8")
+          required = (
+              ".hidden",
+              ".bg-indigo-600",
+              ".md\\:flex",
+              ".sm\\:block",
+              ".hover\\:text-indigo-600",
+              ".bg-red-50",
+              ".text-green-700",
+              ".pointer-events-none",
+              ".rotate-180",
+              ".grid-cols-1",
+          )
+          missing = [selector for selector in required if selector not in css]
+          if missing:
+              raise SystemExit(
+                  "Tailwind output is missing required storefront selectors: "
+                  + ", ".join(missing)
+              )
+          print(
+              f"Tailwind CSS verification passed: {len(required)} required selectors found; "
+              f"{len(css)} bytes generated."
+          )
+          PY
+
+      - name: Commit the lockfile and generated static CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- package-lock.json static/css/tailwind.min.css
+
+          if git diff --cached --quiet; then
+            echo "Tailwind lockfile and generated CSS are already up to date."
+          else
+            git commit -m "Build static Tailwind CSS v3.4.17"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

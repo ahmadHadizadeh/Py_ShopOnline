@@ -1,5 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
+from django.core.paginator import Paginator
+from django.db.models import Q
 from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
@@ -17,9 +19,16 @@ from catalog.services import (
 )
 
 
+PRODUCT_LIST_SORT_OPTIONS = {
+    "newest": ("-created", "-pk"),
+    "price_asc": ("price", "-created", "-pk"),
+    "price_desc": ("-price", "-created", "-pk"),
+}
+PRODUCTS_PER_PAGE = 12
+
+
 def home(request, category_slug=None):
     category = None
-    categories = Category.objects.filter(is_active=True)
     products = Product.objects.filter(is_active=True).select_related("category")
 
     if category_slug:
@@ -30,10 +39,41 @@ def home(request, category_slug=None):
         )
         products = products.filter(category=category)
 
+    search_query = request.GET.get("q", "").strip()[:120]
+    if search_query:
+        products = products.filter(
+            Q(name__icontains=search_query)
+            | Q(name_en__icontains=search_query)
+            | Q(brand__icontains=search_query)
+            | Q(description__icontains=search_query)
+            | Q(highlights__icontains=search_query)
+        )
+
+    sort = request.GET.get("sort", "newest")
+    sort_fields = PRODUCT_LIST_SORT_OPTIONS.get(sort)
+    if sort_fields is None:
+        sort = "newest"
+        sort_fields = PRODUCT_LIST_SORT_OPTIONS[sort]
+
+    products = products.order_by(*sort_fields)
+    paginator = Paginator(products, PRODUCTS_PER_PAGE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
+    query_params["sort"] = sort
+    if search_query:
+        query_params["q"] = search_query
+    else:
+        query_params.pop("q", None)
+
     context = {
         "category": category,
-        "categories": categories,
         "products": products,
+        "page_obj": page_obj,
+        "search_query": search_query,
+        "sort": sort,
+        "pagination_query": query_params.urlencode(),
     }
     return render(request, "catalog/home.html", context)
 

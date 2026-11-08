@@ -170,6 +170,10 @@ class CartItem(models.Model):
                 condition=models.Q(quantity__gte=1),
                 name="cart_item_quantity_gte_1",
             ),
+            models.CheckConstraint(
+                condition=models.Q(unit_price_snapshot__gte=0),
+                name="cart_item_unit_price_snapshot_gte_0",
+            ),
         ]
 
     def __str__(self):
@@ -200,6 +204,14 @@ class CartItem(models.Model):
 
     def clean(self):
         super().clean()
+
+        if (
+            self.unit_price_snapshot is not None
+            and self.unit_price_snapshot < Decimal("0")
+        ):
+            raise ValidationError(
+                {"unit_price_snapshot": "قیمت ثبت‌شده در سبد نمی‌تواند منفی باشد."}
+            )
 
         if self.variant_id and self.variant.product_id != self.product_id:
             raise ValidationError({"variant": "واریانت انتخاب‌شده متعلق به این محصول نیست."})

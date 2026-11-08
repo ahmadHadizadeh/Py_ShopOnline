@@ -23,6 +23,117 @@ from .models.product_media import ProductImage, ProductSpecification
 from .services import adjust_product_stock, record_physical_stock_count
 
 
+class ProductAdminForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not self.instance.pk:
+            return cleaned_data
+
+        try:
+            locked_product = Product.objects.select_for_update().get(
+                pk=self.instance.pk
+            )
+        except Product.DoesNotExist:
+            self.add_error(None, "محصول برای اعتبارسنجی نهایی پیدا نشد.")
+            return cleaned_data
+
+        # Refresh untouched fields from the locked row before ModelForm._post_clean()
+        # applies submitted values and invokes Product.clean().
+        for field in self.instance._meta.concrete_fields:
+            setattr(
+                self.instance,
+                field.attname,
+                getattr(locked_product, field.attname),
+            )
+        return cleaned_data
+
+
+class ProductVariantAdminForm(forms.ModelForm):
+    class Meta:
+        model = ProductVariant
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        selected_product = cleaned_data.get("product")
+        if selected_product is None:
+            return cleaned_data
+
+        old_product_id = None
+        if self.instance.pk:
+            # Read the current parent id without locking the variant. All writers
+            # acquire Product locks before Variant locks, so the lock order stays
+            # consistent with cart pricing operations.
+            variant_state = (
+                ProductVariant.objects.filter(pk=self.instance.pk)
+                .values("product_id")
+                .first()
+            )
+            if variant_state is None:
+                self.add_error(None, "تنوع برای اعتبارسنجی نهایی پیدا نشد.")
+                return cleaned_data
+            old_product_id = variant_state["product_id"]
+
+        new_product_id = selected_product.pk
+        product_ids = {new_product_id}
+        if old_product_id is not None:
+            product_ids.add(old_product_id)
+
+        # Lock old and new parent products in a stable order before locking
+        # the Variant row. This matches the cart's Product -> Variant order.
+        locked_products = {
+            product.pk: product
+            for product in Product.objects.select_for_update()
+            .filter(pk__in=product_ids)
+            .order_by("pk")
+        }
+        if new_product_id not in locked_products or (
+            old_product_id is not None and old_product_id not in locked_products
+        ):
+            self.add_error("product", "محصول انتخاب‌شده یا قبلی دیگر در دسترس نیست.")
+            return cleaned_data
+
+        locked_variant = None
+        if self.instance.pk:
+            locked_variant = (
+                ProductVariant.objects.select_for_update()
+                .filter(pk=self.instance.pk)
+                .first()
+            )
+            if locked_variant is None or locked_variant.product_id != old_product_id:
+                self.add_error(
+                    None,
+                    "وضعیت واریانت هم‌زمان تغییر کرده است؛ فرم را تازه‌سازی و دوباره ثبت کنید.",
+                )
+                return cleaned_data
+
+            for field in self.instance._meta.concrete_fields:
+                setattr(
+                    self.instance,
+                    field.attname,
+                    getattr(locked_variant, field.attname),
+                )
+
+        if (
+            locked_variant is not None
+            and old_product_id != new_product_id
+            and locked_variant.cart_items.exists()
+        ):
+            self.add_error(
+                "product",
+                "واریانتی که در سبد خرید استفاده شده است، قابل انتقال به محصول دیگری نیست.",
+            )
+
+        # Use the freshly locked Product instance, not the earlier ModelChoiceField
+        # object that may have been loaded before the parent row lock.
+        cleaned_data["product"] = locked_products[new_product_id]
+        return cleaned_data
+
+
 # فیلتر سفارشی برای وضعیت موجودی
 LOW_STOCK_THRESHOLD = 5
 
@@ -114,6 +225,7 @@ class InventoryOperationForm(forms.Form):
 
 @admin.register(Product)
 class ProductAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    form = ProductAdminForm
     money_display_fields = {"price", "old_price"}
 
     def get_urls(self):
@@ -409,6 +521,7 @@ class InventoryMovementAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
 @admin.register(ProductVariant)
 class ProductVariantAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    form = ProductVariantAdminForm
     money_display_fields = {"price_adjustment"}
 
     def has_delete_permission(self, request, obj=None):

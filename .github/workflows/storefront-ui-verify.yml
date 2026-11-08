@@ -1,0 +1,227 @@
+name: Storefront UI browser verification
+
+on:
+  push:
+    branches:
+      - "ui/storefront-header-search-navigation-2026-11-07"
+    paths:
+      - ".github/workflows/storefront-ui-verify.yml"
+      - ".github/scripts/storefront-browser-smoke.py"
+      - "package.json"
+      - "package-lock.json"
+      - "tailwind.config.js"
+      - "frontend/tailwind.css"
+      - "accounts/templates/registration/login.html"
+      - "catalog/context_processors.py"
+      - "catalog/templates/catalog/base.html"
+      - "catalog/templates/catalog/home.html"
+      - "catalog/templates/catalog/details.html"
+      - "catalog/templates/catalog/partials/_otp_login_modal.html"
+      - "catalog/admin.py"
+      - "catalog/models/product.py"
+      - "catalog/models/variant.py"
+      - "catalog/tests.py"
+      - "catalog/views.py"
+      - "cart/models.py"
+      - "cart/services.py"
+      - "cart/tests.py"
+      - "cart/migrations/**"
+      - "orders/services.py"
+      - "core/settings.py"
+      - "static/js/storefront/**/*.js"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  storefront:
+    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      DJANGO_DEBUG: "1"
+      SECRET_KEY: "storefront-browser-smoke-only-fixed-key-2026"
+      DB_ENGINE: sqlite3
+      PAYMENT_DEFAULT_GATEWAY: mock_gateway
+
+    steps:
+      - name: Check out the source branch
+        uses: actions/checkout@v4
+
+      - name: Set up the pinned Node.js runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Build the exact storefront CSS used by browser verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
+          test "$(node -p "require('./node_modules/tailwindcss/package.json').version")" = "3.4.17"
+          npm run build:css
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Django and browser-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "Django==6.0.6" \
+            pytest pytest-django Pillow python-dotenv requests jdatetime playwright
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run Django checks and product/cart/checkout regression tests
+        run: |
+          python manage.py check
+          pytest -q catalog/tests.py \
+            cart/tests.py::CartVariantIntegrationTests \
+            cart/tests.py::CartVariantPriceGuardTests \
+            cart/tests.py::CheckoutVariantIntegrationTests \
+            cart/tests.py::CheckoutOrderIntegrityContractTests \
+            accounts/tests.py::test_login_page_renders_otp_entry
+
+      - name: Prepare isolated browser fixtures and authenticated session
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python manage.py migrate --noinput
+          SESSION_ID="$(python - <<'PY'
+          import os
+          import django
+
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+          django.setup()
+
+          from django.conf import settings
+          from django.contrib.auth import (
+              BACKEND_SESSION_KEY,
+              HASH_SESSION_KEY,
+              SESSION_KEY,
+              get_user_model,
+          )
+          from django.contrib.sessions.backends.db import SessionStore
+          from django.test import Client
+          from catalog.models.category import Category
+          from catalog.models.product import Product
+          from catalog.models.variant import ProductVariant
+          from decimal import Decimal
+
+          category, _ = Category.objects.update_or_create(
+              slug="browser-test-category",
+              defaults={"name": "Browser Test", "is_active": True},
+          )
+          for index in range(12):
+              Product.objects.update_or_create(
+                  slug=f"browser-test-product-{index:02d}",
+                  defaults={
+                      "name": "Browser Test Product",
+                      "name_en": "Browser Test Product",
+                      "brand": "NorthwindBrowser",
+                      "description": "Storefront browser smoke fixture",
+                      "highlights": "RTX Browser Test",
+                      "price": Decimal(str(1000 + index * 10)),
+                      "stock": 5,
+                      "is_active": True,
+                      "category": category,
+                  },
+              )
+
+          detail_product, _ = Product.objects.update_or_create(
+              slug="browser-test-product",
+              defaults={
+                  "name": "Browser Test Product",
+                  "name_en": "Browser Test Product",
+                  "brand": "NorthwindBrowser",
+                  "description": "Storefront browser smoke fixture",
+                  "highlights": "RTX Browser Test",
+                  "price": Decimal("2100.00"),
+                  "old_price": Decimal("2000.00"),
+                  "stock": 5,
+                  "is_active": True,
+                  "category": category,
+              },
+          )
+          ProductVariant.objects.update_or_create(
+              product=detail_product,
+              name="رنگ",
+              value="قرمز",
+              defaults={"price_adjustment": Decimal("-350.00")},
+          )
+          ProductVariant.objects.update_or_create(
+              product=detail_product,
+              name="رنگ",
+              value="آبی",
+              defaults={"price_adjustment": Decimal("250.00")},
+          )
+          user, _ = get_user_model().objects.get_or_create(
+              username="storefront-browser-user",
+          )
+
+          # Build the signed session contract consumed by AuthenticationMiddleware.
+          session = SessionStore()
+          session[SESSION_KEY] = str(user.pk)
+          session[BACKEND_SESSION_KEY] = "django.contrib.auth.backends.ModelBackend"
+          session[HASH_SESSION_KEY] = user.get_session_auth_hash()
+          session.save()
+
+          # Confirm Django accepts this session before passing its cookie to Chromium.
+          client = Client()
+          client.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
+          authenticated_response = client.get("/", HTTP_HOST="127.0.0.1")
+          if not authenticated_response.wsgi_request.user.is_authenticated:
+              raise SystemExit("Django rejected the generated authenticated session.")
+          print(session.session_key)
+          PY
+          )"
+          test -n "$SESSION_ID"
+          echo "STOREFRONT_SESSION_ID=$SESSION_ID" >> "$GITHUB_ENV"
+
+      - name: Start isolated Django runserver
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup python manage.py runserver 127.0.0.1:8000 --noreload \
+            > "$RUNNER_TEMP/storefront-runserver.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/storefront-runserver.pid"
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat "$RUNNER_TEMP/storefront-runserver.log"
+          exit 1
+
+      - name: Run desktop and mobile storefront browser smoke
+        env:
+          STOREFRONT_BASE_URL: http://127.0.0.1:8000
+        run: python .github/scripts/storefront-browser-smoke.py
+
+      - name: Upload storefront screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storefront-ui-browser-smoke
+          path: artifacts/storefront-*.png
+          if-no-files-found: warn
+          retention-days: 5
+
+      - name: Stop isolated Django runserver
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/storefront-runserver.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/storefront-runserver.pid")" 2>/dev/null || true
+          fi

@@ -3,6 +3,7 @@
 from decimal import Decimal
 from types import SimpleNamespace
 import threading
+import time
 from uuid import uuid4
 
 from django.contrib import admin
@@ -618,3 +619,332 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
             ).count(),
             1,
         )
+
+
+@skipUnless(
+    connection.vendor == "postgresql",
+    "These tests require real PostgreSQL row-level locking.",
+)
+class PostgreSQLVariantPriceLockingTests(TransactionTestCase):
+    """Verify concurrent admin price edits serialize on the parent Product row."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.category = Category.objects.create(
+            name="PostgreSQL Variant Price Category",
+            slug=f"pg-variant-price-{uuid4().hex[:10]}",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="PostgreSQL Variant Price Product",
+            slug=f"pg-variant-price-product-{uuid4().hex[:10]}",
+            price=Decimal("100.00"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            name="color",
+            value="red",
+            price_adjustment=Decimal("-70.00"),
+        )
+        self.admin_user = get_user_model().objects.create_superuser(
+            username=f"pg-variant-admin-{uuid4().hex[:10]}",
+            email=f"pg-variant-admin-{uuid4().hex[:10]}@example.test",
+            password="TestPassword123!",
+        )
+
+    def _product_form_data(self, product, *, price):
+        return {
+            "name": product.name,
+            "name_en": product.name_en or "",
+            "brand": product.brand or "",
+            "slug": product.slug,
+            "image": "",
+            "description": product.description,
+            "review": product.review,
+            "price": str(price),
+            "old_price": "",
+            "stock": str(product.stock),
+            "is_active": "on" if product.is_active else "",
+            "highlights": product.highlights,
+            "guarantee": product.guarantee,
+            "delivery_info": product.delivery_info,
+            "category": str(product.category_id),
+            "related_products": [],
+        }
+
+    def _configure_worker_connection(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SET lock_timeout = '10s'")
+            cursor.execute("SET statement_timeout = '20s'")
+            cursor.execute("SELECT pg_backend_pid()")
+            return cursor.fetchone()[0]
+
+    def _wait_for_backend_lock(self, backend_pid, worker_finished, *, timeout=8):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT wait_event_type
+                    FROM pg_stat_activity
+                    WHERE pid = %s
+                    """,
+                    [backend_pid],
+                )
+                row = cursor.fetchone()
+
+            if row is not None and row[0] == "Lock":
+                return True
+            if worker_finished.is_set():
+                return False
+            time.sleep(0.025)
+        return False
+
+    def _join_workers(self, *workers):
+        for worker in workers:
+            if worker.ident is not None:
+                worker.join(timeout=25)
+        alive = [worker.name for worker in workers if worker.is_alive()]
+        self.assertFalse(alive, f"PostgreSQL price-edit workers did not finish: {alive}")
+
+    def test_product_price_commit_blocks_conflicting_variant_adjustment(self):
+        """The waiting Variant form must validate against the committed base price."""
+        product_saved = threading.Event()
+        release_product = threading.Event()
+        variant_pid_ready = threading.Event()
+        variant_finished = threading.Event()
+        state = {}
+        errors = []
+
+        def product_worker():
+            close_old_connections()
+            try:
+                self._configure_worker_connection()
+                with transaction.atomic():
+                    request = RequestFactory().post("/admin/catalog/product/")
+                    request.user = get_user_model().objects.get(pk=self.admin_user.pk)
+                    product = Product.objects.get(pk=self.product.pk)
+                    product_admin = admin.site._registry[Product]
+                    form_class = product_admin.get_form(request, product)
+                    form = form_class(
+                        data=self._product_form_data(product, price="80.00"),
+                        instance=product,
+                    )
+                    if not form.is_valid():
+                        state["product_errors"] = list(form.errors)
+                        raise AssertionError(
+                            f"Expected base-price update to validate: {form.errors}"
+                        )
+                    obj = form.save(commit=False)
+                    product_admin.save_model(request, obj, form, change=True)
+                    form.save_m2m()
+                    state["product_saved"] = True
+                    product_saved.set()
+                    if not release_product.wait(timeout=15):
+                        raise RuntimeError("Product transaction release timed out.")
+            except BaseException as exc:
+                errors.append(("product", repr(exc)))
+            finally:
+                product_saved.set()
+                connection.close()
+
+        def variant_worker():
+            close_old_connections()
+            try:
+                backend_pid = self._configure_worker_connection()
+                state["variant_backend_pid"] = backend_pid
+                with transaction.atomic():
+                    request = RequestFactory().post("/admin/catalog/productvariant/")
+                    request.user = get_user_model().objects.get(pk=self.admin_user.pk)
+                    variant = ProductVariant.objects.get(pk=self.variant.pk)
+                    variant_admin = admin.site._registry[ProductVariant]
+                    form_class = variant_admin.get_form(request, variant)
+                    form = form_class(
+                        data={
+                            "product": str(self.product.pk),
+                            "name": variant.name,
+                            "value": variant.value,
+                            "price_adjustment": "-90.00",
+                        },
+                        instance=variant,
+                    )
+                    state["variant_valid"] = form.is_valid()
+                    state["variant_errors"] = list(form.errors)
+                    if state["variant_valid"]:
+                        obj = form.save(commit=False)
+                        variant_admin.save_model(request, obj, form, change=True)
+                        form.save_m2m()
+            except BaseException as exc:
+                errors.append(("variant", repr(exc)))
+            finally:
+                variant_finished.set()
+                connection.close()
+
+        product_thread = threading.Thread(target=product_worker, daemon=True)
+        variant_thread = threading.Thread(target=variant_worker, daemon=True)
+        lock_wait_observed = False
+
+        try:
+            product_thread.start()
+            self.assertTrue(
+                product_saved.wait(timeout=10),
+                "Product admin transaction did not reach its saved/locked boundary.",
+            )
+            self.assertTrue(state.get("product_saved"), errors)
+
+            variant_thread.start()
+            deadline = time.monotonic() + 10
+            while (
+                "variant_backend_pid" not in state
+                and not variant_finished.is_set()
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            self.assertIn("variant_backend_pid", state, errors)
+            lock_wait_observed = self._wait_for_backend_lock(
+                state["variant_backend_pid"],
+                variant_finished,
+            )
+        finally:
+            release_product.set()
+            self._join_workers(product_thread, variant_thread)
+
+        self.assertFalse(errors, f"Concurrent admin price edits failed: {errors}")
+        self.assertTrue(
+            lock_wait_observed,
+            "PostgreSQL did not report the Variant form waiting on the Product row lock.",
+        )
+        self.assertFalse(
+            state["variant_valid"],
+            "A conflicting Variant price adjustment was accepted after the base-price commit.",
+        )
+        self.assertIn("price_adjustment", state["variant_errors"])
+
+        product = Product.objects.get(pk=self.product.pk)
+        variant = ProductVariant.objects.get(pk=self.variant.pk)
+        self.assertEqual(product.price, Decimal("80.00"))
+        self.assertEqual(variant.price_adjustment, Decimal("-70.00"))
+        self.assertGreaterEqual(product.price + variant.price_adjustment, Decimal("0"))
+
+    def test_variant_adjustment_commit_blocks_conflicting_product_price_change(self):
+        """The waiting Product form must recheck variants after the Variant commit."""
+        variant_saved = threading.Event()
+        release_variant = threading.Event()
+        product_pid_ready = threading.Event()
+        product_finished = threading.Event()
+        state = {}
+        errors = []
+
+        def variant_worker():
+            close_old_connections()
+            try:
+                self._configure_worker_connection()
+                with transaction.atomic():
+                    request = RequestFactory().post("/admin/catalog/productvariant/")
+                    request.user = get_user_model().objects.get(pk=self.admin_user.pk)
+                    variant = ProductVariant.objects.get(pk=self.variant.pk)
+                    variant_admin = admin.site._registry[ProductVariant]
+                    form_class = variant_admin.get_form(request, variant)
+                    form = form_class(
+                        data={
+                            "product": str(self.product.pk),
+                            "name": variant.name,
+                            "value": variant.value,
+                            "price_adjustment": "-90.00",
+                        },
+                        instance=variant,
+                    )
+                    if not form.is_valid():
+                        state["variant_errors"] = list(form.errors)
+                        raise AssertionError(
+                            f"Expected Variant adjustment to validate: {form.errors}"
+                        )
+                    obj = form.save(commit=False)
+                    variant_admin.save_model(request, obj, form, change=True)
+                    form.save_m2m()
+                    state["variant_saved"] = True
+                    variant_saved.set()
+                    if not release_variant.wait(timeout=15):
+                        raise RuntimeError("Variant transaction release timed out.")
+            except BaseException as exc:
+                errors.append(("variant", repr(exc)))
+            finally:
+                variant_saved.set()
+                connection.close()
+
+        def product_worker():
+            close_old_connections()
+            try:
+                backend_pid = self._configure_worker_connection()
+                state["product_backend_pid"] = backend_pid
+                with transaction.atomic():
+                    request = RequestFactory().post("/admin/catalog/product/")
+                    request.user = get_user_model().objects.get(pk=self.admin_user.pk)
+                    product = Product.objects.get(pk=self.product.pk)
+                    product_admin = admin.site._registry[Product]
+                    form_class = product_admin.get_form(request, product)
+                    form = form_class(
+                        data=self._product_form_data(product, price="80.00"),
+                        instance=product,
+                    )
+                    state["product_valid"] = form.is_valid()
+                    state["product_errors"] = list(form.errors)
+                    if state["product_valid"]:
+                        obj = form.save(commit=False)
+                        product_admin.save_model(request, obj, form, change=True)
+                        form.save_m2m()
+            except BaseException as exc:
+                errors.append(("product", repr(exc)))
+            finally:
+                product_finished.set()
+                connection.close()
+
+        variant_thread = threading.Thread(target=variant_worker, daemon=True)
+        product_thread = threading.Thread(target=product_worker, daemon=True)
+        lock_wait_observed = False
+
+        try:
+            variant_thread.start()
+            self.assertTrue(
+                variant_saved.wait(timeout=10),
+                "Variant admin transaction did not reach its saved/locked boundary.",
+            )
+            self.assertTrue(state.get("variant_saved"), errors)
+
+            product_thread.start()
+            deadline = time.monotonic() + 10
+            while (
+                "product_backend_pid" not in state
+                and not product_finished.is_set()
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            self.assertIn("product_backend_pid", state, errors)
+            lock_wait_observed = self._wait_for_backend_lock(
+                state["product_backend_pid"],
+                product_finished,
+            )
+        finally:
+            release_variant.set()
+            self._join_workers(variant_thread, product_thread)
+
+        self.assertFalse(errors, f"Concurrent admin price edits failed: {errors}")
+        self.assertTrue(
+            lock_wait_observed,
+            "PostgreSQL did not report the Product form/save waiting on the Product row lock.",
+        )
+        self.assertFalse(
+            state["product_valid"],
+            "A conflicting Product base-price change was accepted after the Variant commit.",
+        )
+        self.assertIn("price", state["product_errors"])
+
+        product = Product.objects.get(pk=self.product.pk)
+        variant = ProductVariant.objects.get(pk=self.variant.pk)
+        self.assertEqual(product.price, Decimal("100.00"))
+        self.assertEqual(variant.price_adjustment, Decimal("-90.00"))
+        self.assertGreaterEqual(product.price + variant.price_adjustment, Decimal("0"))
