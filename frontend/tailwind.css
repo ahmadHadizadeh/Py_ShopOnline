@@ -1,0 +1,8 @@
+/*
+ * Tailwind CSS v3 source entry.
+ * The compiled production asset is static/css/tailwind.min.css.
+ * Keep the source entry separate from STATICFILES_DIRS.
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
