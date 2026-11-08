@@ -1,0 +1,146 @@
+name: Storefront UI browser verification
+
+on:
+  push:
+    branches:
+      - "ui/storefront-header-search-navigation-2026-11-07"
+    paths:
+      - ".github/workflows/storefront-ui-verify.yml"
+      - ".github/scripts/storefront-browser-smoke.py"
+      - "accounts/templates/registration/login.html"
+      - "catalog/context_processors.py"
+      - "catalog/templates/catalog/base.html"
+      - "catalog/templates/catalog/home.html"
+      - "catalog/templates/catalog/partials/_otp_login_modal.html"
+      - "catalog/tests.py"
+      - "catalog/views.py"
+      - "core/settings.py"
+      - "static/js/storefront/**/*.js"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  storefront:
+    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    env:
+      DJANGO_DEBUG: "1"
+      DB_ENGINE: sqlite3
+      PAYMENT_DEFAULT_GATEWAY: mock_gateway
+
+    steps:
+      - name: Check out the source branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Django and browser-test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "Django==6.0.6" \
+            pytest pytest-django Pillow python-dotenv requests jdatetime playwright
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run Django checks and focused regression tests
+        run: |
+          python manage.py check
+          pytest -q catalog/tests.py accounts/tests.py::test_login_page_renders_otp_entry
+
+      - name: Prepare isolated browser fixtures and authenticated session
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python manage.py migrate --noinput
+          SESSION_ID="$(python - <<'PY'
+          import os
+          import django
+
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+          django.setup()
+
+          from django.conf import settings
+          from django.contrib.auth import get_user_model
+          from django.test import Client
+          from catalog.models.category import Category
+          from catalog.models.product import Product
+          from decimal import Decimal
+
+          category, _ = Category.objects.update_or_create(
+              slug="browser-test-category",
+              defaults={"name": "Browser Test", "is_active": True},
+          )
+          Product.objects.update_or_create(
+              slug="browser-test-product",
+              defaults={
+                  "name": "Browser Test Product",
+                  "name_en": "Browser Test Product",
+                  "brand": "NorthwindBrowser",
+                  "description": "Storefront browser smoke fixture",
+                  "highlights": "RTX Browser Test",
+                  "price": Decimal("1499.00"),
+                  "stock": 5,
+                  "is_active": True,
+                  "category": category,
+              },
+          )
+          user, _ = get_user_model().objects.get_or_create(
+              username="storefront-browser-user",
+          )
+          client = Client()
+          client.force_login(user)
+          print(client.cookies[settings.SESSION_COOKIE_NAME].value)
+          PY
+          )"
+          test -n "$SESSION_ID"
+          echo "STOREFRONT_SESSION_ID=$SESSION_ID" >> "$GITHUB_ENV"
+
+      - name: Start isolated Django runserver
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup python manage.py runserver 127.0.0.1:8000 --noreload \
+            > "$RUNNER_TEMP/storefront-runserver.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/storefront-runserver.pid"
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat "$RUNNER_TEMP/storefront-runserver.log"
+          exit 1
+
+      - name: Run desktop and mobile storefront browser smoke
+        env:
+          STOREFRONT_BASE_URL: http://127.0.0.1:8000
+        run: python .github/scripts/storefront-browser-smoke.py
+
+      - name: Upload storefront screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storefront-ui-browser-smoke
+          path: artifacts/storefront-*.png
+          if-no-files-found: warn
+          retention-days: 5
+
+      - name: Stop isolated Django runserver
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/storefront-runserver.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/storefront-runserver.pid")" 2>/dev/null || true
+          fi
