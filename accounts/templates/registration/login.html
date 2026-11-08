@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="min-h-[55vh] flex items-center justify-center">
-    <div class="w-full max-w-md bg-white border border-gray-100 rounded-3xl shadow-sm p-8 text-center">
+    <div data-otp-auto-open class="w-full max-w-md bg-white border border-gray-100 rounded-3xl shadow-sm p-8 text-center">
         <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
             <i class="fa-solid fa-mobile-screen-button text-2xl"></i>
         </div>
@@ -19,12 +19,4 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    if (typeof window.openOtpModal === "function") {
-        window.openOtpModal();
-    }
-});
-</script>
-{% endblock %}
+

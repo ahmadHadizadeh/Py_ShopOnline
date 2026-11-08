@@ -2,7 +2,7 @@
 
 {% block title %}
 
-     {% if category %}  {{ category.name }} | {% endif %}  فروشگاه آنلاین شاپ
+     {% if search_query %}جست‌وجوی {{ search_query }} | {% endif %}{% if category %}{{ category.name }} | {% endif %}فروشگاه آنلاین شاپ
 
 {% endblock %}
 
@@ -21,7 +21,7 @@
 
 
 <!-- Hero Section -->
-{% if not category %}
+{% if not category and not search_query %}
 <div class="bg-gradient-to-r from-indigo-700 via-indigo-600 to-purple-700 rounded-3xl p-8 md:p-16 text-white mb-12 shadow-2xl relative overflow-hidden transition-all duration-500 hover:shadow-indigo-200">
     <div class="relative z-10 max-w-2xl">
         <h1 class="text-3xl md:text-5xl font-black mb-6 leading-tight">به دنیای تکنولوژی <br><span class="text-indigo-200">آنلاین شاپ احمد</span> خوش آمدید</h1>
@@ -45,7 +45,7 @@
     <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-black text-gray-800 flex items-center gap-3">
             <span class="w-2 h-8 bg-indigo-600 rounded-full"></span>
-            {% if category %}{{ category.name }}{% else %}جدیدترین محصولات{% endif %}
+            {% if search_query %}نتایج جست‌وجو برای «{{ search_query }}»{% elif category %}{{ category.name }}{% else %}جدیدترین محصولات{% endif %}
         </h2>
     </div>
     
@@ -124,7 +124,7 @@
             <div class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
                 <i class="fa-solid fa-magnifying-glass text-3xl text-gray-300"></i>
             </div>
-            <p class="text-gray-500 font-bold">هنوز محصولی در این دسته قرار نگرفته است.</p>
+            <p class="text-gray-500 font-bold">{% if search_query %}محصولی با عبارت «{{ search_query }}» پیدا نشد.{% elif category %}هنوز محصولی در این دسته قرار نگرفته است.{% else %}هنوز محصولی برای نمایش ثبت نشده است.{% endif %}</p>
             <a href="{% url 'catalog:product_list' %}" class="mt-4 text-indigo-600 text-sm font-bold hover:underline">مشاهده همه محصولات</a>
         </div>
     {% endfor %}

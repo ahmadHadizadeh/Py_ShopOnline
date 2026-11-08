@@ -27,6 +27,81 @@ class BaseTestCase(TestCase):
         self.product1 = Product.objects.create(name="P1", slug="p1", is_active=True, category=self.category)
         self.client = Client()
 
+class ProductCatalogSearchTests(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.searchable_product = Product.objects.create(
+            name="لپ تاپ گیمینگ",
+            name_en="Gaming Notebook",
+            brand="Northwind",
+            description="portable workstation",
+            highlights="RTX graphics",
+            stock=7,
+            category=self.category,
+        )
+
+    def test_search_matches_existing_product_text_fields(self):
+        for query in ("لپ تاپ", "Gaming", "Northwind", "portable workstation", "RTX graphics"):
+            with self.subTest(query=query):
+                response = self.client.get(reverse("catalog:product_list"), {"q": query})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    list(response.context["products"].values_list("pk", flat=True)),
+                    [self.searchable_product.pk],
+                )
+                self.assertEqual(response.context["search_query"], query)
+
+    def test_search_excludes_inactive_products(self):
+        Product.objects.create(
+            name="Inactive Northwind Device",
+            slug="inactive-northwind-device",
+            is_active=False,
+            stock=5,
+            category=self.category,
+        )
+        response = self.client.get(reverse("catalog:product_list"), {"q": "Northwind"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(response.context["products"].values_list("pk", flat=True)),
+            [self.searchable_product.pk],
+        )
+
+    def test_search_keeps_selected_category_filter(self):
+        other_category = Category.objects.create(name="Other Category", slug="other-category")
+        Product.objects.create(
+            name="Northwind Other Device",
+            slug="northwind-other-device",
+            brand="Northwind",
+            stock=3,
+            category=other_category,
+        )
+        response = self.client.get(
+            reverse("catalog:product_list_by_category", kwargs={"category_slug": self.category.slug}),
+            {"q": "Northwind"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(response.context["products"].values_list("pk", flat=True)),
+            [self.searchable_product.pk],
+        )
+
+    def test_search_trims_query_and_renders_header_controls(self):
+        response = self.client.get(reverse("catalog:product_list"), {"q": "  Northwind  "})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["search_query"], "Northwind")
+        self.assertContains(response, 'id="desktop-search-form"')
+        self.assertContains(response, 'id="mobile-search-panel"')
+        self.assertContains(response, 'id="mobile-navigation-panel"')
+        self.assertContains(response, 'name="q"')
+
+    def test_active_categories_are_available_in_header_on_product_detail(self):
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": self.searchable_product.slug})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.category.get_absolute_url())
+
+
 class ReviewServiceTests(BaseTestCase):
     def test_save_review_unauthenticated_user(self):
         with self.assertRaisesMessage(ValueError, "برای ثبت نظر ابتدا وارد حساب کاربری شوید."):
