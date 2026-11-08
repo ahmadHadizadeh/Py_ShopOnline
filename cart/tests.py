@@ -951,6 +951,41 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         self.assertFalse(Order.objects.filter(cart=self.cart).exists())
         self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
 
+    def test_negative_snapshot_rejects_checkout_without_order_payment_or_address(self):
+        original_from_db = CartItem.from_db
+
+        def load_with_invalid_snapshot(model_cls, db, field_names, values):
+            item = original_from_db(db, field_names, values)
+            if item.pk == self.item.pk:
+                item.unit_price_snapshot = Decimal("-0.01")
+            return item
+
+        with patch.object(
+            CartItem,
+            "from_db",
+            classmethod(load_with_invalid_snapshot),
+        ):
+            response = self.client.post(
+                reverse("cart:checkout"),
+                self.checkout_payload(),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertFalse(
+            OrderAddressSnapshot.objects.filter(order__cart=self.cart).exists()
+        )
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
+
+        # The invalid value existed only on the loaded test instance. The
+        # database snapshot remains unchanged and was never rewritten.
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.unit_price_snapshot, Decimal("1250.00"))
+
     def test_ordered_cart_cannot_be_checked_out_again(self):
         self.cart.status = Cart.STATUS_ORDERED
         self.cart.save(update_fields=["status"])

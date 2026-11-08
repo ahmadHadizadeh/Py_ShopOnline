@@ -26,6 +26,7 @@ on:
       - "cart/services.py"
       - "cart/tests.py"
       - "cart/migrations/**"
+      - "orders/services.py"
       - "core/settings.py"
       - "static/js/storefront/**/*.js"
   workflow_dispatch:
@@ -85,6 +86,7 @@ jobs:
             cart/tests.py::CartVariantIntegrationTests \
             cart/tests.py::CartVariantPriceGuardTests \
             cart/tests.py::CheckoutVariantIntegrationTests \
+            cart/tests.py::CheckoutOrderIntegrityContractTests \
             accounts/tests.py::test_login_page_renders_otp_entry
 
       - name: Prepare isolated browser fixtures and authenticated session
