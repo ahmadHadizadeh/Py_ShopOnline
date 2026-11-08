@@ -238,6 +238,30 @@ class ProductDetailViewTests(BaseTestCase):
         self.assertContains(response, f'value="{variant.pk}"')
         self.assertContains(response, 'required')
 
+    def test_product_detail_uses_cart_availability_rule_not_stock_alone(self):
+        product = Product.objects.create(
+            name="Unavailable Status Product",
+            slug="unavailable-status-product",
+            is_active=True,
+            stock=5,
+            category=self.category,
+        )
+        # Simulate a persisted availability flag that disagrees with positive stock.
+        Product.objects.filter(pk=product.pk).update(is_available_status=False)
+
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["product"].is_available)
+        self.assertContains(response, "ناموجود")
+        self.assertNotContains(response, "موجود در انبار (5)")
+        self.assertNotContains(
+            response,
+            f'action="{reverse("cart:add", args=[product.pk])}"',
+        )
+
     def test_guest_product_detail_uses_external_javascript_without_inline_handlers(self):
         product = Product.objects.create(
             name="Guest Detail Product",

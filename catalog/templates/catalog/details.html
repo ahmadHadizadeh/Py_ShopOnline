@@ -128,7 +128,7 @@
                     <span>•</span>
                     <span>
                         وضعیت:
-                        {% if product.stock > 0 %}
+                        {% if product.is_available %}
                             <span class="text-emerald-600 font-bold">موجود در انبار ({{ product.stock }})</span>
                         {% else %}
                             <span class="text-rose-500 font-bold">ناموجود</span>
@@ -157,7 +157,7 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-stretch gap-4 mt-4">
-                    {% if product.stock > 0 %}
+                    {% if product.is_available %}
                     <form method="post" action="{% url 'cart:add' product.id %}" class="flex flex-wrap items-center gap-4 w-full">
                         {% csrf_token %}
 
