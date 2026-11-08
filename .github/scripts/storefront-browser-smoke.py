@@ -63,6 +63,20 @@ with sync_playwright() as playwright:
         assert columns == expected_columns, (
             f"Unexpected product grid columns at {width}px: {columns}"
         )
+        card_direction = mobile.locator("#product-grid article").first.evaluate(
+            "(card) => getComputedStyle(card).flexDirection"
+        )
+        expected_direction = "row" if width < 640 else "column"
+        assert card_direction == expected_direction, (
+            f"Unexpected product card direction at {width}px: {card_direction}"
+        )
+        if width < 640:
+            image_frame_width = mobile.locator("#product-grid article").first.locator(
+                ":scope > div"
+            ).evaluate("(frame) => frame.getBoundingClientRect().width")
+            assert image_frame_width <= 112.5, (
+                f"Mobile product image frame is not compact at {width}px: {image_frame_width}"
+            )
     mobile.set_viewport_size({"width": 390, "height": 844})
     mobile.screenshot(path=str(ARTIFACTS / "storefront-mobile-home.png"), full_page=True)
 
