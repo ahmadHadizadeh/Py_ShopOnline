@@ -82,7 +82,7 @@
             wrapper.addEventListener("pointerleave", scheduleClose);
         }
 
-        wrapper.addEventListener("focusin", () => setOpen(true));
+        wrapper.addEventListener("focusin", () => clearTimeout(closeTimer));
         wrapper.addEventListener("focusout", (event) => {
             if (!wrapper.contains(event.relatedTarget)) scheduleClose();
         });

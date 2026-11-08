@@ -53,6 +53,11 @@ jobs:
 
           test "$(node -p "require('./node_modules/tailwindcss/package.json').version")" = "3.4.17"
 
+      - name: Check storefront JavaScript syntax
+        run: |
+          node --check static/js/storefront/base.js
+          node --check static/js/storefront/otp.js
+
       - name: Compile the production CSS
         run: npm run build:css
 
