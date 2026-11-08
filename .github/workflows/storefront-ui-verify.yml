@@ -70,7 +70,13 @@ jobs:
           django.setup()
 
           from django.conf import settings
-          from django.contrib.auth import get_user_model
+          from django.contrib.auth import (
+              BACKEND_SESSION_KEY,
+              HASH_SESSION_KEY,
+              SESSION_KEY,
+              get_user_model,
+          )
+          from django.contrib.sessions.backends.db import SessionStore
           from django.test import Client
           from catalog.models.category import Category
           from catalog.models.product import Product
@@ -97,12 +103,21 @@ jobs:
           user, _ = get_user_model().objects.get_or_create(
               username="storefront-browser-user",
           )
+
+          # Build the signed session contract consumed by AuthenticationMiddleware.
+          session = SessionStore()
+          session[SESSION_KEY] = str(user.pk)
+          session[BACKEND_SESSION_KEY] = "django.contrib.auth.backends.ModelBackend"
+          session[HASH_SESSION_KEY] = user.get_session_auth_hash()
+          session.save()
+
+          # Confirm Django accepts this session before passing its cookie to Chromium.
           client = Client()
-          client.force_login(user)
+          client.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
           authenticated_response = client.get("/", HTTP_HOST="127.0.0.1")
           if not authenticated_response.wsgi_request.user.is_authenticated:
-              raise SystemExit("Django test client did not retain the forced login session.")
-          print(client.cookies[settings.SESSION_COOKIE_NAME].value)
+              raise SystemExit("Django rejected the generated authenticated session.")
+          print(session.session_key)
           PY
           )"
           test -n "$SESSION_ID"
