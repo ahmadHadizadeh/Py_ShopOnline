@@ -29,6 +29,7 @@ jobs:
 
     env:
       DJANGO_DEBUG: "1"
+      SECRET_KEY: "storefront-browser-smoke-only-fixed-key-2026"
       DB_ENGINE: sqlite3
       PAYMENT_DEFAULT_GATEWAY: mock_gateway
 
