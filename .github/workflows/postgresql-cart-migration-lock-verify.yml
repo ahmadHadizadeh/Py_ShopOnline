@@ -1,9 +1,14 @@
 name: PostgreSQL cart migration lock-timeout verification
 
 on:
-  push:
+  pull_request:
     branches:
-      - test/cart-0004-lock-timeout
+      - main
+    paths:
+      - ".github/workflows/postgresql-cart-migration-lock-verify.yml"
+      - "cart/test_postgresql_migration_lock_timeout.py"
+      - "cart/migrations/0004_cartitem_nonnegative_unit_price_snapshot.py"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -39,7 +44,7 @@ jobs:
       PAYMENT_DEFAULT_GATEWAY: mock_gateway
 
     steps:
-      - name: Check out the exact test branch
+      - name: Check out the pull request revision
         uses: actions/checkout@v4
 
       - name: Set up Python
