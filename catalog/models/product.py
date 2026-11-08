@@ -1,4 +1,5 @@
 # catalog/models/Product
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.urls import reverse
 from catalog.utils import generate_unique_slug
@@ -73,6 +74,35 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+
+        if not self.pk or self.price is None:
+            return
+
+        persisted_price = type(self).objects.filter(pk=self.pk).values_list(
+            "price", flat=True
+        ).first()
+        if persisted_price is None or persisted_price == self.price:
+            return
+
+        invalid_variant = (
+            self.variants.filter(price_adjustment__lt=-self.price)
+            .order_by("pk")
+            .values_list("name", "value")
+            .first()
+        )
+        if invalid_variant:
+            variant_name, variant_value = invalid_variant
+            raise ValidationError(
+                {
+                    "price": (
+                        "تغییر قیمت پایه باعث منفی شدن قیمت نهایی تنوع "
+                        f"«{variant_name}: {variant_value}» می‌شود."
+                    )
+                }
+            )
 
     def save(self, *args, **kwargs):
         if not self.slug and self.name:

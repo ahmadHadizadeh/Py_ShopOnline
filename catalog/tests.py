@@ -422,6 +422,244 @@ class CategoryRootValidationRegressionTests(TestCase):
 
 
 
+class ProductVariantPriceValidationTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(
+            name="Variant Price Category",
+            slug="variant-price-category",
+        )
+        self.product = Product.objects.create(
+            name="Variant Price Product",
+            slug="variant-price-product",
+            price=Decimal("100.00"),
+            stock=5,
+            category=self.category,
+        )
+
+    def test_variant_full_clean_rejects_negative_final_price(self):
+        variant = ProductVariant(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=Decimal("-100.01"),
+        )
+
+        with self.assertRaises(ValidationError) as raised:
+            variant.full_clean()
+
+        self.assertIn("price_adjustment", raised.exception.message_dict)
+
+    def test_variant_full_clean_allows_zero_final_price_and_negative_adjustment(self):
+        variant = ProductVariant(
+            product=self.product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=Decimal("-100.00"),
+        )
+
+        self.assertIsNone(variant.full_clean())
+
+    def test_product_full_clean_rejects_price_change_that_makes_variant_negative(self):
+        ProductVariant.objects.create(
+            product=self.product,
+            name="حافظه",
+            value="نسخه گران‌تر",
+            price_adjustment=Decimal("-150.00"),
+        )
+        self.product.price = Decimal("149.99")
+
+        with self.assertRaises(ValidationError) as raised:
+            self.product.full_clean()
+
+        self.assertIn("price", raised.exception.message_dict)
+
+    def test_product_full_clean_allows_price_change_that_keeps_variant_at_zero(self):
+        ProductVariant.objects.create(
+            product=self.product,
+            name="حافظه",
+            value="نسخه",
+            price_adjustment=Decimal("-150.00"),
+        )
+        self.product.price = Decimal("150.00")
+
+        self.assertIsNone(self.product.full_clean())
+
+    def test_variant_used_in_cart_cannot_be_reassigned_to_another_product(self):
+        from cart.models import Cart, CartItem
+
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="مشکی",
+            price_adjustment=Decimal("0.00"),
+        )
+        other_product = Product.objects.create(
+            name="Other Variant Product",
+            slug="other-variant-product",
+            price=Decimal("200.00"),
+            stock=5,
+            category=self.category,
+        )
+        cart = Cart.objects.create(session_key="variant-price-validation")
+        CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            variant=variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("100.00"),
+            status="saved",
+        )
+        variant.product = other_product
+
+        with self.assertRaises(ValidationError) as raised:
+            variant.full_clean()
+
+        self.assertIn("product", raised.exception.message_dict)
+
+
+class ProductVariantPriceAdminValidationTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="variant-price-admin",
+            email="variant-price-admin@example.test",
+            password="TestPassword123!",
+        )
+        self.request = RequestFactory().post("/admin/")
+        self.request.user = self.admin_user
+        self.category = Category.objects.create(
+            name="Variant Admin Category",
+            slug="variant-admin-category",
+        )
+        self.product = Product.objects.create(
+            name="Variant Admin Product",
+            slug="variant-admin-product",
+            price=Decimal("100.00"),
+            stock=5,
+            category=self.category,
+        )
+
+    def _product_form_data(self, *, price):
+        return {
+            "name": self.product.name,
+            "name_en": self.product.name_en or "",
+            "brand": self.product.brand or "",
+            "slug": self.product.slug,
+            "image": "",
+            "description": self.product.description,
+            "review": self.product.review,
+            "price": str(price),
+            "old_price": "",
+            "stock": str(self.product.stock),
+            "is_active": "on" if self.product.is_active else "",
+            "highlights": self.product.highlights,
+            "guarantee": self.product.guarantee,
+            "delivery_info": self.product.delivery_info,
+            "category": str(self.product.category_id),
+            "related_products": [],
+        }
+
+    def test_product_admin_form_rejects_base_price_that_makes_existing_variant_negative(self):
+        ProductVariant.objects.create(
+            product=self.product,
+            name="حافظه",
+            value="نسخه",
+            price_adjustment=Decimal("-150.00"),
+        )
+        product_admin = admin.site._registry[Product]
+        form_class = product_admin.get_form(self.request, self.product)
+        form = form_class(
+            data=self._product_form_data(price=Decimal("50.00")),
+            instance=self.product,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("price", form.errors)
+
+    def test_variant_admin_form_rejects_negative_final_price(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=Decimal("-50.00"),
+        )
+        variant_admin = admin.site._registry[ProductVariant]
+        form_class = variant_admin.get_form(self.request, variant)
+        form = form_class(
+            data={
+                "product": str(self.product.pk),
+                "name": variant.name,
+                "value": variant.value,
+                "price_adjustment": "-100.01",
+            },
+            instance=variant,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("price_adjustment", form.errors)
+
+    def test_variant_admin_form_allows_zero_final_price(self):
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="آبی",
+            price_adjustment=Decimal("-50.00"),
+        )
+        variant_admin = admin.site._registry[ProductVariant]
+        form_class = variant_admin.get_form(self.request, variant)
+        form = form_class(
+            data={
+                "product": str(self.product.pk),
+                "name": variant.name,
+                "value": variant.value,
+                "price_adjustment": "-100.00",
+            },
+            instance=variant,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_variant_admin_form_blocks_reassignment_when_variant_is_in_cart(self):
+        from cart.models import Cart, CartItem
+
+        variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="سبز",
+            price_adjustment=Decimal("0.00"),
+        )
+        other_product = Product.objects.create(
+            name="Another Variant Admin Product",
+            slug="another-variant-admin-product",
+            price=Decimal("200.00"),
+            stock=5,
+            category=self.category,
+        )
+        cart = Cart.objects.create(session_key="variant-price-admin-validation")
+        CartItem.objects.create(
+            cart=cart,
+            product=self.product,
+            variant=variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("100.00"),
+            status="saved",
+        )
+
+        variant_admin = admin.site._registry[ProductVariant]
+        form_class = variant_admin.get_form(self.request, variant)
+        form = form_class(
+            data={
+                "product": str(other_product.pk),
+                "name": variant.name,
+                "value": variant.value,
+                "price_adjustment": "0.00",
+            },
+            instance=variant,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("product", form.errors)
+
+
 class ProductAdminUsabilityTests(TestCase):
     def test_product_fields_are_grouped_and_derived_status_is_read_only(self):
         product_admin = admin.site._registry[Product]
