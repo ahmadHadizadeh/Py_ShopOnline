@@ -1,0 +1,12 @@
+{
+  "name": "py-shop-online-frontend-assets",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned Tailwind CSS build tooling for the Django storefront",
+  "scripts": {
+    "build:css": "tailwindcss --config ./tailwind.config.js --input ./frontend/tailwind.css --output ./static/css/tailwind.min.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

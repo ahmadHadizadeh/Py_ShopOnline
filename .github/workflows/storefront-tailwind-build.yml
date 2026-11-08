@@ -6,6 +6,8 @@ on:
       - "ui/storefront-header-search-navigation-2026-11-07"
     paths:
       - ".github/workflows/storefront-tailwind-build.yml"
+      - "package.json"
+      - "package-lock.json"
       - "tailwind.config.js"
       - "frontend/tailwind.css"
       - "accounts/templates/**/*.html"
@@ -32,47 +34,27 @@ jobs:
       - name: Check out the source branch
         uses: actions/checkout@v4
 
-      - name: Download and verify the pinned Tailwind CLI
+      - name: Set up the pinned Node.js runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Install the exact Tailwind dependency graph
         shell: bash
         run: |
           set -euo pipefail
 
-          version="3.4.17"
-          asset="tailwindcss-linux-x64"
-          release_url="https://github.com/tailwindlabs/tailwindcss/releases/download/v${version}"
+          if [ -f package-lock.json ]; then
+            npm ci --ignore-scripts --no-audit --no-fund
+          else
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+            npm ci --ignore-scripts --no-audit --no-fund
+          fi
 
-          curl --fail --show-error --silent --location --retry 3 \
-            "${release_url}/${asset}" \
-            --output "${RUNNER_TEMP}/${asset}"
-          curl --fail --show-error --silent --location --retry 3 \
-            "${release_url}/sha256sums.txt" \
-            --output "${RUNNER_TEMP}/tailwindcss-sha256sums.txt"
-
-          grep -E "[[:space:]]+[*]?${asset}$" \
-            "${RUNNER_TEMP}/tailwindcss-sha256sums.txt" \
-            > "${RUNNER_TEMP}/tailwindcss.sha256"
-
-          test "$(wc -l < "${RUNNER_TEMP}/tailwindcss.sha256")" -eq 1
-          (
-            cd "${RUNNER_TEMP}"
-            sha256sum --check tailwindcss.sha256
-          )
-
-          chmod +x "${RUNNER_TEMP}/${asset}"
-          "${RUNNER_TEMP}/${asset}" --help >/dev/null
+          test "$(node -p "require('./node_modules/tailwindcss/package.json').version")" = "3.4.17"
 
       - name: Compile the production CSS
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          "${RUNNER_TEMP}/tailwindcss-linux-x64" \
-            --config ./tailwind.config.js \
-            --input ./frontend/tailwind.css \
-            --output ./static/css/tailwind.min.css \
-            --minify
-
-          test -s ./static/css/tailwind.min.css
+        run: npm run build:css
 
       - name: Verify representative storefront and runtime selectors
         shell: bash
@@ -105,17 +87,17 @@ jobs:
           )
           PY
 
-      - name: Commit only the generated static CSS
+      - name: Commit the lockfile and generated static CSS
         shell: bash
         run: |
           set -euo pipefail
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- static/css/tailwind.min.css
+          git add -- package-lock.json static/css/tailwind.min.css
 
           if git diff --cached --quiet; then
-            echo "Generated Tailwind CSS is already up to date."
+            echo "Tailwind lockfile and generated CSS are already up to date."
           else
             git commit -m "Build static Tailwind CSS v3.4.17"
             git push origin "HEAD:${GITHUB_REF_NAME}"
