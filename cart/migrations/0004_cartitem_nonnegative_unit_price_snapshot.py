@@ -1,6 +1,16 @@
 from django.db import migrations, models
 
 
+def set_postgresql_lock_timeout(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+
+    # This migration is atomic by default, so SET LOCAL is scoped to this
+    # migration transaction and is automatically reset on commit or rollback.
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute("SET LOCAL lock_timeout = '5s'")
+
+
 def reject_negative_cart_item_snapshots(apps, schema_editor):
     CartItem = apps.get_model("cart", "CartItem")
     invalid_count = CartItem.objects.filter(unit_price_snapshot__lt=0).count()
@@ -20,6 +30,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(
+            set_postgresql_lock_timeout,
+            reverse_code=migrations.RunPython.noop,
+        ),
         migrations.RunPython(
             reject_negative_cart_item_snapshots,
             reverse_code=migrations.RunPython.noop,
