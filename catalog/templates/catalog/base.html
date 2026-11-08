@@ -51,8 +51,8 @@
 
     <!-- Header -->
     <header id="storefront-header" class="bg-white shadow-md sticky top-0 z-50">
-        <nav class="container mx-auto px-3 sm:px-4 lg:px-8 py-3 flex items-center justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-3 lg:gap-10">
+        <nav class="container mx-auto px-3 sm:px-4 lg:px-8 py-3 flex items-center justify-between gap-2 sm:gap-3">
+            <div class="flex min-w-0 items-center gap-2 lg:gap-10">
                 <a href="{% url 'catalog:product_list' %}" class="flex items-center gap-2 text-xl sm:text-2xl font-extrabold text-indigo-700 hover:scale-105 transition-transform">
                     <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
                     <span class="whitespace-nowrap tracking-tight italic">آنلاین شاپ</span>
@@ -77,7 +77,7 @@
                 </ul>
             </div>
 
-            <div class="flex shrink-0 items-center gap-2 sm:gap-5">
+            <div class="flex shrink-0 items-center gap-1 sm:gap-5">
                 <form id="desktop-search-form" method="get" action="{% if category %}{{ category.get_absolute_url }}{% else %}{% url 'catalog:product_list' %}{% endif %}" role="search" class="relative hidden sm:block">
                     <label for="desktop-search-input" class="sr-only">جست‌وجو در محصولات</label>
                     <input type="search" id="desktop-search-input" name="q" value="{{ search_query|default:'' }}" maxlength="120" autocomplete="off" placeholder="جست‌وجوی محصولات..." class="bg-gray-100 border-none rounded-full py-2 pl-4 pr-10 text-sm focus:ring-2 focus:ring-indigo-500 w-48 lg:w-64 transition-all">
@@ -99,8 +99,8 @@
                     <div id="account-dropdown-wrapper" class="relative">
                         <button id="accountDropdown" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="accountMenu" class="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 sm:px-4 py-2.5 rounded-full text-xs sm:text-sm font-bold transition">
                             <i class="fa-solid fa-user text-indigo-600" aria-hidden="true"></i>
-                            <span>حساب کاربری</span>
-                            <i id="accountChevron" class="fa-solid fa-chevron-down text-xs transition duration-200" aria-hidden="true"></i>
+                            <span class="sr-only sm:not-sr-only sm:inline">حساب کاربری</span>
+                            <i id="accountChevron" class="hidden sm:inline-block fa-solid fa-chevron-down text-xs transition duration-200" aria-hidden="true"></i>
                         </button>
                         <div id="accountMenu" aria-hidden="true" class="invisible opacity-0 translate-y-2 pointer-events-none transition-all duration-200 absolute left-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
                             <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition">
@@ -122,7 +122,7 @@
                         </div>
                     </div>
                 {% else %}
-                    <button type="button" data-otp-open aria-haspopup="dialog" aria-controls="otp-modal" class="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-lg shadow-indigo-200 transition active:scale-95">
+                    <button type="button" data-otp-open aria-haspopup="dialog" aria-controls="otp-modal" class="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white px-2 sm:px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-lg shadow-indigo-200 transition active:scale-95">
                         <span class="sm:hidden">ورود</span>
                         <span class="hidden sm:inline">ورود / ثبت‌نام</span>
                     </button>

@@ -53,6 +53,10 @@ with sync_playwright() as playwright:
     expect_hidden(mobile, "#desktop-search-form")
     expect_visible(mobile, "#mobile-search-toggle")
     assert_no_horizontal_overflow(mobile, 390)
+    for width in (320, 360):
+        mobile.set_viewport_size({"width": width, "height": 844})
+        assert_no_horizontal_overflow(mobile, width)
+    mobile.set_viewport_size({"width": 390, "height": 844})
     mobile.screenshot(path=str(ARTIFACTS / "storefront-mobile-home.png"), full_page=True)
 
     # Mobile category drawer and its server-rendered active category link.
@@ -137,6 +141,15 @@ with sync_playwright() as playwright:
             f"body excerpt: {body_excerpt!r}"
         )
     expect_visible(authenticated, "#accountDropdown")
+    for width in (320, 360, 390, 640, 767, 768, 1024, 1440):
+        authenticated.set_viewport_size({"width": width, "height": 844})
+        assert_no_horizontal_overflow(authenticated, width)
+    authenticated.set_viewport_size({"width": 390, "height": 844})
+    authenticated.screenshot(
+        path=str(ARTIFACTS / "storefront-authenticated-mobile.png"),
+        full_page=True,
+    )
+    authenticated.set_viewport_size({"width": 1440, "height": 900})
     authenticated.locator("#accountDropdown").focus()
     authenticated.keyboard.press("Enter")
     assert authenticated.locator("#accountDropdown").get_attribute("aria-expanded") == "true"

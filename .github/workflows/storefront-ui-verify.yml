@@ -7,6 +7,10 @@ on:
     paths:
       - ".github/workflows/storefront-ui-verify.yml"
       - ".github/scripts/storefront-browser-smoke.py"
+      - "package.json"
+      - "package-lock.json"
+      - "tailwind.config.js"
+      - "frontend/tailwind.css"
       - "accounts/templates/registration/login.html"
       - "catalog/context_processors.py"
       - "catalog/templates/catalog/base.html"
@@ -36,6 +40,20 @@ jobs:
     steps:
       - name: Check out the source branch
         uses: actions/checkout@v4
+
+      - name: Set up the pinned Node.js runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Build the exact storefront CSS used by browser verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
+          test "$(node -p "require('./node_modules/tailwindcss/package.json').version")" = "3.4.17"
+          npm run build:css
 
       - name: Set up Python
         uses: actions/setup-python@v5

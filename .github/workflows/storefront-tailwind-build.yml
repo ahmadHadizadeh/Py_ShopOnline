@@ -44,12 +44,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -f package-lock.json ]; then
-            npm ci --ignore-scripts --no-audit --no-fund
-          else
-            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-            npm ci --ignore-scripts --no-audit --no-fund
-          fi
+          test -f package-lock.json
+          npm ci --ignore-scripts --no-audit --no-fund
 
           test "$(node -p "require('./node_modules/tailwindcss/package.json').version")" = "3.4.17"
 
