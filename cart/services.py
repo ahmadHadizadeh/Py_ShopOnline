@@ -6,11 +6,27 @@ from django.db.models import Sum
 
 from cart.models import Cart, CartItem
 from catalog.models.product import Product
+from catalog.models.variant import ProductVariant
+
+
+def _lock_variant_for_product(product, variant_id):
+    if variant_id is None:
+        return None
+
+    try:
+        return (
+            ProductVariant.objects.select_for_update()
+            .get(pk=variant_id, product_id=product.pk)
+        )
+    except ProductVariant.DoesNotExist:
+        raise ValidationError(
+            "واریانت انتخاب‌شده دیگر به این محصول تعلق ندارد یا در دسترس نیست."
+        ) from None
 
 
 def _validate_variant(product, variant):
     if variant is None:
-        if product.variants.filter().exists():
+        if product.variants.exists():
             raise ValidationError("برای این محصول باید یک واریانت انتخاب کنید.")
         return
     if variant.product_id != product.id:
@@ -18,8 +34,16 @@ def _validate_variant(product, variant):
 
 
 def _unit_price(product, variant=None):
+    if variant is not None and variant.product_id != product.pk:
+        raise ValidationError("واریانت انتخاب‌شده متعلق به این محصول نیست.")
+
     adjustment = variant.price_adjustment if variant is not None else Decimal("0")
-    return product.price + adjustment
+    final_price = product.price + adjustment
+    if final_price < 0:
+        raise ValidationError(
+            "قیمت نهایی محصول پس از اعمال تغییر قیمت واریانت نمی‌تواند منفی باشد."
+        )
+    return final_price
 
 
 def _active_quantity_for_product(cart, product_id, *, exclude_item_id=None):
@@ -138,6 +162,18 @@ def merge_guest_cart_to_user(request, *, user=None, guest_session_key=None):
         .order_by("id")
     }
 
+    variant_ids = {
+        item.variant_id
+        for item in guest_items + user_items
+        if item.variant_id is not None
+    }
+    locked_variants = {
+        variant.pk: variant
+        for variant in ProductVariant.objects.select_for_update()
+        .filter(pk__in=variant_ids)
+        .order_by("pk")
+    }
+
     guest_by_identity = {
         (item.product_id, item.variant_id): item for item in guest_items
     }
@@ -220,12 +256,18 @@ def merge_guest_cart_to_user(request, *, user=None, guest_session_key=None):
             final_status = candidate["status"]
             variant_id = identity[1]
             variant = None
-            if variant_id:
-                variant = guest_item.variant if guest_item is not None else user_item.variant
+            if variant_id is not None:
+                variant = locked_variants.get(variant_id)
+                if variant is None:
+                    raise ValidationError(
+                        "واریانت یکی از آیتم‌های سبد دیگر در دسترس نیست."
+                    )
 
+            _validate_variant(product, variant)
             final_unit_price = _unit_price(product, variant)
 
             if user_item is not None:
+                user_item.variant = variant
                 user_item.quantity = final_quantity
                 user_item.status = final_status
                 user_item.unit_price_snapshot = final_unit_price
@@ -243,6 +285,7 @@ def merge_guest_cart_to_user(request, *, user=None, guest_session_key=None):
                 continue
 
             if guest_item is not None:
+                guest_item.variant = variant
                 guest_item.cart = user_cart
                 guest_item.quantity = final_quantity
                 guest_item.status = final_status
@@ -275,11 +318,17 @@ def add_product_to_cart(cart, product, quantity=1, variant=None):
     if not product.is_available:
         raise ValidationError("این محصول در حال حاضر قابل خرید نیست.")
 
+    variant = _lock_variant_for_product(
+        product, variant.pk if variant is not None else None
+    )
     _validate_variant(product, variant)
     item = (
         cart.items.select_for_update(of=("self",))
         .select_related("product", "variant")
-        .filter(product_id=product.pk, variant=variant)
+        .filter(
+            product_id=product.pk,
+            variant_id=variant.pk if variant is not None else None,
+        )
         .first()
     )
     current_item_quantity = item.quantity if item is not None else 0
@@ -296,6 +345,7 @@ def add_product_to_cart(cart, product, quantity=1, variant=None):
     unit_price = _unit_price(product, variant)
     if item:
         item.product = product
+        item.variant = variant
         item.quantity = current_item_quantity + quantity
         item.status = CartItem.STATUS_ACTIVE
         item.unit_price_snapshot = unit_price
@@ -355,9 +405,12 @@ def update_cart_item_quantity_by_id(cart, item_id, quantity):
             "مجموع تعداد این محصول در تمام واریانت‌های سبد از موجودی فعلی بیشتر است."
         )
 
+    variant = _lock_variant_for_product(product, item.variant_id)
+    _validate_variant(product, variant)
     item.product = product
+    item.variant = variant
     item.quantity = quantity
-    item.unit_price_snapshot = _unit_price(product, item.variant)
+    item.unit_price_snapshot = _unit_price(product, variant)
     item.full_clean()
     item.save(update_fields=["quantity", "unit_price_snapshot", "updated"])
     return item
@@ -397,9 +450,12 @@ def toggle_cart_item_status_by_id(cart, item_id, to_status):
                 "مجموع تعداد این محصول در تمام واریانت‌های سبد از موجودی فعلی بیشتر است."
             )
 
+    variant = _lock_variant_for_product(product, item.variant_id)
+    _validate_variant(product, variant)
     item.product = product
+    item.variant = variant
     item.status = to_status
-    item.unit_price_snapshot = _unit_price(product, item.variant)
+    item.unit_price_snapshot = _unit_price(product, variant)
     item.full_clean()
     item.save(update_fields=["status", "unit_price_snapshot", "updated"])
     return item

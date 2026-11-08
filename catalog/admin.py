@@ -63,41 +63,60 @@ class ProductVariantAdminForm(forms.ModelForm):
         if selected_product is None:
             return cleaned_data
 
-        locked_variant = None
         old_product_id = None
         if self.instance.pk:
-            try:
-                locked_variant = ProductVariant.objects.select_for_update().get(
-                    pk=self.instance.pk
-                )
-            except ProductVariant.DoesNotExist:
+            # Read the current parent id without locking the variant. All writers
+            # acquire Product locks before Variant locks, so the lock order stays
+            # consistent with cart pricing operations.
+            variant_state = (
+                ProductVariant.objects.filter(pk=self.instance.pk)
+                .values("product_id")
+                .first()
+            )
+            if variant_state is None:
                 self.add_error(None, "تنوع برای اعتبارسنجی نهایی پیدا نشد.")
                 return cleaned_data
-
-            old_product_id = locked_variant.product_id
-            for field in self.instance._meta.concrete_fields:
-                setattr(
-                    self.instance,
-                    field.attname,
-                    getattr(locked_variant, field.attname),
-                )
+            old_product_id = variant_state["product_id"]
 
         new_product_id = selected_product.pk
         product_ids = {new_product_id}
         if old_product_id is not None:
             product_ids.add(old_product_id)
 
-        # Lock old and new parent products in a stable order. This serializes
-        # variant edits with Product price edits and the cart's Product locks.
+        # Lock old and new parent products in a stable order before locking
+        # the Variant row. This matches the cart's Product -> Variant order.
         locked_products = {
             product.pk: product
             for product in Product.objects.select_for_update()
             .filter(pk__in=product_ids)
             .order_by("pk")
         }
-        if new_product_id not in locked_products:
-            self.add_error("product", "محصول انتخاب‌شده دیگر در دسترس نیست.")
+        if new_product_id not in locked_products or (
+            old_product_id is not None and old_product_id not in locked_products
+        ):
+            self.add_error("product", "محصول انتخاب‌شده یا قبلی دیگر در دسترس نیست.")
             return cleaned_data
+
+        locked_variant = None
+        if self.instance.pk:
+            locked_variant = (
+                ProductVariant.objects.select_for_update()
+                .filter(pk=self.instance.pk)
+                .first()
+            )
+            if locked_variant is None or locked_variant.product_id != old_product_id:
+                self.add_error(
+                    None,
+                    "وضعیت واریانت هم‌زمان تغییر کرده است؛ فرم را تازه‌سازی و دوباره ثبت کنید.",
+                )
+                return cleaned_data
+
+            for field in self.instance._meta.concrete_fields:
+                setattr(
+                    self.instance,
+                    field.attname,
+                    getattr(locked_variant, field.attname),
+                )
 
         if (
             locked_variant is not None

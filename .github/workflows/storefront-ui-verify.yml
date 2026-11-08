@@ -17,8 +17,15 @@ on:
       - "catalog/templates/catalog/home.html"
       - "catalog/templates/catalog/details.html"
       - "catalog/templates/catalog/partials/_otp_login_modal.html"
+      - "catalog/admin.py"
+      - "catalog/models/product.py"
+      - "catalog/models/variant.py"
       - "catalog/tests.py"
       - "catalog/views.py"
+      - "cart/models.py"
+      - "cart/services.py"
+      - "cart/tests.py"
+      - "cart/migrations/**"
       - "core/settings.py"
       - "static/js/storefront/**/*.js"
   workflow_dispatch:
@@ -76,6 +83,7 @@ jobs:
           python manage.py check
           pytest -q catalog/tests.py \
             cart/tests.py::CartVariantIntegrationTests \
+            cart/tests.py::CartVariantPriceGuardTests \
             cart/tests.py::CheckoutVariantIntegrationTests \
             accounts/tests.py::test_login_page_renders_otp_entry
 

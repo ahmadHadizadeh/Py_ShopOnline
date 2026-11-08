@@ -1224,6 +1224,181 @@ class CheckoutOrderIntegrityContractTests(TestCase):
 
 
 
+
+class CartVariantPriceGuardTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="variant-price-guard-user",
+            password="testpass123",
+        )
+        self.category = Category.objects.create(
+            name="Variant Price Guard Category",
+            slug="variant-price-guard-category",
+        )
+        self.product = Product.objects.create(
+            name="Variant Price Guard Product",
+            slug="variant-price-guard-product",
+            price=100,
+            stock=10,
+            is_active=True,
+            category=self.category,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            name="رنگ",
+            value="قرمز",
+            price_adjustment=Decimal("-20.00"),
+        )
+        self.cart = Cart.objects.create(
+            user=self.user,
+            status=Cart.STATUS_ACTIVE,
+        )
+
+    def test_add_uses_fresh_variant_value_instead_of_stale_view_instance(self):
+        stale_variant = ProductVariant.objects.get(pk=self.variant.pk)
+        ProductVariant.objects.filter(pk=self.variant.pk).update(
+            price_adjustment=Decimal("35.00")
+        )
+
+        item = add_product_to_cart(
+            cart=self.cart,
+            product=self.product,
+            quantity=1,
+            variant=stale_variant,
+        )
+
+        self.assertEqual(item.unit_price_snapshot, Decimal("135.00"))
+
+    def test_add_rejects_negative_final_price_without_creating_cart_item(self):
+        stale_variant = ProductVariant.objects.get(pk=self.variant.pk)
+        ProductVariant.objects.filter(pk=self.variant.pk).update(
+            price_adjustment=Decimal("-100.01")
+        )
+
+        with self.assertRaises(ValidationError):
+            add_product_to_cart(
+                cart=self.cart,
+                product=self.product,
+                quantity=1,
+                variant=stale_variant,
+            )
+
+        self.assertFalse(self.cart.items.exists())
+
+    def test_zero_final_price_with_negative_adjustment_is_allowed(self):
+        ProductVariant.objects.filter(pk=self.variant.pk).update(
+            price_adjustment=Decimal("-100.00")
+        )
+
+        item = add_product_to_cart(
+            cart=self.cart,
+            product=self.product,
+            quantity=1,
+            variant=self.variant,
+        )
+
+        self.assertEqual(item.unit_price_snapshot, Decimal("0.00"))
+
+    def test_quantity_update_rejects_new_negative_variant_price_atomically(self):
+        item = CartItem.objects.create(
+            cart=self.cart,
+            product=self.product,
+            variant=self.variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("80.00"),
+            status=CartItem.STATUS_ACTIVE,
+        )
+        ProductVariant.objects.filter(pk=self.variant.pk).update(
+            price_adjustment=Decimal("-100.01")
+        )
+
+        with self.assertRaises(ValidationError):
+            update_cart_item_quantity_by_id(self.cart, item.pk, 2)
+
+        item.refresh_from_db()
+        self.assertEqual(item.quantity, 1)
+        self.assertEqual(item.unit_price_snapshot, Decimal("80.00"))
+
+    def test_reactivating_saved_item_rejects_negative_variant_price(self):
+        item = CartItem.objects.create(
+            cart=self.cart,
+            product=self.product,
+            variant=self.variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("80.00"),
+            status=CartItem.STATUS_SAVED,
+        )
+        ProductVariant.objects.filter(pk=self.variant.pk).update(
+            price_adjustment=Decimal("-100.01")
+        )
+
+        with self.assertRaises(ValidationError):
+            toggle_cart_item_status_by_id(
+                self.cart, item.pk, CartItem.STATUS_ACTIVE
+            )
+
+        item.refresh_from_db()
+        self.assertEqual(item.status, CartItem.STATUS_SAVED)
+        self.assertEqual(item.unit_price_snapshot, Decimal("80.00"))
+
+    def test_guest_merge_rejects_negative_variant_price_and_rolls_back(self):
+        request = _merge_request(self.user)
+        guest_cart = _guest_cart(request)
+        guest_item = CartItem.objects.create(
+            cart=guest_cart,
+            product=self.product,
+            variant=self.variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("80.00"),
+            status=CartItem.STATUS_SAVED,
+        )
+        ProductVariant.objects.filter(pk=self.variant.pk).update(
+            price_adjustment=Decimal("-100.01")
+        )
+
+        with self.assertRaises(ValidationError):
+            merge_guest_cart_to_user(
+                request,
+                user=self.user,
+                guest_session_key=request.session.session_key,
+            )
+
+        self.assertTrue(Cart.objects.filter(pk=guest_cart.pk).exists())
+        self.assertTrue(CartItem.objects.filter(pk=guest_item.pk, cart=guest_cart).exists())
+        self.assertFalse(
+            Cart.objects.filter(user=self.user, status=Cart.STATUS_ACTIVE).exists()
+        )
+
+    def test_cart_item_model_validation_rejects_negative_snapshot(self):
+        item = CartItem(
+            cart=self.cart,
+            product=self.product,
+            variant=self.variant,
+            quantity=1,
+            unit_price_snapshot=Decimal("-0.01"),
+            status=CartItem.STATUS_SAVED,
+        )
+
+        with self.assertRaises(ValidationError) as raised:
+            item.full_clean()
+
+        self.assertIn("unit_price_snapshot", raised.exception.message_dict)
+
+    def test_database_constraint_rejects_negative_snapshot_without_full_clean(self):
+        from django.db import IntegrityError, transaction
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CartItem.objects.create(
+                    cart=self.cart,
+                    product=self.product,
+                    variant=self.variant,
+                    quantity=1,
+                    unit_price_snapshot=Decimal("-0.01"),
+                    status=CartItem.STATUS_SAVED,
+                )
+
+
 class SharedProductVariantStockTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
