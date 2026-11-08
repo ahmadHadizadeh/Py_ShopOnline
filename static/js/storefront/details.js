@@ -19,16 +19,32 @@
         const wishlistMessage = document.getElementById("wishlist-message");
         const variantSelect = document.getElementById("product-variant");
         const priceDisplay = document.getElementById("product-price-display");
+        const oldPriceDisplay = document.getElementById("product-old-price-display");
+        const discountBadge = document.getElementById("product-discount-badge");
 
         if (variantSelect && priceDisplay) {
             const basePrice = Number(priceDisplay.dataset.basePrice || 0);
+            const oldPrice = oldPriceDisplay
+                ? Number(oldPriceDisplay.dataset.oldPrice)
+                : Number.NaN;
             const formatPrice = value => new Intl.NumberFormat("fa-IR", {
                 maximumFractionDigits: 0,
             }).format(value);
             variantSelect.addEventListener("change", () => {
                 const selected = variantSelect.options[variantSelect.selectedIndex];
                 const adjustment = Number(selected?.dataset.priceAdjustment || 0);
-                priceDisplay.textContent = formatPrice(basePrice + adjustment);
+                const finalPrice = basePrice + adjustment;
+                const hasDiscount = Number.isFinite(finalPrice)
+                    && Number.isFinite(oldPrice)
+                    && oldPrice > finalPrice;
+
+                priceDisplay.textContent = formatPrice(finalPrice);
+                if (oldPriceDisplay) {
+                    oldPriceDisplay.classList.toggle("hidden", !hasDiscount);
+                }
+                if (discountBadge) {
+                    discountBadge.classList.toggle("hidden", !hasDiscount);
+                }
             });
         }
 

@@ -139,8 +139,15 @@
                 <div class="mb-6">
                     <div class="flex items-center gap-3 mb-2">
                         {% if product.old_price %}
-                            <span class="text-base text-gray-400 line-through">{{ product.old_price|floatformat:0 }}</span>
-                            <span class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">تخفیف</span>
+                            <span
+                                id="product-old-price-display"
+                                class="text-base text-gray-400 line-through{% if product.old_price <= product.price %} hidden{% endif %}"
+                                data-old-price="{{ product.old_price }}"
+                            >{{ product.old_price|floatformat:0 }}</span>
+                            <span
+                                id="product-discount-badge"
+                                class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full{% if product.old_price <= product.price %} hidden{% endif %}"
+                            >تخفیف</span>
                         {% endif %}
                     </div>
                     <div>

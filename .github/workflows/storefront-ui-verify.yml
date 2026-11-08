@@ -71,10 +71,13 @@ jobs:
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
 
-      - name: Run Django checks and focused regression tests
+      - name: Run Django checks and product/cart/checkout regression tests
         run: |
           python manage.py check
-          pytest -q catalog/tests.py accounts/tests.py::test_login_page_renders_otp_entry
+          pytest -q catalog/tests.py \
+            cart/tests.py::CartVariantIntegrationTests \
+            cart/tests.py::CheckoutVariantIntegrationTests \
+            accounts/tests.py::test_login_page_renders_otp_entry
 
       - name: Prepare isolated browser fixtures and authenticated session
         shell: bash
@@ -131,7 +134,8 @@ jobs:
                   "brand": "NorthwindBrowser",
                   "description": "Storefront browser smoke fixture",
                   "highlights": "RTX Browser Test",
-                  "price": Decimal("1500.00"),
+                  "price": Decimal("2100.00"),
+                  "old_price": Decimal("2000.00"),
                   "stock": 5,
                   "is_active": True,
                   "category": category,
@@ -141,6 +145,12 @@ jobs:
               product=detail_product,
               name="رنگ",
               value="قرمز",
+              defaults={"price_adjustment": Decimal("-350.00")},
+          )
+          ProductVariant.objects.update_or_create(
+              product=detail_product,
+              name="رنگ",
+              value="آبی",
               defaults={"price_adjustment": Decimal("250.00")},
           )
           user, _ = get_user_model().objects.get_or_create(

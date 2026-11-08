@@ -162,12 +162,46 @@ with sync_playwright() as playwright:
     mobile.locator('[data-quantity-action="decrease"]').click()
     assert quantity_input.input_value() == "1"
 
-    variant_option = mobile.locator("#product-variant option:not([disabled])").first
-    mobile.locator("#product-variant").select_option(variant_option.get_attribute("value"))
-    expected_price = mobile.evaluate(
+    old_price_display = "#product-old-price-display"
+    discount_badge = "#product-discount-badge"
+    expect_hidden(mobile, old_price_display)
+    expect_hidden(mobile, discount_badge)
+
+    discounted_variant = mobile.locator(
+        '#product-variant option[data-price-adjustment="-350.00"]'
+    )
+    assert discounted_variant.count() == 1
+    mobile.locator("#product-variant").select_option(
+        discounted_variant.get_attribute("value")
+    )
+    expected_discounted_price = mobile.evaluate(
         "() => new Intl.NumberFormat('fa-IR', {maximumFractionDigits: 0}).format(1750)"
     )
-    assert mobile.locator("#product-price-display").inner_text() == expected_price
+    assert mobile.locator("#product-price-display").inner_text() == expected_discounted_price
+    expect_visible(mobile, old_price_display)
+    expect_visible(mobile, discount_badge)
+
+    non_discounted_variant = mobile.locator(
+        '#product-variant option[data-price-adjustment="250.00"]'
+    )
+    assert non_discounted_variant.count() == 1
+    mobile.locator("#product-variant").select_option(
+        non_discounted_variant.get_attribute("value")
+    )
+    expected_non_discounted_price = mobile.evaluate(
+        "() => new Intl.NumberFormat('fa-IR', {maximumFractionDigits: 0}).format(2350)"
+    )
+    assert mobile.locator("#product-price-display").inner_text() == expected_non_discounted_price
+    expect_hidden(mobile, old_price_display)
+    expect_hidden(mobile, discount_badge)
+
+    # Switching back must restore the discount using the newly selected final price.
+    mobile.locator("#product-variant").select_option(
+        discounted_variant.get_attribute("value")
+    )
+    assert mobile.locator("#product-price-display").inner_text() == expected_discounted_price
+    expect_visible(mobile, old_price_display)
+    expect_visible(mobile, discount_badge)
 
     mobile.locator("#open-image-modal").click()
     expect_visible(mobile, "#image-modal")

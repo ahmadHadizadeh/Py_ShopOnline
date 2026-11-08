@@ -211,6 +211,79 @@ class WishlistServiceTests(BaseTestCase):
             toggle_wishlist(None, self.product1.pk)
 
 class ProductDetailViewTests(BaseTestCase):
+    def test_product_detail_shows_discount_when_reference_price_exceeds_base_price(self):
+        product = Product.objects.create(
+            name="Discounted Detail Product",
+            slug="discounted-detail-product",
+            price=Decimal("1500.00"),
+            old_price=Decimal("2000.00"),
+            stock=5,
+            category=self.category,
+        )
+
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="product-old-price-display"')
+        self.assertContains(response, 'data-old-price="2000.00"')
+        self.assertContains(
+            response,
+            'class="text-base text-gray-400 line-through"',
+        )
+        self.assertContains(response, 'id="product-discount-badge"')
+        self.assertContains(
+            response,
+            'class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full"',
+        )
+
+    def test_product_detail_hides_discount_when_reference_price_is_not_higher(self):
+        for index, base_price in enumerate(("2000.00", "2100.00")):
+            with self.subTest(base_price=base_price):
+                product = Product.objects.create(
+                    name="No Discount Detail Product",
+                    slug=f"no-discount-detail-product-{index}",
+                    price=Decimal(base_price),
+                    old_price=Decimal("2000.00"),
+                    stock=5,
+                    category=self.category,
+                )
+
+                response = self.client.get(
+                    reverse("catalog:product_detail", kwargs={"slug": product.slug})
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'id="product-old-price-display"')
+                self.assertContains(response, 'data-old-price="2000.00"')
+                self.assertContains(
+                    response,
+                    'class="text-base text-gray-400 line-through hidden"',
+                )
+                self.assertContains(response, 'id="product-discount-badge"')
+                self.assertContains(
+                    response,
+                    'class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full hidden"',
+                )
+
+    def test_product_detail_does_not_render_discount_without_reference_price(self):
+        product = Product.objects.create(
+            name="No Reference Price Product",
+            slug="no-reference-price-product",
+            price=Decimal("1500.00"),
+            stock=5,
+            category=self.category,
+        )
+
+        response = self.client.get(
+            reverse("catalog:product_detail", kwargs={"slug": product.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="product-old-price-display"')
+        self.assertNotContains(response, 'id="product-discount-badge"')
+
     def test_product_detail_renders_required_variant_selector(self):
         product = Product.objects.create(
             name="Variant Product",
