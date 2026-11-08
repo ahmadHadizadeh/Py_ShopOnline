@@ -73,7 +73,7 @@ with sync_playwright() as playwright:
         if width < 640:
             image_frame_width = mobile.locator("#product-grid article").first.locator(
                 ":scope > div"
-            ).evaluate("(frame) => frame.getBoundingClientRect().width")
+            ).first.evaluate("(frame) => frame.getBoundingClientRect().width")
             assert image_frame_width <= 112.5, (
                 f"Mobile product image frame is not compact at {width}px: {image_frame_width}"
             )
