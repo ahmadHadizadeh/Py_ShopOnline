@@ -156,6 +156,22 @@ with sync_playwright() as playwright:
     assert desktop_card_transform != "none", (
         "Desktop product card hover treatment did not activate."
     )
+    mobile.emulate_media(reduced_motion="reduce")
+    reduced_desktop_transform = desktop_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    reduced_desktop_transition = desktop_card.evaluate(
+        "(card) => getComputedStyle(card).transitionProperty"
+    )
+    assert reduced_desktop_transform == "none", (
+        "Product card still moves on hover when reduced motion is requested: "
+        f"{reduced_desktop_transform}"
+    )
+    assert reduced_desktop_transition == "none", (
+        "Product card still transitions on hover when reduced motion is requested: "
+        f"{reduced_desktop_transition}"
+    )
+    mobile.emulate_media(reduced_motion="no-preference")
     mobile.mouse.move(0, 0)
     mobile.locator("#desktop-search-input").fill("NorthwindBrowser")
     expect_visible(mobile, "#desktop-search-suggestions")
