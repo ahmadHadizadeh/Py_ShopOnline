@@ -489,11 +489,11 @@ class HomepageMerchandisingTests(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            'class="product-price text-xl font-black text-indigo-700">1,234,568</span>',
+            'data-price-role="current" class="product-price text-xl font-black tabular-nums text-indigo-700">1,234,568</span>',
         )
         self.assertContains(
             response,
-            'class="mb-0.5 text-xs text-gray-400 line-through">1,500,001</span>',
+            'data-price-role="reference" class="mb-0.5 text-xs font-medium text-slate-400 line-through">1,500,001</span>',
         )
 
 
