@@ -8,6 +8,7 @@ on:
       - "feat/homepage-premium-redesign-2026-11-09"
     paths:
       - ".github/workflows/storefront-tailwind-build.yml"
+      - ".github/scripts/storefront-browser-smoke.py"
       - "package.json"
       - "package-lock.json"
       - "tailwind.config.js"
