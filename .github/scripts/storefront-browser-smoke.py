@@ -96,6 +96,10 @@ with sync_playwright() as playwright:
     mobile.locator("#mobile-search-toggle").click()
     expect_visible(mobile, "#mobile-search-panel")
     mobile.locator("#mobile-search-input").fill("NorthwindBrowser")
+    expect_visible(mobile, "#mobile-search-suggestions")
+    mobile_suggestions = mobile.locator("#mobile-search-suggestions a[role='option']")
+    assert 0 < mobile_suggestions.count() <= 6
+    assert mobile_suggestions.first.get_attribute("href").startswith("/product/")
     mobile.locator("#mobile-search-panel button[type='submit']").click()
     mobile.wait_for_url("**/category/browser-test-category/?q=NorthwindBrowser")
     assert "نتایج جست‌وجو" in mobile.locator("#products-list h2").inner_text()
@@ -131,6 +135,9 @@ with sync_playwright() as playwright:
     assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
     mobile.screenshot(path=str(ARTIFACTS / "storefront-desktop-home.png"), full_page=True)
     mobile.locator("#desktop-search-input").fill("NorthwindBrowser")
+    expect_visible(mobile, "#desktop-search-suggestions")
+    desktop_suggestions = mobile.locator("#desktop-search-suggestions a[role='option']")
+    assert 0 < desktop_suggestions.count() <= 6
     mobile.locator("#desktop-search-form button[type='submit']").click()
     mobile.wait_for_url("**/?q=NorthwindBrowser")
     assert "نتایج جست‌وجو" in mobile.locator("#products-list h2").inner_text()
