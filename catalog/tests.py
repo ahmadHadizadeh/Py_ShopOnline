@@ -381,6 +381,7 @@ class HomepageMerchandisingTests(BaseTestCase):
         )
 
     def test_homepage_with_only_showcase_products_does_not_show_empty_catalog_state(self):
+        self.product1.price = Decimal("1000")
         self.product1.stock = 5
         self.product1.save()
         self._record_order_item(self.product1, 1)
