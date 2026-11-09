@@ -253,6 +253,38 @@ class ProductCatalogSearchTests(BaseTestCase):
 
 
 class HomepageMerchandisingTests(BaseTestCase):
+    def test_homepage_hero_and_trust_strip_show_only_on_unfiltered_root(self):
+        homepage = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(homepage.status_code, 200)
+        self.assertContains(homepage, 'id="storefront-hero"')
+        self.assertContains(homepage, 'id="storefront-hero-heading"')
+        self.assertContains(homepage, 'id="storefront-trust-strip"')
+        for benefit in (
+            "وضعیت موجودی مشخص",
+            "امتیاز و نظرات کاربران",
+            "انتخاب تنوع محصول",
+            "پیگیری سفارش",
+        ):
+            with self.subTest(benefit=benefit):
+                self.assertContains(homepage, benefit)
+
+        category_response = self.client.get(
+            reverse(
+                "catalog:product_list_by_category",
+                kwargs={"category_slug": self.category.slug},
+            )
+        )
+        search_response = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": self.product1.name},
+        )
+        for response in (category_response, search_response):
+            with self.subTest(path=response.wsgi_request.path, query=response.wsgi_request.GET):
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, 'id="storefront-hero"')
+                self.assertNotContains(response, 'id="storefront-trust-strip"')
+
     def _record_order_item(
         self,
         product,

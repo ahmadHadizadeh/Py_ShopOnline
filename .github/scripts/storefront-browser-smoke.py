@@ -49,6 +49,9 @@ with sync_playwright() as playwright:
         f"Storefront home did not return HTTP 200: {None if response is None else response.status}"
     )
     expect_visible(mobile, "#storefront-header")
+    expect_visible(mobile, "#storefront-hero")
+    expect_visible(mobile, "#storefront-trust-strip")
+    assert mobile.locator("#storefront-trust-strip h2").count() == 4
     expect_visible(mobile, "#mobile-nav-toggle")
     expect_hidden(mobile, "#desktop-search-form")
     expect_visible(mobile, "#mobile-search-toggle")
@@ -57,6 +60,13 @@ with sync_playwright() as playwright:
     for width, expected_columns in ((320, 1), (360, 1), (390, 1), (640, 2), (768, 2), (1024, 3), (1280, 4), (1440, 4)):
         mobile.set_viewport_size({"width": width, "height": 844})
         assert_no_horizontal_overflow(mobile, width)
+        trust_columns = mobile.locator("#storefront-trust-strip").evaluate(
+            "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
+        )
+        expected_trust_columns = 4 if width >= 1024 else 2
+        assert trust_columns == expected_trust_columns, (
+            f"Unexpected trust-strip columns at {width}px: {trust_columns}"
+        )
         columns = mobile.locator("#product-grid").evaluate(
             "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
         )
@@ -133,6 +143,8 @@ with sync_playwright() as playwright:
     expect_visible(mobile, '#mobile-navigation-panel a[href="/category/browser-test-category/"]')
     category_link.click()
     mobile.wait_for_url("**/category/browser-test-category/")
+    expect_hidden(mobile, "#storefront-hero")
+    expect_hidden(mobile, "#storefront-trust-strip")
     assert mobile.locator("#products-list h2").inner_text().strip() == "Browser Test"
 
     # Mobile search retains the current category and submits a real GET query.
@@ -174,6 +186,8 @@ with sync_playwright() as playwright:
     response = mobile.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
     assert response is not None and response.status == 200
     expect_visible(mobile, "#desktop-search-form")
+    expect_hidden(mobile, "#storefront-hero")
+    expect_hidden(mobile, "#storefront-trust-strip")
     expect_hidden(mobile, "#mobile-nav-toggle")
     assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
     mobile.screenshot(path=str(ARTIFACTS / "storefront-desktop-home.png"), full_page=True)
