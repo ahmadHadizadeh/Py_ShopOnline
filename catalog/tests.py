@@ -380,6 +380,29 @@ class HomepageMerchandisingTests(BaseTestCase):
             (best_seller_ids | special_offer_ids).isdisjoint(main_grid_ids)
         )
 
+    def test_homepage_with_only_showcase_products_does_not_show_empty_catalog_state(self):
+        self.product1.stock = 5
+        self.product1.save()
+        self._record_order_item(self.product1, 1)
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["page_obj"].paginator.count, 0)
+        self.assertEqual(
+            [product.pk for product in response.context["best_selling_products"]],
+            [self.product1.pk],
+        )
+        self.assertContains(response, 'id="best-selling-heading"')
+        self.assertContains(
+            response,
+            "محصولات منتخب در بخش‌های ویژه و پرفروش‌ها نمایش داده می‌شوند.",
+        )
+        self.assertNotContains(
+            response,
+            "هنوز محصولی برای نمایش ثبت نشده است.",
+        )
+
     def test_special_offers_require_real_discount_and_available_stock(self):
         discounted = Product.objects.create(
             name="Discounted product",
