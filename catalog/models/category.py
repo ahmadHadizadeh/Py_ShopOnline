@@ -12,6 +12,12 @@ class Category(models.Model):
         allow_unicode=True,
         verbose_name="اسلاگ",
     )
+    image = models.ImageField(
+        upload_to="categories/%Y/%m/%d",
+        blank=True,
+        default="",
+        verbose_name="تصویر دسته‌بندی",
+    )
     is_active = models.BooleanField(default=True, verbose_name="فعال")
     parent = models.ForeignKey(
         "self",
