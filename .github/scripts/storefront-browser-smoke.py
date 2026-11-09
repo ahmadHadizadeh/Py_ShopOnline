@@ -77,7 +77,21 @@ with sync_playwright() as playwright:
             assert image_frame_width <= 112.5, (
                 f"Mobile product image frame is not compact at {width}px: {image_frame_width}"
             )
+            mobile_card_transform = mobile.locator("#product-grid article").first.evaluate(
+                "(card) => getComputedStyle(card).transform"
+            )
+            assert mobile_card_transform == "none", (
+                f"Product card should not depend on hover at {width}px: {mobile_card_transform}"
+            )
     mobile.set_viewport_size({"width": 390, "height": 844})
+    mobile.emulate_media(reduced_motion="reduce")
+    reduced_motion_transition = mobile.locator("#product-grid article").first.evaluate(
+        "(card) => getComputedStyle(card).transitionProperty"
+    )
+    assert reduced_motion_transition == "none", (
+        f"Product card ignored prefers-reduced-motion: {reduced_motion_transition}"
+    )
+    mobile.emulate_media(reduced_motion="no-preference")
     mobile.screenshot(path=str(ARTIFACTS / "storefront-mobile-home.png"), full_page=True)
 
     # Mobile category drawer and its server-rendered active category link.
@@ -134,6 +148,15 @@ with sync_playwright() as playwright:
     expect_hidden(mobile, "#mobile-nav-toggle")
     assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
     mobile.screenshot(path=str(ARTIFACTS / "storefront-desktop-home.png"), full_page=True)
+    desktop_card = mobile.locator("#product-grid article").first
+    desktop_card.hover()
+    desktop_card_transform = desktop_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    assert desktop_card_transform != "none", (
+        "Desktop product card hover treatment did not activate."
+    )
+    mobile.mouse.move(0, 0)
     mobile.locator("#desktop-search-input").fill("NorthwindBrowser")
     expect_visible(mobile, "#desktop-search-suggestions")
     desktop_suggestions = mobile.locator("#desktop-search-suggestions a[role='option']")
