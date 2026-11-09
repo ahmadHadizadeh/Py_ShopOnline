@@ -1,18 +1,23 @@
 from decimal import Decimal
 # فایل: catalog/tests.py
 from django.test import TestCase, Client, RequestFactory, SimpleTestCase
+from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib import admin
+from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from catalog.models.product import Product
 from catalog.models.inventory import InventoryMovement
 from catalog.models.category import Category
+from catalog.models.storefront_settings import StorefrontSettings
 from catalog.models.review import Review
 from catalog.models.variant import ProductVariant
 from catalog.templatetags.storefront_formatting import format_price
 from orders.models import Order, OrderItem, Payment
+from accounts.apps import STORE_MANAGER_GROUP_NAME
+from catalog.context_processors import storefront_categories
 from catalog.services import (
     adjust_product_stock,
     record_physical_stock_count,
@@ -1525,3 +1530,159 @@ class StorefrontPriceFormattingTests(SimpleTestCase):
         self.assertEqual(format_price("not-a-number"), "not-a-number")
         self.assertEqual(format_price(Decimal("NaN")), "NaN")
 
+
+
+
+class StorefrontSettingsModelTests(TestCase):
+    def test_social_links_must_use_https(self):
+        settings = StorefrontSettings(
+            instagram_url="http://www.instagram.com/example"
+        )
+
+        with self.assertRaises(ValidationError):
+            settings.full_clean()
+
+    def test_singleton_uses_fixed_primary_key_and_rejects_duplicate_rows(self):
+        settings = StorefrontSettings.objects.create(
+            instagram_url="https://www.instagram.com/example"
+        )
+
+        self.assertEqual(settings.pk, StorefrontSettings.SINGLETON_PK)
+        self.assertEqual(StorefrontSettings.objects.count(), 1)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StorefrontSettings.objects.create(
+                    telegram_url="https://t.me/example"
+                )
+
+        self.assertEqual(StorefrontSettings.objects.count(), 1)
+
+    def test_non_singleton_primary_key_is_rejected(self):
+        settings = StorefrontSettings(pk=2)
+
+        with self.assertRaises(ValidationError):
+            settings.save()
+
+    def test_settings_record_cannot_be_deleted_through_model_instance(self):
+        settings = StorefrontSettings.objects.create()
+
+        with self.assertRaises(ValidationError):
+            settings.delete()
+
+        self.assertTrue(
+            StorefrontSettings.objects.filter(
+                pk=StorefrontSettings.SINGLETON_PK
+            ).exists()
+        )
+
+
+class StorefrontSettingsContextTests(TestCase):
+    def test_context_processor_exposes_optional_settings_and_skips_admin(self):
+        request = RequestFactory().get("/")
+        context = storefront_categories(request)
+
+        self.assertIn("categories", context)
+        self.assertIn("storefront_settings", context)
+        self.assertIsNone(context["storefront_settings"])
+
+        settings = StorefrontSettings.objects.create(
+            whatsapp_url="https://wa.me/989120000000"
+        )
+        context = storefront_categories(request)
+
+        self.assertEqual(context["storefront_settings"], settings)
+        self.assertEqual(
+            storefront_categories(RequestFactory().get("/admin/")),
+            {},
+        )
+
+    def test_footer_renders_only_configured_social_links(self):
+        category = Category.objects.create(
+            name="Social Footer Category",
+            slug="social-footer-category",
+        )
+
+        empty_response = self.client.get(reverse("catalog:product_list"))
+        self.assertEqual(empty_response.status_code, 200)
+        self.assertNotContains(empty_response, 'aria-label="اینستاگرام فروشگاه"')
+
+        StorefrontSettings.objects.create(
+            instagram_url="https://www.instagram.com/example"
+        )
+        configured_response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(configured_response.status_code, 200)
+        self.assertContains(
+            configured_response,
+            'href="https://www.instagram.com/example"',
+        )
+        self.assertContains(
+            configured_response,
+            'aria-label="اینستاگرام فروشگاه"',
+        )
+        self.assertNotContains(
+            configured_response,
+            'aria-label="واتساپ فروشگاه"',
+        )
+
+
+class StorefrontSettingsAdminAccessTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="storefront-settings-owner",
+            email="storefront-settings-owner@example.test",
+            password="TestPassword123!",
+        )
+        self.manager = User.objects.create_user(
+            username="storefront-settings-manager",
+            email="storefront-settings-manager@example.test",
+            password="TestPassword123!",
+            is_staff=True,
+        )
+        manager_group, _created = Group.objects.get_or_create(
+            name=STORE_MANAGER_GROUP_NAME
+        )
+        self.manager.groups.add(manager_group)
+        self.model_admin = admin.site._registry[StorefrontSettings]
+
+    def test_only_store_owner_can_access_settings_admin(self):
+        self.client.force_login(self.manager)
+        settings = StorefrontSettings.objects.create(
+            instagram_url="https://www.instagram.com/example"
+        )
+        protected_urls = (
+            reverse("admin:catalog_storefrontsettings_changelist"),
+            reverse("admin:catalog_storefrontsettings_change", args=[settings.pk]),
+            reverse("admin:catalog_storefrontsettings_add"),
+        )
+
+        for url in protected_urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)
+
+        self.assertFalse(StorefrontSettings.objects.filter(pk=settings.pk).none())
+
+    def test_owner_can_add_and_change_settings_but_cannot_add_or_delete_twice(self):
+        self.client.force_login(self.owner)
+        changelist_url = reverse("admin:catalog_storefrontsettings_changelist")
+        add_url = reverse("admin:catalog_storefrontsettings_add")
+
+        self.assertEqual(self.client.get(changelist_url).status_code, 200)
+        self.assertEqual(self.client.get(add_url).status_code, 200)
+
+        settings = StorefrontSettings.objects.create(
+            instagram_url="https://www.instagram.com/example"
+        )
+        change_url = reverse(
+            "admin:catalog_storefrontsettings_change",
+            args=[settings.pk],
+        )
+        delete_url = reverse(
+            "admin:catalog_storefrontsettings_delete",
+            args=[settings.pk],
+        )
+
+        self.assertEqual(self.client.get(change_url).status_code, 200)
+        self.assertEqual(self.client.get(add_url).status_code, 403)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
