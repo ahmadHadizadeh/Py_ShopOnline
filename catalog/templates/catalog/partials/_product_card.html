@@ -1,3 +1,4 @@
+{% load storefront_formatting %}
 <article data-product-price="{{ product.price }}" class="group relative flex min-w-0 flex-row overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl sm:flex-col">
     {% if product.old_price and product.discount_percent > 0 and product.is_available %}
         <span class="absolute right-4 top-4 z-10 rounded-lg bg-red-500 px-2.5 py-1 text-[10px] font-bold text-white shadow-md">
@@ -40,10 +41,10 @@
         <div class="mt-auto flex items-end justify-between border-t border-gray-50 pt-4">
             <div class="flex flex-col">
                 {% if product.old_price and product.old_price > product.price %}
-                    <span class="mb-0.5 text-xs text-gray-400 line-through">{{ product.old_price|floatformat:0 }}</span>
+                    <span class="mb-0.5 text-xs text-gray-400 line-through">{{ product.old_price|format_price }}</span>
                 {% endif %}
                 <div class="flex items-baseline gap-1">
-                    <span class="product-price text-xl font-black text-indigo-700">{{ product.price|floatformat:0 }}</span>
+                    <span class="product-price text-xl font-black text-indigo-700">{{ product.price|format_price }}</span>
                     <span class="text-[10px] font-bold text-gray-500">تومان</span>
                 </div>
             </div>

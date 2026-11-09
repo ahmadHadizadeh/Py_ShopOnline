@@ -1,6 +1,6 @@
 from decimal import Decimal
 # فایل: catalog/tests.py
-from django.test import TestCase, Client, RequestFactory
+from django.test import TestCase, Client, RequestFactory, SimpleTestCase
 from django.db.models.deletion import ProtectedError
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib import admin
@@ -11,6 +11,7 @@ from catalog.models.inventory import InventoryMovement
 from catalog.models.category import Category
 from catalog.models.review import Review
 from catalog.models.variant import ProductVariant
+from catalog.templatetags.storefront_formatting import format_price
 from orders.models import Order, OrderItem, Payment
 from catalog.services import (
     adjust_product_stock,
@@ -401,6 +402,28 @@ class HomepageMerchandisingTests(BaseTestCase):
         self.assertEqual(product_row.review_count, 1)
         self.assertEqual(product_row.avg_rating, Decimal("5"))
         self.assertContains(response, 'fa-solid fa-star text-yellow-400')
+
+    def test_homepage_product_card_formats_current_and_reference_prices(self):
+        Product.objects.create(
+            name="Grouped price product",
+            slug="grouped-price-product",
+            price=Decimal("1234567.50"),
+            old_price=Decimal("1500000.50"),
+            stock=4,
+            category=self.category,
+        )
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'class="product-price text-xl font-black text-indigo-700">1,234,568</span>',
+        )
+        self.assertContains(
+            response,
+            'class="mb-0.5 text-xs text-gray-400 line-through">1,500,001</span>',
+        )
 
 
 class ReviewServiceTests(BaseTestCase):
@@ -1342,3 +1365,24 @@ class ProductCategoryModelProtectionTests(TestCase):
 
         self.assertTrue(Category.objects.filter(pk=category.pk).exists())
         self.assertTrue(Product.objects.filter(pk=product.pk).exists())
+
+class StorefrontPriceFormattingTests(SimpleTestCase):
+    def test_decimal_amounts_are_grouped_and_rounded_half_up(self):
+        cases = (
+            (Decimal("489000000.00"), "489,000,000"),
+            (Decimal("489000000.50"), "489,000,001"),
+            (Decimal("1234567.49"), "1,234,567"),
+            (Decimal("1234567.50"), "1,234,568"),
+            (Decimal("0.49"), "0"),
+            (Decimal("0.50"), "1"),
+        )
+
+        for value, expected in cases:
+            with self.subTest(value=value):
+                self.assertEqual(format_price(value), expected)
+
+    def test_missing_or_invalid_values_have_safe_fallbacks(self):
+        self.assertEqual(format_price(None), "—")
+        self.assertEqual(format_price("not-a-number"), "not-a-number")
+        self.assertEqual(format_price(Decimal("NaN")), "NaN")
+
