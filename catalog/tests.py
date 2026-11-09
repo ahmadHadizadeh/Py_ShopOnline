@@ -102,6 +102,56 @@ class ProductCatalogSearchTests(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.category.get_absolute_url())
 
+    def test_homepage_renders_visual_category_cards(self):
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="دسته‌بندی‌های فروشگاه"')
+        self.assertContains(response, self.category.get_absolute_url())
+        self.assertContains(response, self.category.name)
+
+    def test_search_suggestions_reuse_search_fields_and_category_scope(self):
+        other_category = Category.objects.create(
+            name="Other Suggestion Category",
+            slug="other-suggestion-category",
+        )
+        Product.objects.create(
+            name="Northwind in another category",
+            slug="northwind-in-another-category",
+            brand="Northwind",
+            stock=3,
+            category=other_category,
+        )
+        Product.objects.create(
+            name="Inactive Northwind",
+            slug="inactive-northwind",
+            brand="Northwind",
+            is_active=False,
+            stock=3,
+            category=self.category,
+        )
+
+        response = self.client.get(
+            reverse("catalog:search_suggestions"),
+            {"q": "Northwind", "category": self.category.slug},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], self.searchable_product.name)
+        self.assertEqual(results[0]["url"], self.searchable_product.get_absolute_url())
+        self.assertEqual(results[0]["category"], self.category.name)
+
+    def test_search_suggestions_ignore_queries_shorter_than_two_characters(self):
+        response = self.client.get(
+            reverse("catalog:search_suggestions"),
+            {"q": "N"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"results": []})
+
     def test_price_sorting_uses_only_supported_options(self):
         cheaper = Product.objects.create(
             name="Sortable cheaper item",
@@ -1191,6 +1241,23 @@ class InventoryAdminOperationViewTests(TestCase):
         self.assertEqual(self.product.stock, 5)
         self.assertEqual(InventoryMovement.objects.count(), 0)
 
+
+
+class CategoryAdminImageTests(TestCase):
+    def test_category_image_is_optional_and_available_in_admin(self):
+        image_field = Category._meta.get_field("image")
+        self.assertTrue(image_field.blank)
+        self.assertEqual(image_field.default, "")
+
+        category_admin = admin.site._registry[Category]
+        request = RequestFactory().get("/admin/catalog/category/add/")
+        fieldsets = category_admin.get_fieldsets(request)
+        configured_fields = [
+            field_name
+            for _, options in fieldsets
+            for field_name in options.get("fields", ())
+        ]
+        self.assertIn("image", configured_fields)
 
 
 class CategoryAdminDeletionSafetyTests(TestCase):
