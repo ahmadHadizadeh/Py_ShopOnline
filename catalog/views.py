@@ -78,9 +78,12 @@ def home(request, category_slug=None):
         sort = "newest"
         sort_fields = PRODUCT_LIST_SORT_OPTIONS[sort]
 
-    products = _with_approved_review_summary(products.order_by(*sort_fields))
+    products = products.order_by(*sort_fields)
     paginator = Paginator(products, PRODUCTS_PER_PAGE)
     page_obj = paginator.get_page(request.GET.get("page"))
+    # Keep the paginator count query free of review joins; aggregate ratings
+    # only for the 12 products actually rendered on this page.
+    page_obj.object_list = _with_approved_review_summary(page_obj.object_list)
 
     query_params = request.GET.copy()
     query_params.pop("page", None)
