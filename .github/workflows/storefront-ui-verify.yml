@@ -14,6 +14,9 @@ on:
       - "accounts/templates/registration/login.html"
       - "catalog/context_processors.py"
       - "catalog/templates/catalog/base.html"
+      - "catalog/models/category.py"
+      - "catalog/urls.py"
+      - "catalog/migrations/**"
       - "catalog/templates/catalog/home.html"
       - "catalog/templates/catalog/partials/_product_card.html"
       - "catalog/templates/catalog/details.html"
@@ -34,10 +37,17 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/storefront-ui-verify.yml"
+      - ".github/scripts/storefront-browser-smoke.py"
+      - "catalog/templates/catalog/base.html"
       - "catalog/templates/catalog/home.html"
       - "catalog/templates/catalog/partials/_product_card.html"
+      - "catalog/models/category.py"
+      - "catalog/admin.py"
+      - "catalog/migrations/**"
+      - "catalog/urls.py"
       - "catalog/tests.py"
       - "catalog/views.py"
+      - "static/js/storefront/**/*.js"
   workflow_dispatch:
 
 permissions:
