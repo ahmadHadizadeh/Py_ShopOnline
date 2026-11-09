@@ -38,6 +38,11 @@ on:
     paths:
       - ".github/workflows/storefront-ui-verify.yml"
       - ".github/scripts/storefront-browser-smoke.py"
+      - "package.json"
+      - "package-lock.json"
+      - "tailwind.config.js"
+      - "frontend/tailwind.css"
+      - "static/css/tailwind.min.css"
       - "catalog/templates/catalog/base.html"
       - "catalog/templates/catalog/home.html"
       - "catalog/templates/catalog/partials/_product_card.html"
