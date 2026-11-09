@@ -25,7 +25,7 @@
         const makeSuggestion = (item) => {
             const link = document.createElement("a");
             link.href = item.url;
-            link.className = "flex items-center justify-between gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50 focus:bg-indigo-50";
+            link.className = "flex items-center justify-between gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-indigo-50";
             link.setAttribute("role", "option");
 
             const details = document.createElement("span");
