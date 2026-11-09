@@ -350,7 +350,7 @@ class HomepageMerchandisingTests(BaseTestCase):
         )
         self.assertEqual(product_row.review_count, 1)
         self.assertEqual(product_row.avg_rating, Decimal("5"))
-        self.assertContains(response, 'fa-solid fa-star text-amber-400')
+        self.assertContains(response, 'fa-solid fa-star text-yellow-400')
 
 
 class ReviewServiceTests(BaseTestCase):
