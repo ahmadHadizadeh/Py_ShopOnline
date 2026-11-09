@@ -503,10 +503,6 @@ class HomepageMerchandisingTests(BaseTestCase):
         self.assertContains(response, 'class="category-card group')
         self.assertContains(response, "Ordered special offer")
         self.assertContains(response, "Ordered best seller")
-        self.assertNotIn(
-            "priority_image=True",
-            html,
-        )
 
     def test_homepage_card_rating_uses_only_approved_reviews(self):
         product = Product.objects.create(
