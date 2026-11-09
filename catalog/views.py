@@ -1,7 +1,18 @@
 from django.conf import settings
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import (
+    Avg,
+    Count,
+    F,
+    IntegerField,
+    OuterRef,
+    Q,
+    Subquery,
+    Sum,
+    Value,
+)
+from django.db.models.functions import Coalesce
 from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
@@ -25,6 +36,18 @@ PRODUCT_LIST_SORT_OPTIONS = {
     "price_desc": ("-price", "-created", "-pk"),
 }
 PRODUCTS_PER_PAGE = 12
+HOMEPAGE_SHOWCASE_LIMIT = 8
+
+
+def _with_approved_review_summary(queryset):
+    return queryset.annotate(
+        avg_rating=Avg("reviews__rating", filter=Q(reviews__is_approved=True)),
+        review_count=Count(
+            "reviews",
+            filter=Q(reviews__is_approved=True),
+            distinct=True,
+        ),
+    )
 
 
 def home(request, category_slug=None):
@@ -55,7 +78,7 @@ def home(request, category_slug=None):
         sort = "newest"
         sort_fields = PRODUCT_LIST_SORT_OPTIONS[sort]
 
-    products = products.order_by(*sort_fields)
+    products = _with_approved_review_summary(products.order_by(*sort_fields))
     paginator = Paginator(products, PRODUCTS_PER_PAGE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
@@ -67,6 +90,62 @@ def home(request, category_slug=None):
     else:
         query_params.pop("q", None)
 
+    best_selling_products = []
+    special_offer_products = []
+
+    if category is None and not search_query:
+        # Count only completed sales. A correlated subquery keeps the sales
+        # aggregate independent from the review join used by the product cards.
+        from orders.models import Order, OrderItem, Payment
+
+        paid_item_totals = (
+            OrderItem.objects.filter(
+                product_id=OuterRef("pk"),
+                order__status__in=(
+                    Order.Status.PAID,
+                    Order.Status.PROCESSING,
+                    Order.Status.COMPLETED,
+                ),
+                order__payment__status=Payment.Status.SUCCESS,
+                order__stock_reduced=True,
+            )
+            .order_by()
+            .values("product_id")
+            .annotate(total_sold=Sum("quantity"))
+            .values("total_sold")[:1]
+        )
+
+        best_selling_queryset = (
+            Product.objects.filter(
+                is_active=True,
+                is_available_status=True,
+                stock__gt=0,
+            )
+            .select_related("category")
+            .annotate(
+                sold_quantity=Coalesce(
+                    Subquery(paid_item_totals, output_field=IntegerField()),
+                    Value(0),
+                    output_field=IntegerField(),
+                )
+            )
+            .filter(sold_quantity__gt=0)
+            .order_by("-sold_quantity", "-pk")
+        )
+        best_selling_products = _with_approved_review_summary(
+            best_selling_queryset
+        )[:HOMEPAGE_SHOWCASE_LIMIT]
+
+        special_offer_queryset = Product.objects.filter(
+            is_active=True,
+            is_available_status=True,
+            stock__gt=0,
+            old_price__gt=F("price"),
+        ).select_related("category")
+        special_offer_products = _with_approved_review_summary(
+            special_offer_queryset.order_by("-created", "-pk")
+        )[:HOMEPAGE_SHOWCASE_LIMIT]
+
     context = {
         "category": category,
         "products": products,
@@ -74,6 +153,8 @@ def home(request, category_slug=None):
         "search_query": search_query,
         "sort": sort,
         "pagination_query": query_params.urlencode(),
+        "best_selling_products": best_selling_products,
+        "special_offer_products": special_offer_products,
     }
     return render(request, "catalog/home.html", context)
 
