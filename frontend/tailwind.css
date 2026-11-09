@@ -6,3 +6,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Product-card hover effects require a real hover-capable pointer and no
+ * reduced-motion preference. Width alone is not a reliable proxy for touch.
+ */
+@layer components {
+    @media (hover: hover) and (min-width: 640px) and (prefers-reduced-motion: no-preference) {
+        .product-card:hover {
+            @apply -translate-y-1 border-indigo-100 shadow-xl;
+        }
+
+        .product-card:hover .product-card__image {
+            @apply scale-105;
+        }
+
+        .product-card:hover .product-card__title {
+            @apply text-indigo-600;
+        }
+    }
+}

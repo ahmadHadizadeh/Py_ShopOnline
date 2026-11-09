@@ -94,6 +94,35 @@ with sync_playwright() as playwright:
     mobile.emulate_media(reduced_motion="no-preference")
     mobile.screenshot(path=str(ARTIFACTS / "storefront-mobile-home.png"), full_page=True)
 
+    # Touch-capable tablets must not receive hover-only card treatments merely
+    # because their CSS viewport is wider than the mobile breakpoint.
+    touch_context = browser.new_context(
+        viewport={"width": 768, "height": 844},
+        device_scale_factor=1,
+        is_mobile=True,
+        has_touch=True,
+    )
+    touch_page = touch_context.new_page()
+    touch_page.on("pageerror", lambda error: page_errors.append(f"touch: {error}"))
+    touch_response = touch_page.goto(
+        f"{BASE_URL}/",
+        wait_until="domcontentloaded",
+    )
+    assert touch_response is not None and touch_response.status == 200
+    assert touch_page.evaluate(
+        "() => window.matchMedia('(hover: none)').matches"
+    ), "Playwright touch context did not expose a non-hover pointer."
+    assert_no_horizontal_overflow(touch_page, 768)
+    touch_card = touch_page.locator("#product-grid article").first
+    touch_card.hover()
+    touch_card_transform = touch_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    assert touch_card_transform == "none", (
+        "A touch-capable tablet received the product-card hover transform: "
+        f"{touch_card_transform}"
+    )
+
     # Mobile category drawer and its server-rendered active category link.
     mobile.locator("#mobile-nav-toggle").click()
     expect_visible(mobile, "#mobile-navigation-panel")
@@ -361,6 +390,7 @@ with sync_playwright() as playwright:
 
     guest_context.close()
     authenticated_context.close()
+    touch_context.close()
     mobile_context.close()
     browser.close()
 
