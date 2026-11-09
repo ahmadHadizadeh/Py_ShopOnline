@@ -1,5 +1,5 @@
 {% load storefront_formatting %}
-<article data-product-price="{{ product.price }}" class="group relative flex min-w-0 flex-row overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] duration-200 ease-out focus-within:border-indigo-200 focus-within:shadow-lg sm:flex-col sm:hover:-translate-y-1 sm:hover:border-indigo-100 sm:hover:shadow-xl motion-reduce:transform-none motion-reduce:transition-none">
+<article data-product-price="{{ product.price }}" class="group relative flex min-w-0 flex-row overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] duration-200 ease-out focus-within:border-indigo-200 focus-within:shadow-lg sm:flex-col sm:hover:-translate-y-1 sm:hover:border-indigo-100 sm:hover:shadow-xl motion-reduce:!transform-none motion-reduce:transition-none">
     {% if product.old_price and product.discount_percent > 0 and product.is_available %}
         <span class="absolute right-4 top-4 z-10 rounded-full bg-rose-500 px-3 py-1 text-[10px] font-bold text-white shadow-sm">
             {{ product.discount_percent }}٪ تخفیف
@@ -8,7 +8,7 @@
 
     <div class="relative flex h-28 w-28 shrink-0 aspect-square items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 p-3 sm:h-auto sm:w-full sm:p-6">
         {% if product.image %}
-            <img src="{{ product.image.url }}" alt="{{ product.name }}" loading="{% if priority_image %}eager{% else %}lazy{% endif %}" decoding="async" {% if priority_image %}fetchpriority="high"{% endif %} class="h-full w-full object-contain transition-transform duration-200 ease-out sm:group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none {% if not product.is_available %}grayscale opacity-50{% endif %}">
+            <img src="{{ product.image.url }}" alt="{{ product.name }}" loading="{% if priority_image %}eager{% else %}lazy{% endif %}" decoding="async" {% if priority_image %}fetchpriority="high"{% endif %} class="h-full w-full object-contain transition-transform duration-200 ease-out sm:group-hover:scale-105 motion-reduce:!transform-none motion-reduce:transition-none {% if not product.is_available %}grayscale opacity-50{% endif %}">
         {% else %}
             <i class="fa-regular fa-image text-5xl text-gray-300" aria-hidden="true"></i>
         {% endif %}
