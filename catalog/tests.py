@@ -468,6 +468,46 @@ class HomepageMerchandisingTests(BaseTestCase):
         offers = list(response.context["special_offer_products"])
         self.assertEqual([product.pk for product in offers], [discounted.pk])
 
+    def test_homepage_places_curated_shelves_before_latest_product_grid(self):
+        special_offer = Product.objects.create(
+            name="Ordered special offer",
+            slug="ordered-special-offer",
+            price=Decimal("800"),
+            old_price=Decimal("1000"),
+            stock=5,
+            category=self.category,
+        )
+        best_seller = Product.objects.create(
+            name="Ordered best seller",
+            slug="ordered-best-seller",
+            price=Decimal("1200"),
+            stock=5,
+            category=self.category,
+        )
+        self._record_order_item(best_seller, 2)
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        category_nav = html.index('aria-label="دسته‌بندی‌های فروشگاه"')
+        offer_heading = html.index('id="special-offers-heading"')
+        bestseller_heading = html.index('id="best-selling-heading"')
+        product_section = html.index('aria-label="فهرست محصولات"')
+        product_grid = html.index('id="product-grid"')
+
+        self.assertLess(category_nav, offer_heading)
+        self.assertLess(offer_heading, bestseller_heading)
+        self.assertLess(bestseller_heading, product_section)
+        self.assertLess(product_section, product_grid)
+        self.assertContains(response, 'class="category-card group')
+        self.assertContains(response, "Ordered special offer")
+        self.assertContains(response, "Ordered best seller")
+        self.assertNotIn(
+            "priority_image=True",
+            html,
+        )
+
     def test_homepage_card_rating_uses_only_approved_reviews(self):
         product = Product.objects.create(
             name="Reviewed product",

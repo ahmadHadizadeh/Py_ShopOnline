@@ -60,6 +60,15 @@ with sync_playwright() as playwright:
     for width, expected_columns in ((320, 1), (360, 1), (390, 1), (640, 2), (768, 2), (1024, 3), (1280, 4), (1440, 4)):
         mobile.set_viewport_size({"width": width, "height": 844})
         assert_no_horizontal_overflow(mobile, width)
+        category_columns = mobile.locator(
+            '#products-list nav[aria-label="دسته‌بندی‌های فروشگاه"]'
+        ).evaluate(
+            "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
+        )
+        expected_category_columns = 2 if width < 640 else 3 if width < 1024 else 4
+        assert category_columns == expected_category_columns, (
+            f"Unexpected category grid columns at {width}px: {category_columns}"
+        )
         trust_columns = mobile.locator("#storefront-trust-strip").evaluate(
             "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
         )
@@ -131,6 +140,17 @@ with sync_playwright() as playwright:
     assert touch_card_transform == "none", (
         "A touch-capable tablet received the product-card hover transform: "
         f"{touch_card_transform}"
+    )
+    touch_category_card = touch_page.locator(
+        '#products-list nav[aria-label="دسته‌بندی‌های فروشگاه"] .category-card'
+    ).first
+    touch_category_card.hover()
+    touch_category_transform = touch_category_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    assert touch_category_transform == "none", (
+        "A touch-capable tablet received the category-card hover transform: "
+        f"{touch_category_transform}"
     )
 
     # Mobile category drawer and its server-rendered active category link.

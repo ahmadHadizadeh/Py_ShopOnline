@@ -24,5 +24,13 @@
         .product-card:hover .product-card__title {
             @apply text-indigo-600;
         }
+
+        .category-card:hover {
+            @apply -translate-y-1 border-indigo-100 shadow-lg;
+        }
+
+        .category-card:hover .category-card__label {
+            @apply text-indigo-700;
+        }
     }
 }

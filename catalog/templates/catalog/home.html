@@ -109,29 +109,29 @@
             {% elif category %}
                 {{ category.name }}
             {% else %}
-                جدیدترین محصولات
+                دسته‌بندی‌های فروشگاه
             {% endif %}
         </h2>
     </div>
 
     {% if not category and not search_query %}
         <nav class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 sm:gap-6 xl:gap-8" aria-label="دسته‌بندی‌های فروشگاه">
-            <a href="{% url 'catalog:product_list' %}" class="flex flex-col items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-                <span class="flex h-20 w-20 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                    <i class="fa-solid fa-layer-group text-3xl" aria-hidden="true"></i>
+            <a href="{% url 'catalog:product_list' %}" class="category-card group flex min-w-0 flex-col items-center gap-3 rounded-3xl border border-slate-100 bg-white px-3 py-4 text-center shadow-sm transition-[transform,box-shadow,border-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 motion-reduce:transition-none">
+                <span class="category-card__media flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-indigo-50/60 sm:h-28 sm:w-28">
+                    <i class="category-card__artwork fa-solid fa-layer-group text-3xl text-indigo-600" aria-hidden="true"></i>
                 </span>
-                <span class="text-sm font-black text-gray-800">همه دسته‌ها</span>
+                <span class="category-card__label text-sm font-black text-slate-800 transition-colors duration-200 motion-reduce:transition-none">همه دسته‌ها</span>
             </a>
             {% for cat in categories %}
-                <a href="{{ cat.get_absolute_url }}" class="flex flex-col items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-                    <span class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl bg-gray-50">
+                <a href="{{ cat.get_absolute_url }}" class="category-card group flex min-w-0 flex-col items-center gap-3 rounded-3xl border border-slate-100 bg-white px-3 py-4 text-center shadow-sm transition-[transform,box-shadow,border-color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 motion-reduce:transition-none">
+                    <span class="category-card__media flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 via-white to-indigo-50/60 sm:h-28 sm:w-28">
                         {% if cat.image %}
-                            <img src="{{ cat.image.url }}" alt="{{ cat.name }}" loading="lazy" decoding="async" class="h-full w-full object-contain p-2">
+                            <img src="{{ cat.image.url }}" alt="{{ cat.name }}" loading="lazy" decoding="async" class="category-card__artwork h-full w-full object-contain p-2">
                         {% else %}
-                            <i class="fa-solid fa-layer-group text-3xl text-indigo-600" aria-hidden="true"></i>
+                            <i class="category-card__artwork fa-solid fa-layer-group text-3xl text-indigo-600" aria-hidden="true"></i>
                         {% endif %}
                     </span>
-                    <span class="text-sm font-black text-gray-800">{{ cat.name }}</span>
+                    <span class="category-card__label text-sm font-black text-slate-800 transition-colors duration-200 motion-reduce:transition-none">{{ cat.name }}</span>
                 </a>
             {% empty %}
                 <p class="col-span-full text-sm text-gray-500">دسته‌بندی فعالی ثبت نشده است.</p>
@@ -149,9 +149,55 @@
             {% endfor %}
         </nav>
     {% endif %}
+
+{% if special_offer_products %}
+<section class="mb-10" aria-labelledby="special-offers-heading">
+    <div class="mb-6 flex items-center justify-between gap-4">
+        <div>
+            <h2 id="special-offers-heading" class="text-xl md:text-2xl font-black text-gray-800">پیشنهادهای ویژه</h2>
+            <p class="mt-1 text-sm text-gray-500">محصولات موجود با قیمت فعلی کمتر از قیمت قبلی ثبت‌شده.</p>
+        </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 xl:gap-8">
+        {% for pro in special_offer_products %}
+            {% if forloop.first %}
+                {% include "catalog/partials/_product_card.html" with product=pro priority_image=True %}
+            {% else %}
+                {% include "catalog/partials/_product_card.html" with product=pro %}
+            {% endif %}
+        {% endfor %}
+    </div>
 </section>
+{% endif %}
+
+{% if best_selling_products %}
+<section class="mb-10" aria-labelledby="best-selling-heading">
+    <div class="mb-6 flex items-center justify-between gap-4">
+        <div>
+            <h2 id="best-selling-heading" class="text-xl md:text-2xl font-black text-gray-800">پرفروش‌ترین محصولات</h2>
+            <p class="mt-1 text-sm text-gray-500">بر اساس سفارش‌های پرداخت‌شده و کاهش موجودی ثبت‌شده.</p>
+        </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 xl:gap-8">
+        {% for pro in best_selling_products %}
+            {% if not special_offer_products and forloop.first %}
+                {% include "catalog/partials/_product_card.html" with product=pro priority_image=True %}
+            {% else %}
+                {% include "catalog/partials/_product_card.html" with product=pro %}
+            {% endif %}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 
 <section aria-label="فهرست محصولات">
+    {% if not category and not search_query %}
+        <div class="mb-5">
+            <h2 id="latest-products-heading" class="text-xl font-black text-slate-900 md:text-2xl">جدیدترین محصولات</h2>
+            <p class="mt-1 text-sm text-slate-500">تازه‌ترین کالاهای اضافه‌شده به فروشگاه</p>
+        </div>
+    {% endif %}
     <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p id="product-count" class="text-sm text-gray-500" aria-live="polite">
             {% if page_obj.paginator.count %}
@@ -183,7 +229,11 @@
 
     <div id="product-grid" data-total-count="{{ page_obj.paginator.count }}" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 xl:gap-8">
         {% for pro in page_obj.object_list %}
-            {% include "catalog/partials/_product_card.html" with product=pro priority_image=forloop.first %}
+            {% if forloop.first and not special_offer_products and not best_selling_products %}
+                {% include "catalog/partials/_product_card.html" with product=pro priority_image=True %}
+            {% else %}
+                {% include "catalog/partials/_product_card.html" with product=pro %}
+            {% endif %}
         {% empty %}
             {% if not special_offer_products and not best_selling_products %}
                 <div class="col-span-full flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-gray-200 bg-white py-20">
@@ -222,36 +272,6 @@
     {% endif %}
 </section>
 
-{% if special_offer_products %}
-<section class="mb-10" aria-labelledby="special-offers-heading">
-    <div class="mb-6 flex items-center justify-between gap-4">
-        <div>
-            <h2 id="special-offers-heading" class="text-xl md:text-2xl font-black text-gray-800">پیشنهادهای ویژه</h2>
-            <p class="mt-1 text-sm text-gray-500">محصولات موجود با قیمت فعلی کمتر از قیمت قبلی ثبت‌شده.</p>
-        </div>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 xl:gap-8">
-        {% for pro in special_offer_products %}
-            {% include "catalog/partials/_product_card.html" with product=pro %}
-        {% endfor %}
-    </div>
 </section>
-{% endif %}
-
-{% if best_selling_products %}
-<section class="mb-10" aria-labelledby="best-selling-heading">
-    <div class="mb-6 flex items-center justify-between gap-4">
-        <div>
-            <h2 id="best-selling-heading" class="text-xl md:text-2xl font-black text-gray-800">پرفروش‌ترین محصولات</h2>
-            <p class="mt-1 text-sm text-gray-500">بر اساس سفارش‌های پرداخت‌شده و کاهش موجودی ثبت‌شده.</p>
-        </div>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 xl:gap-8">
-        {% for pro in best_selling_products %}
-            {% include "catalog/partials/_product_card.html" with product=pro %}
-        {% endfor %}
-    </div>
-</section>
-{% endif %}
 
 {% endblock %}
