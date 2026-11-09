@@ -34,6 +34,47 @@
 </div>
 {% endif %}
 
+{% if not category and not search_query %}
+<section class="mb-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="مزیت‌های خرید">
+    <div class="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <i class="fa-solid fa-box-open text-lg" aria-hidden="true"></i>
+        </span>
+        <div>
+            <h2 class="text-sm font-black text-gray-800">وضعیت موجودی مشخص</h2>
+            <p class="mt-1 text-xs leading-5 text-gray-500">موجود یا ناموجود بودن هر کالا پیش از خرید مشخص است.</p>
+        </div>
+    </div>
+    <div class="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <i class="fa-solid fa-star text-lg" aria-hidden="true"></i>
+        </span>
+        <div>
+            <h2 class="text-sm font-black text-gray-800">امتیاز و نظرات کاربران</h2>
+            <p class="mt-1 text-xs leading-5 text-gray-500">میانگین امتیاز بر اساس نظرات تأییدشده نمایش داده می‌شود.</p>
+        </div>
+    </div>
+    <div class="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <i class="fa-solid fa-sliders text-lg" aria-hidden="true"></i>
+        </span>
+        <div>
+            <h2 class="text-sm font-black text-gray-800">انتخاب تنوع محصول</h2>
+            <p class="mt-1 text-xs leading-5 text-gray-500">ویژگی و قیمت نهایی محصولات دارای تنوع در صفحه محصول مشخص می‌شود.</p>
+        </div>
+    </div>
+    <a href="{% url 'accounts:dashboard_orders' %}" class="flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition hover:border-indigo-200 hover:shadow-md">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+            <i class="fa-solid fa-truck-fast text-lg" aria-hidden="true"></i>
+        </span>
+        <div>
+            <h2 class="text-sm font-black text-gray-800">پیگیری سفارش</h2>
+            <p class="mt-1 text-xs leading-5 text-gray-500">سفارش‌های ثبت‌شده از پنل کاربری قابل مشاهده‌اند.</p>
+        </div>
+    </a>
+</section>
+{% endif %}
+
 <section class="mb-10" id="products-list" aria-labelledby="products-heading">
     <div class="flex items-center justify-between mb-6">
         <h2 id="products-heading" class="text-2xl font-black text-gray-800 flex items-center gap-3">
@@ -48,16 +89,41 @@
         </h2>
     </div>
 
-    <nav class="flex flex-wrap gap-3" aria-label="فیلتر دسته‌بندی محصولات">
-        <a href="{% url 'catalog:product_list' %}{% if pagination_query %}?{{ pagination_query }}{% endif %}" class="px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 {% if not category %}bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105{% else %}bg-white border border-gray-200 text-gray-600 hover:border-indigo-400 hover:text-indigo-600{% endif %}" {% if not category %}aria-current="page"{% endif %}>
-            همه دسته‌ها
-        </a>
-        {% for cat in categories %}
-            <a href="{{ cat.get_absolute_url }}{% if pagination_query %}?{{ pagination_query }}{% endif %}" class="px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 {% if category.slug == cat.slug %}bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105{% else %}bg-white border border-gray-200 text-gray-600 hover:border-indigo-400 hover:text-indigo-600{% endif %}" {% if category.slug == cat.slug %}aria-current="page"{% endif %}>
-                {{ cat.name }}
+    {% if not category and not search_query %}
+        <nav class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5 sm:gap-6 xl:gap-8" aria-label="دسته‌بندی‌های فروشگاه">
+            <a href="{% url 'catalog:product_list' %}" class="flex flex-col items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+                <span class="flex h-20 w-20 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <i class="fa-solid fa-layer-group text-3xl" aria-hidden="true"></i>
+                </span>
+                <span class="text-sm font-black text-gray-800">همه دسته‌ها</span>
             </a>
-        {% endfor %}
-    </nav>
+            {% for cat in categories %}
+                <a href="{{ cat.get_absolute_url }}" class="flex flex-col items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+                    <span class="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl bg-gray-50">
+                        {% if cat.image %}
+                            <img src="{{ cat.image.url }}" alt="{{ cat.name }}" loading="lazy" decoding="async" class="h-full w-full object-contain p-2">
+                        {% else %}
+                            <i class="fa-solid fa-layer-group text-3xl text-indigo-600" aria-hidden="true"></i>
+                        {% endif %}
+                    </span>
+                    <span class="text-sm font-black text-gray-800">{{ cat.name }}</span>
+                </a>
+            {% empty %}
+                <p class="col-span-full text-sm text-gray-500">دسته‌بندی فعالی ثبت نشده است.</p>
+            {% endfor %}
+        </nav>
+    {% else %}
+        <nav class="flex flex-wrap gap-3" aria-label="فیلتر دسته‌بندی محصولات">
+            <a href="{% url 'catalog:product_list' %}{% if pagination_query %}?{{ pagination_query }}{% endif %}" class="px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 {% if not category %}bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105{% else %}bg-white border border-gray-200 text-gray-600 hover:border-indigo-400 hover:text-indigo-600{% endif %}" {% if not category %}aria-current="page"{% endif %}>
+                همه دسته‌ها
+            </a>
+            {% for cat in categories %}
+                <a href="{{ cat.get_absolute_url }}{% if pagination_query %}?{{ pagination_query }}{% endif %}" class="px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 {% if category.slug == cat.slug %}bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-105{% else %}bg-white border border-gray-200 text-gray-600 hover:border-indigo-400 hover:text-indigo-600{% endif %}" {% if category.slug == cat.slug %}aria-current="page"{% endif %}>
+                    {{ cat.name }}
+                </a>
+            {% endfor %}
+        </nav>
+    {% endif %}
 </section>
 
 <section aria-label="فهرست محصولات">
