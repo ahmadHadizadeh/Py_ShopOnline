@@ -29,8 +29,8 @@
                 <p class="mt-0.5 truncate text-[10px] font-medium italic text-gray-400">{{ product.name_en }}</p>
             {% endif %}
             {% if product.review_count %}
-                <div class="mt-2 flex items-center gap-1.5 text-xs text-gray-500" aria-label="میانگین امتیاز {{ product.avg_rating|floatformat:1 }} از ۵ بر اساس {{ product.review_count }} نظر تأییدشده">
-                    <i class="fa-solid fa-star text-amber-400" aria-hidden="true"></i>
+                <div class="mt-2 flex items-center gap-1 text-xs text-gray-500" aria-label="میانگین امتیاز {{ product.avg_rating|floatformat:1 }} از ۵ بر اساس {{ product.review_count }} نظر تأییدشده">
+                    <i class="fa-solid fa-star text-yellow-400" aria-hidden="true"></i>
                     <span class="font-bold text-gray-700">{{ product.avg_rating|floatformat:1 }}</span>
                     <span>({{ product.review_count }} نظر)</span>
                 </div>
