@@ -186,8 +186,8 @@ with sync_playwright() as playwright:
     response = mobile.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
     assert response is not None and response.status == 200
     expect_visible(mobile, "#desktop-search-form")
-    expect_hidden(mobile, "#storefront-hero")
-    expect_hidden(mobile, "#storefront-trust-strip")
+    expect_visible(mobile, "#storefront-hero")
+    expect_visible(mobile, "#storefront-trust-strip")
     expect_hidden(mobile, "#mobile-nav-toggle")
     assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
     mobile.screenshot(path=str(ARTIFACTS / "storefront-desktop-home.png"), full_page=True)
