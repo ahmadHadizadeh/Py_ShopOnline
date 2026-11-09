@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "ui/storefront-header-search-navigation-2026-11-07"
+      - "feat/storefront-homepage-merchandising-2026-11-09"
     paths:
       - ".github/workflows/storefront-tailwind-build.yml"
       - "package.json"
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07'
+    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07' || github.ref == 'refs/heads/feat/storefront-homepage-merchandising-2026-11-09'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -54,6 +55,7 @@ jobs:
           node --check static/js/storefront/base.js
           node --check static/js/storefront/otp.js
           node --check static/js/storefront/details.js
+          node --check static/js/storefront/search.js
 
       - name: Compile the production CSS
         run: npm run build:css

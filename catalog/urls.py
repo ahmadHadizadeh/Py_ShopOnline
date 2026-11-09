@@ -7,6 +7,11 @@ app_name = "catalog"
 register_converter(UnicodeSlugConverter, "uslug")
 
 urlpatterns = [
+    path(
+        "ajax/search-suggestions/",
+        views.search_suggestions,
+        name="search_suggestions",
+    ),
     path("", views.home, name="product_list"),
     path("category/<uslug:category_slug>/", views.home, name="product_list_by_category"),
     path("product/<uslug:slug>/", views.product_detail, name="product_detail"),

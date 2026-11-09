@@ -11,6 +11,7 @@ from catalog.models.inventory import InventoryMovement
 from catalog.models.category import Category
 from catalog.models.review import Review
 from catalog.models.variant import ProductVariant
+from orders.models import Order, OrderItem, Payment
 from catalog.services import (
     adjust_product_stock,
     record_physical_stock_count,
@@ -100,6 +101,56 @@ class ProductCatalogSearchTests(BaseTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.category.get_absolute_url())
+
+    def test_homepage_renders_visual_category_cards(self):
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="دسته‌بندی‌های فروشگاه"')
+        self.assertContains(response, self.category.get_absolute_url())
+        self.assertContains(response, self.category.name)
+
+    def test_search_suggestions_reuse_search_fields_and_category_scope(self):
+        other_category = Category.objects.create(
+            name="Other Suggestion Category",
+            slug="other-suggestion-category",
+        )
+        Product.objects.create(
+            name="Northwind in another category",
+            slug="northwind-in-another-category",
+            brand="Northwind",
+            stock=3,
+            category=other_category,
+        )
+        Product.objects.create(
+            name="Inactive Northwind",
+            slug="inactive-northwind",
+            brand="Northwind",
+            is_active=False,
+            stock=3,
+            category=self.category,
+        )
+
+        response = self.client.get(
+            reverse("catalog:search_suggestions"),
+            {"q": "Northwind", "category": self.category.slug},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["name"], self.searchable_product.name)
+        self.assertEqual(results[0]["url"], self.searchable_product.get_absolute_url())
+        self.assertEqual(results[0]["category"], self.category.name)
+
+    def test_search_suggestions_ignore_queries_shorter_than_two_characters(self):
+        response = self.client.get(
+            reverse("catalog:search_suggestions"),
+            {"q": "N"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"results": []})
 
     def test_price_sorting_uses_only_supported_options(self):
         cheaper = Product.objects.create(
@@ -198,6 +249,158 @@ class ProductCatalogSearchTests(BaseTestCase):
             response,
             'href="/?q=Northwind&amp;sort=price_desc"',
         )
+
+
+class HomepageMerchandisingTests(BaseTestCase):
+    def _record_order_item(
+        self,
+        product,
+        quantity,
+        *,
+        order_status=Order.Status.PAID,
+        payment_status=Payment.Status.SUCCESS,
+        stock_reduced=True,
+    ):
+        order = Order.objects.create(
+            user=self.user,
+            status=order_status,
+            stock_reduced=stock_reduced,
+        )
+        Payment.objects.create(
+            order=order,
+            user=self.user,
+            amount=product.price * quantity,
+            status=payment_status,
+        )
+        return OrderItem.objects.create(
+            order=order,
+            product=product,
+            product_name=product.name,
+            quantity=quantity,
+            unit_price=product.price,
+            subtotal_price=product.price * quantity,
+        )
+
+    def test_best_sellers_count_only_successful_fulfillable_sales(self):
+        popular = Product.objects.create(
+            name="Popular product",
+            slug="popular-product",
+            price=Decimal("1000"),
+            stock=10,
+            category=self.category,
+        )
+        second = Product.objects.create(
+            name="Second popular product",
+            slug="second-popular-product",
+            price=Decimal("2000"),
+            stock=10,
+            category=self.category,
+        )
+        cancelled = Product.objects.create(
+            name="Cancelled order product",
+            slug="cancelled-order-product",
+            price=Decimal("3000"),
+            stock=10,
+            category=self.category,
+        )
+
+        self._record_order_item(popular, 2)
+        self._record_order_item(popular, 3, order_status=Order.Status.COMPLETED)
+        self._record_order_item(second, 4)
+        self._record_order_item(
+            popular,
+            50,
+            order_status=Order.Status.PENDING,
+            payment_status=Payment.Status.PENDING,
+            stock_reduced=False,
+        )
+        self._record_order_item(
+            cancelled,
+            100,
+            order_status=Order.Status.CANCELLED,
+            payment_status=Payment.Status.REFUNDED,
+            stock_reduced=False,
+        )
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        best_sellers = list(response.context["best_selling_products"])
+        self.assertEqual(
+            [product.pk for product in best_sellers],
+            [popular.pk, second.pk],
+        )
+        self.assertEqual(best_sellers[0].sold_quantity, 5)
+
+    def test_special_offers_require_real_discount_and_available_stock(self):
+        discounted = Product.objects.create(
+            name="Discounted product",
+            slug="discounted-product",
+            price=Decimal("800"),
+            old_price=Decimal("1000"),
+            stock=5,
+            category=self.category,
+        )
+        Product.objects.create(
+            name="No actual discount",
+            slug="no-actual-discount",
+            price=Decimal("1000"),
+            old_price=Decimal("800"),
+            stock=5,
+            category=self.category,
+        )
+        Product.objects.create(
+            name="Sold out discount",
+            slug="sold-out-discount",
+            price=Decimal("500"),
+            old_price=Decimal("1000"),
+            stock=0,
+            category=self.category,
+        )
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        offers = list(response.context["special_offer_products"])
+        self.assertEqual([product.pk for product in offers], [discounted.pk])
+
+    def test_homepage_card_rating_uses_only_approved_reviews(self):
+        product = Product.objects.create(
+            name="Reviewed product",
+            slug="reviewed-product",
+            price=Decimal("1500"),
+            stock=5,
+            category=self.category,
+        )
+        pending_user = User.objects.create_user(
+            username="pending-review-user",
+            password="test-password",
+        )
+        Review.objects.create(
+            product=product,
+            user=self.user,
+            rating=5,
+            comment="Approved review",
+            is_approved=True,
+        )
+        Review.objects.create(
+            product=product,
+            user=pending_user,
+            rating=1,
+            comment="Pending review",
+            is_approved=False,
+        )
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        product_row = next(
+            row for row in response.context["page_obj"].object_list
+            if row.pk == product.pk
+        )
+        self.assertEqual(product_row.review_count, 1)
+        self.assertEqual(product_row.avg_rating, Decimal("5"))
+        self.assertContains(response, 'fa-solid fa-star text-yellow-400')
 
 
 class ReviewServiceTests(BaseTestCase):
@@ -1038,6 +1241,23 @@ class InventoryAdminOperationViewTests(TestCase):
         self.assertEqual(self.product.stock, 5)
         self.assertEqual(InventoryMovement.objects.count(), 0)
 
+
+
+class CategoryAdminImageTests(TestCase):
+    def test_category_image_is_optional_and_available_in_admin(self):
+        image_field = Category._meta.get_field("image")
+        self.assertTrue(image_field.blank)
+        self.assertEqual(image_field.default, "")
+
+        category_admin = admin.site._registry[Category]
+        request = RequestFactory().get("/admin/catalog/category/add/")
+        fieldsets = category_admin.get_fieldsets(request)
+        configured_fields = [
+            field_name
+            for _, options in fieldsets
+            for field_name in options.get("fields", ())
+        ]
+        self.assertIn("image", configured_fields)
 
 
 class CategoryAdminDeletionSafetyTests(TestCase):
