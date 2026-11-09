@@ -15,6 +15,7 @@ on:
       - "catalog/context_processors.py"
       - "catalog/templates/catalog/base.html"
       - "catalog/templates/catalog/home.html"
+      - "catalog/templates/catalog/partials/_product_card.html"
       - "catalog/templates/catalog/details.html"
       - "catalog/templates/catalog/partials/_otp_login_modal.html"
       - "catalog/admin.py"
@@ -29,6 +30,14 @@ on:
       - "orders/services.py"
       - "core/settings.py"
       - "static/js/storefront/**/*.js"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/storefront-ui-verify.yml"
+      - "catalog/templates/catalog/home.html"
+      - "catalog/templates/catalog/partials/_product_card.html"
+      - "catalog/tests.py"
+      - "catalog/views.py"
   workflow_dispatch:
 
 permissions:
@@ -36,7 +45,7 @@ permissions:
 
 jobs:
   storefront:
-    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
