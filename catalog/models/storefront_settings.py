@@ -56,12 +56,19 @@ class StorefrontSettings(models.Model):
     def __str__(self):
         return self._meta.verbose_name
 
+    def clean(self):
+        super().clean()
+        if self.pk is None:
+            self.pk = self.SINGLETON_PK
+
     def save(self, *args, **kwargs):
         if self.pk not in (None, self.SINGLETON_PK):
             raise ValidationError(
                 {"id": "تنظیمات ویترین فقط یک رکورد با شناسه ثابت دارد."}
             )
         self.pk = self.SINGLETON_PK
+        if self._state.adding:
+            kwargs.setdefault("force_insert", True)
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

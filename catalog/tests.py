@@ -1671,8 +1671,23 @@ class StorefrontSettingsAdminAccessTests(TestCase):
         self.assertEqual(self.client.get(changelist_url).status_code, 200)
         self.assertEqual(self.client.get(add_url).status_code, 200)
 
-        settings = StorefrontSettings.objects.create(
-            instagram_url="https://www.instagram.com/example"
+        save_response = self.client.post(
+            add_url,
+            {
+                "instagram_url": "https://www.instagram.com/example",
+                "whatsapp_url": "",
+                "telegram_url": "",
+                "bale_url": "",
+                "_save": "ذخیره",
+            },
+        )
+        self.assertEqual(save_response.status_code, 302)
+        settings = StorefrontSettings.objects.get(
+            pk=StorefrontSettings.SINGLETON_PK
+        )
+        self.assertEqual(
+            settings.instagram_url,
+            "https://www.instagram.com/example",
         )
         change_url = reverse(
             "admin:catalog_storefrontsettings_change",
