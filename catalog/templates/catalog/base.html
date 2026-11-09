@@ -80,10 +80,11 @@
             <div class="flex shrink-0 items-center gap-1 sm:gap-5">
                 <form id="desktop-search-form" method="get" action="{% if category %}{{ category.get_absolute_url }}{% else %}{% url 'catalog:product_list' %}{% endif %}" role="search" class="relative hidden sm:block">
                     <label for="desktop-search-input" class="sr-only">جست‌وجو در محصولات</label>
-                    <input type="search" id="desktop-search-input" name="q" value="{{ search_query|default:'' }}" maxlength="120" autocomplete="off" placeholder="جست‌وجوی محصولات..." class="bg-gray-100 border-none rounded-full py-2 pl-4 pr-10 text-sm focus:ring-2 focus:ring-indigo-500 w-48 lg:w-64 transition-all">
+                    <input type="search" id="desktop-search-input" name="q" value="{{ search_query|default:'' }}" maxlength="120" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="desktop-search-suggestions" data-search-suggest-url="{% url 'catalog:search_suggestions' %}" data-category-slug="{{ category.slug|default:'' }}" placeholder="جست‌وجوی محصولات..." class="bg-gray-100 border-none rounded-full py-2 pl-4 pr-10 text-sm focus:ring-2 focus:ring-indigo-500 w-48 lg:w-64 transition-all">
                     <button type="submit" aria-label="جست‌وجو" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600">
                         <i class="fa-solid fa-magnifying-glass text-sm" aria-hidden="true"></i>
                     </button>
+                    <div id="desktop-search-suggestions" data-search-suggestions role="listbox" aria-label="پیشنهادهای جست‌وجو" aria-hidden="true" class="absolute right-0 top-full z-50 mt-2 hidden w-full rounded-2xl border border-gray-100 bg-white py-2 shadow-xl"></div>
                 </form>
 
                 <button id="mobile-search-toggle" type="button" class="sm:hidden inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-indigo-600 transition" aria-label="نمایش جست‌وجو" aria-controls="mobile-search-panel" aria-expanded="false">
@@ -135,12 +136,13 @@
         </nav>
 
         <div id="mobile-search-panel" class="hidden md:hidden border-t border-gray-100 bg-white" aria-hidden="true">
-            <form method="get" action="{% if category %}{{ category.get_absolute_url }}{% else %}{% url 'catalog:product_list' %}{% endif %}" role="search" class="container mx-auto px-4 py-3 flex items-center gap-2">
+            <form method="get" action="{% if category %}{{ category.get_absolute_url }}{% else %}{% url 'catalog:product_list' %}{% endif %}" role="search" class="container mx-auto px-4 py-3 relative flex items-center gap-2">
                 <label for="mobile-search-input" class="sr-only">جست‌وجو در محصولات</label>
-                <input type="search" id="mobile-search-input" name="q" value="{{ search_query|default:'' }}" maxlength="120" autocomplete="off" placeholder="نام محصول، برند یا ویژگی..." class="min-w-0 flex-1 bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                <input type="search" id="mobile-search-input" name="q" value="{{ search_query|default:'' }}" maxlength="120" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="mobile-search-suggestions" data-search-suggest-url="{% url 'catalog:search_suggestions' %}" data-category-slug="{{ category.slug|default:'' }}" placeholder="نام محصول، برند یا ویژگی..." class="min-w-0 flex-1 bg-gray-100 border border-gray-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                 <button type="submit" aria-label="جست‌وجو" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition">
                     <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                 </button>
+                <div id="mobile-search-suggestions" data-search-suggestions role="listbox" aria-label="پیشنهادهای جست‌وجو" aria-hidden="true" class="absolute right-4 left-4 top-full z-50 mt-1 hidden rounded-2xl border border-gray-100 bg-white py-2 shadow-xl"></div>
             </form>
         </div>
 
@@ -173,16 +175,18 @@
 
     <footer class="bg-gray-900 text-gray-400 pt-12 pb-6 border-t border-gray-800 mt-auto">
         <div class="container mx-auto px-4 lg:px-8">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-8 mb-8 text-center md:text-right">
-                <div>
-                    <h2 class="text-white text-xl font-bold mb-2 italic">آنلاین شاپ هوش برتر</h2>
-                    <p class="max-w-xs text-sm leading-relaxed">مرجع تخصصی تکنولوژی با مدیریت احمد هادی‌زاده.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div class="md:col-span-2">
+                    <h2 class="text-white text-xl font-bold mb-3">آنلاین‌شاپ احمد</h2>
+                    <p class="max-w-xl text-sm leading-7">فروشگاهی با دسته‌بندی‌های متنوع؛ قیمت، وضعیت موجودی، امتیاز کاربران و جزئیات هر محصول را پیش از خرید بررسی کنید.</p>
                 </div>
-                <div class="flex gap-6 text-2xl">
-                    <a href="#" class="hover:text-pink-500 transition"><i class="fa-brands fa-instagram"></i></a>
-                    <a href="#" class="hover:text-blue-400 transition"><i class="fa-brands fa-telegram"></i></a>
-                    <a href="#" class="hover:text-gray-100 transition"><i class="fa-brands fa-github"></i></a>
-                </div>
+                <nav class="flex flex-col gap-3" aria-label="دسترسی سریع در پابرگ">
+                    <h2 class="text-white text-sm font-bold mb-1">دسترسی سریع</h2>
+                    <a href="{% url 'catalog:product_list' %}" class="text-sm hover:text-white transition">خانه و همه محصولات</a>
+                    <a href="{% url 'cart:detail' %}" class="text-sm hover:text-white transition">سبد خرید</a>
+                    <a href="{% url 'accounts:dashboard_orders' %}" class="text-sm hover:text-white transition">پیگیری سفارش‌ها</a>
+                    <a href="/sitemap.xml" class="text-sm hover:text-white transition">نقشه سایت</a>
+                </nav>
             </div>
             <div class="border-t border-gray-800 pt-6 text-center text-xs">
                 <p>© ۲۰۲۶ - طراحی و توسعه: <span class="text-indigo-400 font-bold italic text-sm underline decoration-wavy">احمد</span></p>
@@ -191,6 +195,7 @@
     </footer>
 
 <script src="{% static 'js/storefront/base.js' %}" defer></script>
+<script src="{% static 'js/storefront/search.js' %}" defer></script>
 {% include 'catalog/partials/_otp_login_modal.html' %}
 <script src="{% static 'js/storefront/otp.js' %}" defer></script>
 
