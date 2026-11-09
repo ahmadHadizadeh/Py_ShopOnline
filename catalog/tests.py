@@ -333,6 +333,53 @@ class HomepageMerchandisingTests(BaseTestCase):
         )
         self.assertEqual(best_sellers[0].sold_quantity, 5)
 
+    def test_homepage_showcase_products_are_not_repeated_across_sections(self):
+        shared_product = Product.objects.create(
+            name="Shared showcase product",
+            slug="shared-showcase-product",
+            price=Decimal("1000"),
+            old_price=Decimal("1200"),
+            stock=5,
+            category=self.category,
+        )
+        best_seller = Product.objects.create(
+            name="Exclusive best seller",
+            slug="exclusive-best-seller",
+            price=Decimal("1500"),
+            stock=5,
+            category=self.category,
+        )
+        special_offer = Product.objects.create(
+            name="Exclusive special offer",
+            slug="exclusive-special-offer",
+            price=Decimal("800"),
+            old_price=Decimal("1000"),
+            stock=5,
+            category=self.category,
+        )
+        self._record_order_item(shared_product, 2)
+        self._record_order_item(best_seller, 1)
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        best_seller_ids = {
+            product.pk for product in response.context["best_selling_products"]
+        }
+        special_offer_ids = {
+            product.pk for product in response.context["special_offer_products"]
+        }
+        main_grid_ids = {
+            product.pk for product in response.context["page_obj"].object_list
+        }
+
+        self.assertEqual(best_seller_ids, {shared_product.pk, best_seller.pk})
+        self.assertEqual(special_offer_ids, {special_offer.pk})
+        self.assertTrue(best_seller_ids.isdisjoint(special_offer_ids))
+        self.assertTrue(
+            (best_seller_ids | special_offer_ids).isdisjoint(main_grid_ids)
+        )
+
     def test_special_offers_require_real_discount_and_available_stock(self):
         discounted = Product.objects.create(
             name="Discounted product",
