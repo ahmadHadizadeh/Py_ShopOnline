@@ -16,7 +16,7 @@ from django.db.models.functions import Coalesce
 from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, resolve_url
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from catalog.models.category import Category
@@ -50,6 +50,59 @@ def _with_approved_review_summary(queryset):
     )
 
 
+def _filter_products_by_search(queryset, search_query):
+    if not search_query:
+        return queryset
+    return queryset.filter(
+        Q(name__icontains=search_query)
+        | Q(name_en__icontains=search_query)
+        | Q(brand__icontains=search_query)
+        | Q(description__icontains=search_query)
+        | Q(highlights__icontains=search_query)
+    )
+
+
+@require_GET
+def search_suggestions(request):
+    search_query = request.GET.get("q", "").strip()[:120]
+    if len(search_query) < 2:
+        return JsonResponse({"results": []})
+
+    products = Product.objects.filter(is_active=True).select_related("category")
+    products = _filter_products_by_search(products, search_query)
+
+    category_slug = request.GET.get("category", "").strip()
+    if category_slug:
+        products = products.filter(
+            category__slug=category_slug,
+            category__is_active=True,
+        )
+
+    suggestions = products.order_by("-created", "-pk").values(
+        "name",
+        "slug",
+        "price",
+        "category__name",
+    )[:6]
+
+    return JsonResponse(
+        {
+            "results": [
+                {
+                    "name": item["name"],
+                    "url": reverse(
+                        "catalog:product_detail",
+                        kwargs={"slug": item["slug"]},
+                    ),
+                    "price": str(item["price"]),
+                    "category": item["category__name"],
+                }
+                for item in suggestions
+            ]
+        }
+    )
+
+
 def home(request, category_slug=None):
     category = None
     products = Product.objects.filter(is_active=True).select_related("category")
@@ -63,14 +116,7 @@ def home(request, category_slug=None):
         products = products.filter(category=category)
 
     search_query = request.GET.get("q", "").strip()[:120]
-    if search_query:
-        products = products.filter(
-            Q(name__icontains=search_query)
-            | Q(name_en__icontains=search_query)
-            | Q(brand__icontains=search_query)
-            | Q(description__icontains=search_query)
-            | Q(highlights__icontains=search_query)
-        )
+    products = _filter_products_by_search(products, search_query)
 
     sort = request.GET.get("sort", "newest")
     sort_fields = PRODUCT_LIST_SORT_OPTIONS.get(sort)
