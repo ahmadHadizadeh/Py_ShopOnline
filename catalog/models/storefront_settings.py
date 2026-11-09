@@ -48,7 +48,7 @@ class StorefrontSettings(models.Model):
         verbose_name_plural = "تنظیمات ویترین فروشگاه"
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(id=SINGLETON_PK),
+                condition=models.Q(id=1),
                 name="storefront_settings_singleton_id_1",
             ),
         ]

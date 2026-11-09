@@ -179,7 +179,8 @@
                 <div class="md:col-span-2">
                     <h2 class="text-white text-xl font-bold mb-3">آنلاین‌شاپ احمد</h2>
                     <p class="max-w-xl text-sm leading-7">فروشگاهی با دسته‌بندی‌های متنوع؛ قیمت، وضعیت موجودی، امتیاز کاربران و جزئیات هر محصول را پیش از خرید بررسی کنید.</p>
-                    {% if storefront_settings and storefront_settings.instagram_url or storefront_settings and storefront_settings.whatsapp_url or storefront_settings and storefront_settings.telegram_url or storefront_settings and storefront_settings.bale_url %}
+                    {% if storefront_settings %}
+                        {% if storefront_settings.instagram_url or storefront_settings.whatsapp_url or storefront_settings.telegram_url or storefront_settings.bale_url %}
                         <nav class="mt-6 flex flex-wrap items-center gap-3" aria-label="شبکه‌های اجتماعی فروشگاه">
                             {% if storefront_settings.instagram_url %}
                                 <a href="{{ storefront_settings.instagram_url }}" target="_blank" rel="noopener noreferrer" aria-label="اینستاگرام فروشگاه" class="inline-flex items-center gap-2 rounded-xl border border-gray-700 px-3 py-2 text-sm text-gray-300 hover:border-pink-400 hover:text-white transition">
@@ -206,6 +207,7 @@
                                 </a>
                             {% endif %}
                         </nav>
+                        {% endif %}
                     {% endif %}
                 </div>
                 <nav class="flex flex-col gap-3" aria-label="دسترسی سریع در پابرگ">

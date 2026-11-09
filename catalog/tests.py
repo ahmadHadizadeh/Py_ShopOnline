@@ -1661,7 +1661,7 @@ class StorefrontSettingsAdminAccessTests(TestCase):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 403)
 
-        self.assertFalse(StorefrontSettings.objects.filter(pk=settings.pk).none())
+        self.assertTrue(StorefrontSettings.objects.filter(pk=settings.pk).exists())
 
     def test_owner_can_add_and_change_settings_but_cannot_add_or_delete_twice(self):
         self.client.force_login(self.owner)
