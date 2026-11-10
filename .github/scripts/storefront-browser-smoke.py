@@ -70,6 +70,19 @@ def assert_footer_layout(page, width: int) -> None:
         )
 
 
+def assert_hero_heading_spacing(page, width: int) -> None:
+    heading = page.locator("#storefront-hero-heading")
+    assert heading.locator('[data-storefront-hero-line="1"]').count() == 1
+    assert heading.locator('[data-storefront-hero-line="2"]').count() == 1
+    actual_gap = float(
+        heading.evaluate("(element) => getComputedStyle(element).rowGap").replace("px", "")
+    )
+    expected_gap = 16 if width >= 640 else 12
+    assert abs(actual_gap - expected_gap) <= 1, (
+        f"Unexpected hero heading line gap at {width}px: {actual_gap}px"
+    )
+
+
 def expect_visible(page, selector: str) -> None:
     locator = page.locator(selector)
     locator.wait_for(state="visible", timeout=3000)
@@ -98,6 +111,9 @@ with sync_playwright() as playwright:
     )
     expect_visible(mobile, "#storefront-header")
     expect_visible(mobile, "#storefront-hero")
+    expect_visible(mobile, "#storefront-hero-heading [data-storefront-hero-line='1']")
+    expect_visible(mobile, "#storefront-hero-heading [data-storefront-hero-line='2']")
+    assert_hero_heading_spacing(mobile, 390)
     expect_visible(mobile, "#storefront-trust-strip")
     assert mobile.locator("#storefront-trust-strip h2").count() == 4
     expect_visible(mobile, "#mobile-nav-toggle")
@@ -149,6 +165,7 @@ with sync_playwright() as playwright:
         mobile.set_viewport_size({"width": width, "height": 844})
         assert_no_horizontal_overflow(mobile, width)
         assert_footer_layout(mobile, width)
+        assert_hero_heading_spacing(mobile, width)
         category_columns = mobile.locator(
             '#products-list nav[aria-label="دسته‌بندی‌های فروشگاه"]'
         ).evaluate(

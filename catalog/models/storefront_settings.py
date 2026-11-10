@@ -13,6 +13,21 @@ class StorefrontSettings(models.Model):
     """Single, owner-managed set of optional public storefront links."""
 
     SINGLETON_PK = 1
+    DEFAULT_HERO_TITLE_LINE_1 = "محصول موردنیازتان، فقط چند کلیک با شما فاصله دارد."
+    DEFAULT_HERO_TITLE_LINE_2 = "در آنلاین‌شاپ احمد، ساده و آگاهانه انتخاب کنید."
+
+    hero_title_line_1 = models.CharField(
+        max_length=160,
+        default=DEFAULT_HERO_TITLE_LINE_1,
+        verbose_name="خط اول عنوان بنر صفحه اصلی",
+        help_text="متن اصلی بنر صفحه اصلی؛ حداکثر ۱۶۰ نویسه.",
+    )
+    hero_title_line_2 = models.CharField(
+        max_length=160,
+        default=DEFAULT_HERO_TITLE_LINE_2,
+        verbose_name="خط دوم عنوان بنر صفحه اصلی",
+        help_text="متن تأکیدی زیر خط اول؛ حداکثر ۱۶۰ نویسه.",
+    )
 
     instagram_url = models.URLField(
         max_length=500,

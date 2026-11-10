@@ -667,6 +667,19 @@ class WishlistAdmin(admin.ModelAdmin):
 class StorefrontSettingsAdmin(admin.ModelAdmin):
     fieldsets = (
         (
+            "متن بنر صفحه اصلی",
+            {
+                "fields": (
+                    "hero_title_line_1",
+                    "hero_title_line_2",
+                ),
+                "description": (
+                    "هر خط را جداگانه ویرایش کنید. فاصله بین دو خط در قالب سایت "
+                    "به‌صورت واکنش‌گرا مدیریت می‌شود؛ شکست خط را داخل فیلد وارد نکنید."
+                ),
+            },
+        ),
+        (
             "پیوندهای شبکه‌های اجتماعی",
             {
                 "fields": (

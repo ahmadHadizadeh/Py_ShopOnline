@@ -264,6 +264,8 @@ class HomepageMerchandisingTests(BaseTestCase):
         self.assertEqual(homepage.status_code, 200)
         self.assertContains(homepage, 'id="storefront-hero"')
         self.assertContains(homepage, 'id="storefront-hero-heading"')
+        self.assertContains(homepage, StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1)
+        self.assertContains(homepage, StorefrontSettings.DEFAULT_HERO_TITLE_LINE_2)
         self.assertContains(homepage, 'id="storefront-trust-strip"')
         for benefit in (
             "وضعیت موجودی مشخص",
@@ -1534,6 +1536,21 @@ class StorefrontPriceFormattingTests(SimpleTestCase):
 
 
 class StorefrontSettingsModelTests(TestCase):
+    def test_hero_heading_defaults_are_present_and_bounded(self):
+        settings = StorefrontSettings()
+        settings.full_clean()
+
+        self.assertEqual(
+            settings.hero_title_line_1,
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1,
+        )
+        self.assertEqual(
+            settings.hero_title_line_2,
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_2,
+        )
+        self.assertLessEqual(len(settings.hero_title_line_1), 160)
+        self.assertLessEqual(len(settings.hero_title_line_2), 160)
+
     def test_social_links_must_use_https(self):
         settings = StorefrontSettings(
             instagram_url="http://www.instagram.com/example"
@@ -1585,13 +1602,25 @@ class StorefrontSettingsContextTests(TestCase):
         self.assertIn("categories", context)
         self.assertIn("storefront_settings", context)
         self.assertIsNone(context["storefront_settings"])
+        self.assertEqual(
+            context["storefront_hero_title_line_1"],
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1,
+        )
+        self.assertEqual(
+            context["storefront_hero_title_line_2"],
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_2,
+        )
 
         settings = StorefrontSettings.objects.create(
-            whatsapp_url="https://wa.me/989120000000"
+            whatsapp_url="https://wa.me/989120000000",
+            hero_title_line_1="عنوان آزمایشی اول",
+            hero_title_line_2="عنوان آزمایشی دوم",
         )
         context = storefront_categories(request)
 
         self.assertEqual(context["storefront_settings"], settings)
+        self.assertEqual(context["storefront_hero_title_line_1"], "عنوان آزمایشی اول")
+        self.assertEqual(context["storefront_hero_title_line_2"], "عنوان آزمایشی دوم")
         self.assertEqual(
             storefront_categories(RequestFactory().get("/admin/")),
             {},
@@ -1674,6 +1703,8 @@ class StorefrontSettingsAdminAccessTests(TestCase):
         save_response = self.client.post(
             add_url,
             {
+                "hero_title_line_1": "عنوان آزمایشی اول در پنل مالک",
+                "hero_title_line_2": "عنوان آزمایشی دوم در پنل مالک",
                 "instagram_url": "https://www.instagram.com/example",
                 "whatsapp_url": "",
                 "telegram_url": "",
@@ -1689,6 +1720,13 @@ class StorefrontSettingsAdminAccessTests(TestCase):
             settings.instagram_url,
             "https://www.instagram.com/example",
         )
+        self.assertEqual(settings.hero_title_line_1, "عنوان آزمایشی اول در پنل مالک")
+        self.assertEqual(settings.hero_title_line_2, "عنوان آزمایشی دوم در پنل مالک")
+
+        homepage = self.client.get(reverse("catalog:product_list"))
+        self.assertContains(homepage, "عنوان آزمایشی اول در پنل مالک")
+        self.assertContains(homepage, "عنوان آزمایشی دوم در پنل مالک")
+
         change_url = reverse(
             "admin:catalog_storefrontsettings_change",
             args=[settings.pk],
