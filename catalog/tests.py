@@ -1789,6 +1789,7 @@ class StorefrontSettingsAdminAccessTests(TestCase):
         save_response = self.client.post(
             add_url,
             {
+                "store_name": StorefrontSettings.DEFAULT_STORE_NAME,
                 "hero_title_line_1": "عنوان آزمایشی اول در پنل مالک",
                 "hero_title_line_2": "عنوان آزمایشی دوم در پنل مالک",
                 "instagram_url": "https://www.instagram.com/example",
