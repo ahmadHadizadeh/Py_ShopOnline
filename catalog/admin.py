@@ -13,6 +13,7 @@ from core.admin_formatting import (
     format_jalali_datetime,
 )
 from .models.category import Category
+from .models.storefront_settings import StorefrontSettings
 from .models.product import Product
 from .models.inventory import InventoryMovement
 from .models.review import Review
@@ -656,6 +657,83 @@ class WishlistAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+
+@admin.register(StorefrontSettings)
+class StorefrontSettingsAdmin(admin.ModelAdmin):
+    fieldsets = (
+        (
+            "متن بنر صفحه اصلی",
+            {
+                "fields": (
+                    "hero_title_line_1",
+                    "hero_title_line_2",
+                ),
+                "description": (
+                    "هر خط را جداگانه ویرایش کنید. فاصله بین دو خط در قالب سایت "
+                    "به‌صورت واکنش‌گرا مدیریت می‌شود؛ شکست خط را داخل فیلد وارد نکنید."
+                ),
+            },
+        ),
+        (
+            "پیوندهای شبکه‌های اجتماعی",
+            {
+                "fields": (
+                    "instagram_url",
+                    "whatsapp_url",
+                    "telegram_url",
+                    "bale_url",
+                ),
+                "description": (
+                    "پیوند کامل هر شبکه را با HTTPS وارد کنید. "
+                    "فیلدهای خالی در پابرگ نمایش داده نمی‌شوند. "
+                    "این بخش فقط در اختیار صاحب فروشگاه است."
+                ),
+            },
+        ),
+    )
+    list_display = ("__str__", "instagram_url", "whatsapp_url", "telegram_url", "bale_url")
+    list_display_links = ("__str__",)
+    list_per_page = 1
+
+    @staticmethod
+    def _is_store_owner(request):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.is_active
+            and request.user.is_superuser
+        )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            pk=StorefrontSettings.SINGLETON_PK
+        )
+
+    def has_module_permission(self, request):
+        return self._is_store_owner(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._is_store_owner(request) and (
+            obj is None or obj.pk == StorefrontSettings.SINGLETON_PK
+        )
+
+    def has_add_permission(self, request):
+        return (
+            self._is_store_owner(request)
+            and not StorefrontSettings.objects.filter(
+                pk=StorefrontSettings.SINGLETON_PK
+            ).exists()
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return self._is_store_owner(request) and (
+            obj is None or obj.pk == StorefrontSettings.SINGLETON_PK
+        )
 
     def has_delete_permission(self, request, obj=None):
         return False

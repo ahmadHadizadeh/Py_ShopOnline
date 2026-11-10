@@ -1,0 +1,90 @@
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
+from django.db import models
+
+
+_https_url_validator = URLValidator(
+    schemes=["https"],
+    message="نشانی باید یک پیوند معتبر با پروتکل HTTPS باشد.",
+)
+
+
+class StorefrontSettings(models.Model):
+    """Single, owner-managed set of optional public storefront links."""
+
+    SINGLETON_PK = 1
+    DEFAULT_HERO_TITLE_LINE_1 = "محصول موردنیازتان، فقط چند کلیک با شما فاصله دارد."
+    DEFAULT_HERO_TITLE_LINE_2 = "در آنلاین‌شاپ احمد، ساده و آگاهانه انتخاب کنید."
+
+    hero_title_line_1 = models.CharField(
+        max_length=160,
+        default=DEFAULT_HERO_TITLE_LINE_1,
+        verbose_name="خط اول عنوان بنر صفحه اصلی",
+        help_text="متن اصلی بنر صفحه اصلی؛ حداکثر ۱۶۰ نویسه.",
+    )
+    hero_title_line_2 = models.CharField(
+        max_length=160,
+        default=DEFAULT_HERO_TITLE_LINE_2,
+        verbose_name="خط دوم عنوان بنر صفحه اصلی",
+        help_text="متن تأکیدی زیر خط اول؛ حداکثر ۱۶۰ نویسه.",
+    )
+
+    instagram_url = models.URLField(
+        max_length=500,
+        blank=True,
+        validators=[_https_url_validator],
+        verbose_name="پیوند اینستاگرام",
+        help_text="نشانی کامل HTTPS؛ در صورت خالی بودن نمایش داده نمی‌شود.",
+    )
+    whatsapp_url = models.URLField(
+        max_length=500,
+        blank=True,
+        validators=[_https_url_validator],
+        verbose_name="پیوند واتساپ",
+        help_text="نشانی کامل HTTPS؛ در صورت خالی بودن نمایش داده نمی‌شود.",
+    )
+    telegram_url = models.URLField(
+        max_length=500,
+        blank=True,
+        validators=[_https_url_validator],
+        verbose_name="پیوند تلگرام",
+        help_text="نشانی کامل HTTPS؛ در صورت خالی بودن نمایش داده نمی‌شود.",
+    )
+    bale_url = models.URLField(
+        max_length=500,
+        blank=True,
+        validators=[_https_url_validator],
+        verbose_name="پیوند بله",
+        help_text="نشانی کامل HTTPS؛ در صورت خالی بودن نمایش داده نمی‌شود.",
+    )
+
+    class Meta:
+        verbose_name = "تنظیمات ویترین فروشگاه"
+        verbose_name_plural = "تنظیمات ویترین فروشگاه"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(id=1),
+                name="storefront_settings_singleton_id_1",
+            ),
+        ]
+
+    def __str__(self):
+        return self._meta.verbose_name
+
+    def clean(self):
+        super().clean()
+        if self.pk is None:
+            self.pk = self.SINGLETON_PK
+
+    def save(self, *args, **kwargs):
+        if self.pk not in (None, self.SINGLETON_PK):
+            raise ValidationError(
+                {"id": "تنظیمات ویترین فقط یک رکورد با شناسه ثابت دارد."}
+            )
+        self.pk = self.SINGLETON_PK
+        if self._state.adding:
+            kwargs.setdefault("force_insert", True)
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("رکورد اصلی تنظیمات ویترین قابل حذف نیست.")

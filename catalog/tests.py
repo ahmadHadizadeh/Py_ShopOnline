@@ -1,17 +1,23 @@
 from decimal import Decimal
 # فایل: catalog/tests.py
-from django.test import TestCase, Client, RequestFactory
+from django.test import TestCase, Client, RequestFactory, SimpleTestCase
+from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib import admin
+from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from catalog.models.product import Product
 from catalog.models.inventory import InventoryMovement
 from catalog.models.category import Category
+from catalog.models.storefront_settings import StorefrontSettings
 from catalog.models.review import Review
 from catalog.models.variant import ProductVariant
+from catalog.templatetags.storefront_formatting import format_price
 from orders.models import Order, OrderItem, Payment
+from accounts.apps import STORE_MANAGER_GROUP_NAME
+from catalog.context_processors import storefront_categories
 from catalog.services import (
     adjust_product_stock,
     record_physical_stock_count,
@@ -252,6 +258,40 @@ class ProductCatalogSearchTests(BaseTestCase):
 
 
 class HomepageMerchandisingTests(BaseTestCase):
+    def test_homepage_hero_and_trust_strip_show_only_on_unfiltered_root(self):
+        homepage = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(homepage.status_code, 200)
+        self.assertContains(homepage, 'id="storefront-hero"')
+        self.assertContains(homepage, 'id="storefront-hero-heading"')
+        self.assertContains(homepage, StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1)
+        self.assertContains(homepage, StorefrontSettings.DEFAULT_HERO_TITLE_LINE_2)
+        self.assertContains(homepage, 'id="storefront-trust-strip"')
+        for benefit in (
+            "وضعیت موجودی مشخص",
+            "امتیاز و نظرات کاربران",
+            "انتخاب تنوع محصول",
+            "پیگیری سفارش",
+        ):
+            with self.subTest(benefit=benefit):
+                self.assertContains(homepage, benefit)
+
+        category_response = self.client.get(
+            reverse(
+                "catalog:product_list_by_category",
+                kwargs={"category_slug": self.category.slug},
+            )
+        )
+        search_response = self.client.get(
+            reverse("catalog:product_list"),
+            {"q": self.product1.name},
+        )
+        for response in (category_response, search_response):
+            with self.subTest(path=response.wsgi_request.path, query=response.wsgi_request.GET):
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, 'id="storefront-hero"')
+                self.assertNotContains(response, 'id="storefront-trust-strip"')
+
     def _record_order_item(
         self,
         product,
@@ -332,6 +372,77 @@ class HomepageMerchandisingTests(BaseTestCase):
         )
         self.assertEqual(best_sellers[0].sold_quantity, 5)
 
+    def test_homepage_showcase_products_are_not_repeated_across_sections(self):
+        shared_product = Product.objects.create(
+            name="Shared showcase product",
+            slug="shared-showcase-product",
+            price=Decimal("1000"),
+            old_price=Decimal("1200"),
+            stock=5,
+            category=self.category,
+        )
+        best_seller = Product.objects.create(
+            name="Exclusive best seller",
+            slug="exclusive-best-seller",
+            price=Decimal("1500"),
+            stock=5,
+            category=self.category,
+        )
+        special_offer = Product.objects.create(
+            name="Exclusive special offer",
+            slug="exclusive-special-offer",
+            price=Decimal("800"),
+            old_price=Decimal("1000"),
+            stock=5,
+            category=self.category,
+        )
+        self._record_order_item(shared_product, 2)
+        self._record_order_item(best_seller, 1)
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        best_seller_ids = {
+            product.pk for product in response.context["best_selling_products"]
+        }
+        special_offer_ids = {
+            product.pk for product in response.context["special_offer_products"]
+        }
+        main_grid_ids = {
+            product.pk for product in response.context["page_obj"].object_list
+        }
+
+        self.assertEqual(best_seller_ids, {shared_product.pk, best_seller.pk})
+        self.assertEqual(special_offer_ids, {special_offer.pk})
+        self.assertTrue(best_seller_ids.isdisjoint(special_offer_ids))
+        self.assertTrue(
+            (best_seller_ids | special_offer_ids).isdisjoint(main_grid_ids)
+        )
+
+    def test_homepage_with_only_showcase_products_does_not_show_empty_catalog_state(self):
+        self.product1.price = Decimal("1000")
+        self.product1.stock = 5
+        self.product1.save()
+        self._record_order_item(self.product1, 1)
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["page_obj"].paginator.count, 0)
+        self.assertEqual(
+            [product.pk for product in response.context["best_selling_products"]],
+            [self.product1.pk],
+        )
+        self.assertContains(response, 'id="best-selling-heading"')
+        self.assertContains(
+            response,
+            "محصولات منتخب در بخش‌های ویژه و پرفروش‌ها نمایش داده می‌شوند.",
+        )
+        self.assertNotContains(
+            response,
+            "هنوز محصولی برای نمایش ثبت نشده است.",
+        )
+
     def test_special_offers_require_real_discount_and_available_stock(self):
         discounted = Product.objects.create(
             name="Discounted product",
@@ -363,6 +474,42 @@ class HomepageMerchandisingTests(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         offers = list(response.context["special_offer_products"])
         self.assertEqual([product.pk for product in offers], [discounted.pk])
+
+    def test_homepage_places_curated_shelves_before_latest_product_grid(self):
+        special_offer = Product.objects.create(
+            name="Ordered special offer",
+            slug="ordered-special-offer",
+            price=Decimal("800"),
+            old_price=Decimal("1000"),
+            stock=5,
+            category=self.category,
+        )
+        best_seller = Product.objects.create(
+            name="Ordered best seller",
+            slug="ordered-best-seller",
+            price=Decimal("1200"),
+            stock=5,
+            category=self.category,
+        )
+        self._record_order_item(best_seller, 2)
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        category_nav = html.index('aria-label="دسته‌بندی‌های فروشگاه"')
+        offer_heading = html.index('id="special-offers-heading"')
+        bestseller_heading = html.index('id="best-selling-heading"')
+        product_section = html.index('aria-label="فهرست محصولات"')
+        product_grid = html.index('id="product-grid"')
+
+        self.assertLess(category_nav, offer_heading)
+        self.assertLess(offer_heading, bestseller_heading)
+        self.assertLess(bestseller_heading, product_section)
+        self.assertLess(product_section, product_grid)
+        self.assertContains(response, 'class="category-card group')
+        self.assertContains(response, "Ordered special offer")
+        self.assertContains(response, "Ordered best seller")
 
     def test_homepage_card_rating_uses_only_approved_reviews(self):
         product = Product.objects.create(
@@ -401,6 +548,28 @@ class HomepageMerchandisingTests(BaseTestCase):
         self.assertEqual(product_row.review_count, 1)
         self.assertEqual(product_row.avg_rating, Decimal("5"))
         self.assertContains(response, 'fa-solid fa-star text-yellow-400')
+
+    def test_homepage_product_card_formats_current_and_reference_prices(self):
+        Product.objects.create(
+            name="Grouped price product",
+            slug="grouped-price-product",
+            price=Decimal("1234567.50"),
+            old_price=Decimal("1500000.50"),
+            stock=4,
+            category=self.category,
+        )
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'data-price-role="current" class="product-price text-xl font-black tabular-nums text-indigo-700">1,234,568</span>',
+        )
+        self.assertContains(
+            response,
+            'data-price-role="reference" class="mb-0.5 text-xs font-medium text-slate-400 line-through">1,500,001</span>',
+        )
 
 
 class ReviewServiceTests(BaseTestCase):
@@ -1342,3 +1511,231 @@ class ProductCategoryModelProtectionTests(TestCase):
 
         self.assertTrue(Category.objects.filter(pk=category.pk).exists())
         self.assertTrue(Product.objects.filter(pk=product.pk).exists())
+
+class StorefrontPriceFormattingTests(SimpleTestCase):
+    def test_decimal_amounts_are_grouped_and_rounded_half_up(self):
+        cases = (
+            (Decimal("489000000.00"), "489,000,000"),
+            (Decimal("489000000.50"), "489,000,001"),
+            (Decimal("1234567.49"), "1,234,567"),
+            (Decimal("1234567.50"), "1,234,568"),
+            (Decimal("0.49"), "0"),
+            (Decimal("0.50"), "1"),
+        )
+
+        for value, expected in cases:
+            with self.subTest(value=value):
+                self.assertEqual(format_price(value), expected)
+
+    def test_missing_or_invalid_values_have_safe_fallbacks(self):
+        self.assertEqual(format_price(None), "—")
+        self.assertEqual(format_price("not-a-number"), "not-a-number")
+        self.assertEqual(format_price(Decimal("NaN")), "NaN")
+
+
+
+
+class StorefrontSettingsModelTests(TestCase):
+    def test_hero_heading_defaults_are_present_and_bounded(self):
+        settings = StorefrontSettings()
+        settings.full_clean()
+
+        self.assertEqual(
+            settings.hero_title_line_1,
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1,
+        )
+        self.assertEqual(
+            settings.hero_title_line_2,
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_2,
+        )
+        self.assertLessEqual(len(settings.hero_title_line_1), 160)
+        self.assertLessEqual(len(settings.hero_title_line_2), 160)
+
+    def test_social_links_must_use_https(self):
+        settings = StorefrontSettings(
+            instagram_url="http://www.instagram.com/example"
+        )
+
+        with self.assertRaises(ValidationError):
+            settings.full_clean()
+
+    def test_singleton_uses_fixed_primary_key_and_rejects_duplicate_rows(self):
+        settings = StorefrontSettings.objects.create(
+            instagram_url="https://www.instagram.com/example"
+        )
+
+        self.assertEqual(settings.pk, StorefrontSettings.SINGLETON_PK)
+        self.assertEqual(StorefrontSettings.objects.count(), 1)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StorefrontSettings.objects.create(
+                    telegram_url="https://t.me/example"
+                )
+
+        self.assertEqual(StorefrontSettings.objects.count(), 1)
+
+    def test_non_singleton_primary_key_is_rejected(self):
+        settings = StorefrontSettings(pk=2)
+
+        with self.assertRaises(ValidationError):
+            settings.save()
+
+    def test_settings_record_cannot_be_deleted_through_model_instance(self):
+        settings = StorefrontSettings.objects.create()
+
+        with self.assertRaises(ValidationError):
+            settings.delete()
+
+        self.assertTrue(
+            StorefrontSettings.objects.filter(
+                pk=StorefrontSettings.SINGLETON_PK
+            ).exists()
+        )
+
+
+class StorefrontSettingsContextTests(TestCase):
+    def test_context_processor_exposes_optional_settings_and_skips_admin(self):
+        request = RequestFactory().get("/")
+        context = storefront_categories(request)
+
+        self.assertIn("categories", context)
+        self.assertIn("storefront_settings", context)
+        self.assertIsNone(context["storefront_settings"])
+        self.assertEqual(
+            context["storefront_hero_title_line_1"],
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1,
+        )
+        self.assertEqual(
+            context["storefront_hero_title_line_2"],
+            StorefrontSettings.DEFAULT_HERO_TITLE_LINE_2,
+        )
+
+        settings = StorefrontSettings.objects.create(
+            whatsapp_url="https://wa.me/989120000000",
+            hero_title_line_1="عنوان آزمایشی اول",
+            hero_title_line_2="عنوان آزمایشی دوم",
+        )
+        context = storefront_categories(request)
+
+        self.assertEqual(context["storefront_settings"], settings)
+        self.assertEqual(context["storefront_hero_title_line_1"], "عنوان آزمایشی اول")
+        self.assertEqual(context["storefront_hero_title_line_2"], "عنوان آزمایشی دوم")
+        self.assertEqual(
+            storefront_categories(RequestFactory().get("/admin/")),
+            {},
+        )
+
+    def test_footer_renders_only_configured_social_links(self):
+        category = Category.objects.create(
+            name="Social Footer Category",
+            slug="social-footer-category",
+        )
+
+        empty_response = self.client.get(reverse("catalog:product_list"))
+        self.assertEqual(empty_response.status_code, 200)
+        self.assertNotContains(empty_response, 'aria-label="اینستاگرام فروشگاه"')
+
+        StorefrontSettings.objects.create(
+            instagram_url="https://www.instagram.com/example"
+        )
+        configured_response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(configured_response.status_code, 200)
+        self.assertContains(
+            configured_response,
+            'href="https://www.instagram.com/example"',
+        )
+        self.assertContains(
+            configured_response,
+            'aria-label="اینستاگرام فروشگاه"',
+        )
+        self.assertNotContains(
+            configured_response,
+            'aria-label="واتساپ فروشگاه"',
+        )
+
+
+class StorefrontSettingsAdminAccessTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="storefront-settings-owner",
+            email="storefront-settings-owner@example.test",
+            password="TestPassword123!",
+        )
+        self.manager = User.objects.create_user(
+            username="storefront-settings-manager",
+            email="storefront-settings-manager@example.test",
+            password="TestPassword123!",
+            is_staff=True,
+        )
+        manager_group, _created = Group.objects.get_or_create(
+            name=STORE_MANAGER_GROUP_NAME
+        )
+        self.manager.groups.add(manager_group)
+        self.model_admin = admin.site._registry[StorefrontSettings]
+
+    def test_only_store_owner_can_access_settings_admin(self):
+        self.client.force_login(self.manager)
+        settings = StorefrontSettings.objects.create(
+            instagram_url="https://www.instagram.com/example"
+        )
+        protected_urls = (
+            reverse("admin:catalog_storefrontsettings_changelist"),
+            reverse("admin:catalog_storefrontsettings_change", args=[settings.pk]),
+            reverse("admin:catalog_storefrontsettings_add"),
+        )
+
+        for url in protected_urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)
+
+        self.assertTrue(StorefrontSettings.objects.filter(pk=settings.pk).exists())
+
+    def test_owner_can_add_and_change_settings_but_cannot_add_or_delete_twice(self):
+        self.client.force_login(self.owner)
+        changelist_url = reverse("admin:catalog_storefrontsettings_changelist")
+        add_url = reverse("admin:catalog_storefrontsettings_add")
+
+        self.assertEqual(self.client.get(changelist_url).status_code, 200)
+        self.assertEqual(self.client.get(add_url).status_code, 200)
+
+        save_response = self.client.post(
+            add_url,
+            {
+                "hero_title_line_1": "عنوان آزمایشی اول در پنل مالک",
+                "hero_title_line_2": "عنوان آزمایشی دوم در پنل مالک",
+                "instagram_url": "https://www.instagram.com/example",
+                "whatsapp_url": "",
+                "telegram_url": "",
+                "bale_url": "",
+                "_save": "ذخیره",
+            },
+        )
+        self.assertEqual(save_response.status_code, 302)
+        settings = StorefrontSettings.objects.get(
+            pk=StorefrontSettings.SINGLETON_PK
+        )
+        self.assertEqual(
+            settings.instagram_url,
+            "https://www.instagram.com/example",
+        )
+        self.assertEqual(settings.hero_title_line_1, "عنوان آزمایشی اول در پنل مالک")
+        self.assertEqual(settings.hero_title_line_2, "عنوان آزمایشی دوم در پنل مالک")
+
+        homepage = self.client.get(reverse("catalog:product_list"))
+        self.assertContains(homepage, "عنوان آزمایشی اول در پنل مالک")
+        self.assertContains(homepage, "عنوان آزمایشی دوم در پنل مالک")
+
+        change_url = reverse(
+            "admin:catalog_storefrontsettings_change",
+            args=[settings.pk],
+        )
+        delete_url = reverse(
+            "admin:catalog_storefrontsettings_delete",
+            args=[settings.pk],
+        )
+
+        self.assertEqual(self.client.get(change_url).status_code, 200)
+        self.assertEqual(self.client.get(add_url).status_code, 403)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)

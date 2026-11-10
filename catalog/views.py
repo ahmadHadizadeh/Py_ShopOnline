@@ -126,11 +126,6 @@ def home(request, category_slug=None):
         sort_fields = PRODUCT_LIST_SORT_OPTIONS[sort]
 
     products = products.order_by(*sort_fields)
-    paginator = Paginator(products, PRODUCTS_PER_PAGE)
-    page_obj = paginator.get_page(request.GET.get("page"))
-    # Keep the paginator count query free of review joins; aggregate ratings
-    # only for the 12 products actually rendered on this page.
-    page_obj.object_list = _with_approved_review_summary(page_obj.object_list)
 
     query_params = request.GET.copy()
     query_params.pop("page", None)
@@ -142,6 +137,7 @@ def home(request, category_slug=None):
 
     best_selling_products = []
     special_offer_products = []
+    best_selling_product_ids = []
 
     if category is None and not search_query:
         # Count only completed sales. A correlated subquery keeps the sales
@@ -182,9 +178,14 @@ def home(request, category_slug=None):
             .filter(sold_quantity__gt=0)
             .order_by("-sold_quantity", "-pk")
         )
-        best_selling_products = _with_approved_review_summary(
-            best_selling_queryset
-        )[:HOMEPAGE_SHOWCASE_LIMIT]
+        best_selling_products = list(
+            _with_approved_review_summary(best_selling_queryset)[
+                :HOMEPAGE_SHOWCASE_LIMIT
+            ]
+        )
+        best_selling_product_ids = [
+            product.pk for product in best_selling_products
+        ]
 
         special_offer_queryset = Product.objects.filter(
             is_active=True,
@@ -192,9 +193,28 @@ def home(request, category_slug=None):
             stock__gt=0,
             old_price__gt=F("price"),
         ).select_related("category")
-        special_offer_products = _with_approved_review_summary(
-            special_offer_queryset.order_by("-created", "-pk")
-        )[:HOMEPAGE_SHOWCASE_LIMIT]
+        # When a product qualifies for both shelves, keep it in best sellers.
+        special_offer_products = list(
+            _with_approved_review_summary(
+                special_offer_queryset.exclude(
+                    pk__in=best_selling_product_ids
+                ).order_by("-created", "-pk")
+            )[:HOMEPAGE_SHOWCASE_LIMIT]
+        )
+
+    # Curated products appear in their dedicated shelves only. Exclude them
+    # before pagination so they do not repeat in the main grid on any page.
+    homepage_showcase_ids = best_selling_product_ids + [
+        product.pk for product in special_offer_products
+    ]
+    if homepage_showcase_ids:
+        products = products.exclude(pk__in=homepage_showcase_ids)
+
+    paginator = Paginator(products, PRODUCTS_PER_PAGE)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    # Keep the paginator count query free of review joins; aggregate ratings
+    # only for the products actually rendered on this page.
+    page_obj.object_list = _with_approved_review_summary(page_obj.object_list)
 
     context = {
         "category": category,

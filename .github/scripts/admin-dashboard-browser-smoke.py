@@ -11,6 +11,13 @@ import urllib.request
 from decimal import Decimal
 from pathlib import Path
 
+KNOWN_DJANGO_UNLOAD_WARNING = (
+    "Permissions policy violation: unload is not allowed in this document."
+)
+DJANGO_RELATED_LOOKUPS_PATH = (
+    "/static/admin/js/admin/RelatedObjectLookups.js"
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS = ROOT / "artifacts"
 BASE_URL = "http://127.0.0.1:18765"
@@ -134,6 +141,7 @@ def main() -> None:
         "viewport_checks": {},
         "important_static_assets": {},
         "console_errors": [],
+        "known_framework_console_warnings": [],
         "page_errors": [],
         "screenshots": [],
     }
@@ -163,12 +171,33 @@ def main() -> None:
                     viewport={"width": 1440, "height": 1000},
                     device_scale_factor=1,
                 )
-                page.on(
-                    "console",
-                    lambda message: report["console_errors"].append(message.text)
-                    if message.type == "error"
-                    else None,
-                )
+                def capture_console_message(message) -> None:
+                    if message.type != "error":
+                        return
+
+                    location = message.location or {}
+                    source_path = urlsplit(location.get("url", "")).path
+                    if (
+                        message.text == KNOWN_DJANGO_UNLOAD_WARNING
+                        and source_path.endswith(DJANGO_RELATED_LOOKUPS_PATH)
+                    ):
+                        # Django 6.0.6's bundled RelatedObjectLookups.js still
+                        # registers an unload handler. Chromium reports this
+                        # framework deprecation as a Permissions Policy error.
+                        # Keep it visible in the report without confusing it
+                        # with application JavaScript errors.
+                        report["known_framework_console_warnings"].append(
+                            {
+                                "message": message.text,
+                                "source": source_path,
+                                "line": location.get("lineNumber"),
+                            }
+                        )
+                        return
+
+                    report["console_errors"].append(message.text)
+
+                page.on("console", capture_console_message)
                 page.on(
                     "pageerror",
                     lambda error: report["page_errors"].append(str(error)),

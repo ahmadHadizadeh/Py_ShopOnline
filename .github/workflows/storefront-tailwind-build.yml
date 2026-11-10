@@ -5,8 +5,10 @@ on:
     branches:
       - "ui/storefront-header-search-navigation-2026-11-07"
       - "feat/storefront-homepage-merchandising-2026-11-09"
+      - "feat/homepage-premium-redesign-2026-11-09"
     paths:
       - ".github/workflows/storefront-tailwind-build.yml"
+      - ".github/scripts/storefront-browser-smoke.py"
       - "package.json"
       - "package-lock.json"
       - "tailwind.config.js"
@@ -27,7 +29,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07' || github.ref == 'refs/heads/feat/storefront-homepage-merchandising-2026-11-09'
+    if: github.ref == 'refs/heads/ui/storefront-header-search-navigation-2026-11-07' || github.ref == 'refs/heads/feat/storefront-homepage-merchandising-2026-11-09' || github.ref == 'refs/heads/feat/homepage-premium-redesign-2026-11-09'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 

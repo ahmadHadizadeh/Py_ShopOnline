@@ -22,6 +22,67 @@ def assert_no_horizontal_overflow(page, width: int) -> None:
     assert dimensions["body"] <= width, f"Body overflows viewport: {dimensions}"
 
 
+def assert_footer_layout(page, width: int) -> None:
+    grid = page.locator("#storefront-footer-grid")
+    columns = grid.evaluate(
+        "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').filter(Boolean).length"
+    )
+    expected_columns = 4 if width >= 768 else 1
+    assert columns == expected_columns, (
+        f"Unexpected footer columns at {width}px: {columns}"
+    )
+
+    image = page.locator("#storefront-enamad-placeholder img")
+    image_width = image.evaluate(
+        "(element) => element.getBoundingClientRect().width"
+    )
+    expected_image_width = 125 if width >= 768 else 112 if width >= 640 else 96
+    assert abs(image_width - expected_image_width) <= 1, (
+        f"Unexpected responsive placeholder width at {width}px: {image_width}"
+    )
+
+    grid_box = grid.bounding_box()
+    image_box = image.bounding_box()
+    assert grid_box is not None and image_box is not None
+    assert image_box["x"] >= grid_box["x"] - 1
+    assert image_box["x"] + image_box["width"] <= grid_box["x"] + grid_box["width"] + 1
+
+    if width >= 768:
+        positions = page.evaluate(
+            """() => {
+                const rect = (selector) => {
+                    const element = document.querySelector(selector);
+                    const box = element.getBoundingClientRect();
+                    return {left: box.left, right: box.right};
+                };
+                return {
+                    brand: rect("#storefront-footer-brand"),
+                    links: rect("#storefront-footer-links"),
+                    placeholder: rect("#storefront-enamad-placeholder"),
+                };
+            }"""
+        )
+        assert positions["placeholder"]["right"] < positions["links"]["left"], (
+            "The placeholder should occupy the visual left side of the RTL footer."
+        )
+        assert positions["links"]["right"] < positions["brand"]["left"], (
+            "The quick links should sit between the brand and left-side placeholder."
+        )
+
+
+def assert_hero_heading_spacing(page, width: int) -> None:
+    heading = page.locator("#storefront-hero-heading")
+    assert heading.locator('[data-storefront-hero-line="1"]').count() == 1
+    assert heading.locator('[data-storefront-hero-line="2"]').count() == 1
+    actual_gap = float(
+        heading.evaluate("(element) => getComputedStyle(element).rowGap").replace("px", "")
+    )
+    expected_gap = 16 if width >= 640 else 12
+    assert abs(actual_gap - expected_gap) <= 1, (
+        f"Unexpected hero heading line gap at {width}px: {actual_gap}px"
+    )
+
+
 def expect_visible(page, selector: str) -> None:
     locator = page.locator(selector)
     locator.wait_for(state="visible", timeout=3000)
@@ -49,14 +110,78 @@ with sync_playwright() as playwright:
         f"Storefront home did not return HTTP 200: {None if response is None else response.status}"
     )
     expect_visible(mobile, "#storefront-header")
+    expect_visible(mobile, "#storefront-hero")
+    expect_visible(mobile, "#storefront-hero-heading [data-storefront-hero-line='1']")
+    expect_visible(mobile, "#storefront-hero-heading [data-storefront-hero-line='2']")
+    assert_hero_heading_spacing(mobile, 390)
+    expect_visible(mobile, "#storefront-trust-strip")
+    assert mobile.locator("#storefront-trust-strip h2").count() == 4
     expect_visible(mobile, "#mobile-nav-toggle")
     expect_hidden(mobile, "#desktop-search-form")
     expect_visible(mobile, "#mobile-search-toggle")
     assert_no_horizontal_overflow(mobile, 390)
     assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
+
+    enamad_section = mobile.locator("#storefront-enamad-placeholder")
+    expect_visible(mobile, "#storefront-enamad-placeholder")
+    enamad_image = enamad_section.locator("img")
+    assert enamad_image.get_attribute("alt") == (
+        "تصویر جایگزین نماد اعتماد؛ نشان‌دهنده تأیید رسمی فروشگاه نیست"
+    )
+    assert enamad_image.get_attribute("width") == "125"
+    assert enamad_image.get_attribute("height") == "136"
+    assert enamad_image.get_attribute("loading") == "lazy"
+    assert enamad_image.get_attribute("decoding") == "async"
+    assert enamad_image.get_attribute("src") == (
+        "/static/images/storefront/enamad-placeholder.png"
+    )
+    assert mobile.locator("#storefront-enamad-notice").inner_text().strip() == (
+        "این تصویر موقت است و به‌معنای تأیید رسمی فروشگاه نیست."
+    )
+
+    image_response = mobile.request.get(
+        f"{BASE_URL}/static/images/storefront/enamad-placeholder.png"
+    )
+    assert image_response.status == 200, (
+        f"Placeholder image returned HTTP {image_response.status}"
+    )
+    assert image_response.headers.get("content-type", "").split(";")[0] == "image/png"
+    image_bytes = image_response.body()
+    assert 0 < len(image_bytes) <= 4096, (
+        f"Placeholder image is unexpectedly large: {len(image_bytes)} bytes"
+    )
+
+    enamad_image.scroll_into_view_if_needed()
+    mobile.wait_for_function(
+        """() => {
+            const image = document.querySelector("#storefront-enamad-placeholder img");
+            return image && image.complete
+                && image.naturalWidth === 125
+                && image.naturalHeight === 136;
+        }""",
+        timeout=5000,
+    )
     for width, expected_columns in ((320, 1), (360, 1), (390, 1), (640, 2), (768, 2), (1024, 3), (1280, 4), (1440, 4)):
         mobile.set_viewport_size({"width": width, "height": 844})
         assert_no_horizontal_overflow(mobile, width)
+        assert_footer_layout(mobile, width)
+        assert_hero_heading_spacing(mobile, width)
+        category_columns = mobile.locator(
+            '#products-list nav[aria-label="دسته‌بندی‌های فروشگاه"]'
+        ).evaluate(
+            "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
+        )
+        expected_category_columns = 2 if width < 640 else 3 if width < 1024 else 4
+        assert category_columns == expected_category_columns, (
+            f"Unexpected category grid columns at {width}px: {category_columns}"
+        )
+        trust_columns = mobile.locator("#storefront-trust-strip").evaluate(
+            "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
+        )
+        expected_trust_columns = 4 if width >= 1024 else 2
+        assert trust_columns == expected_trust_columns, (
+            f"Unexpected trust-strip columns at {width}px: {trust_columns}"
+        )
         columns = mobile.locator("#product-grid").evaluate(
             "(element) => getComputedStyle(element).gridTemplateColumns.split(' ').length"
         )
@@ -77,8 +202,62 @@ with sync_playwright() as playwright:
             assert image_frame_width <= 112.5, (
                 f"Mobile product image frame is not compact at {width}px: {image_frame_width}"
             )
+            mobile_card_transform = mobile.locator("#product-grid article").first.evaluate(
+                "(card) => getComputedStyle(card).transform"
+            )
+            assert mobile_card_transform == "none", (
+                f"Product card should not depend on hover at {width}px: {mobile_card_transform}"
+            )
     mobile.set_viewport_size({"width": 390, "height": 844})
+    mobile.emulate_media(reduced_motion="reduce")
+    reduced_motion_transition = mobile.locator("#product-grid article").first.evaluate(
+        "(card) => getComputedStyle(card).transitionProperty"
+    )
+    assert reduced_motion_transition == "none", (
+        f"Product card ignored prefers-reduced-motion: {reduced_motion_transition}"
+    )
+    mobile.emulate_media(reduced_motion="no-preference")
     mobile.screenshot(path=str(ARTIFACTS / "storefront-mobile-home.png"), full_page=True)
+
+    # Touch-capable tablets must not receive hover-only card treatments merely
+    # because their CSS viewport is wider than the mobile breakpoint.
+    touch_context = browser.new_context(
+        viewport={"width": 768, "height": 844},
+        device_scale_factor=1,
+        is_mobile=True,
+        has_touch=True,
+    )
+    touch_page = touch_context.new_page()
+    touch_page.on("pageerror", lambda error: page_errors.append(f"touch: {error}"))
+    touch_response = touch_page.goto(
+        f"{BASE_URL}/",
+        wait_until="domcontentloaded",
+    )
+    assert touch_response is not None and touch_response.status == 200
+    assert touch_page.evaluate(
+        "() => window.matchMedia('(hover: none)').matches"
+    ), "Playwright touch context did not expose a non-hover pointer."
+    assert_no_horizontal_overflow(touch_page, 768)
+    touch_card = touch_page.locator("#product-grid article").first
+    touch_card.hover()
+    touch_card_transform = touch_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    assert touch_card_transform == "none", (
+        "A touch-capable tablet received the product-card hover transform: "
+        f"{touch_card_transform}"
+    )
+    touch_category_card = touch_page.locator(
+        '#products-list nav[aria-label="دسته‌بندی‌های فروشگاه"] .category-card'
+    ).first
+    touch_category_card.hover()
+    touch_category_transform = touch_category_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    assert touch_category_transform == "none", (
+        "A touch-capable tablet received the category-card hover transform: "
+        f"{touch_category_transform}"
+    )
 
     # Mobile category drawer and its server-rendered active category link.
     mobile.locator("#mobile-nav-toggle").click()
@@ -90,6 +269,8 @@ with sync_playwright() as playwright:
     expect_visible(mobile, '#mobile-navigation-panel a[href="/category/browser-test-category/"]')
     category_link.click()
     mobile.wait_for_url("**/category/browser-test-category/")
+    expect_hidden(mobile, "#storefront-hero")
+    expect_hidden(mobile, "#storefront-trust-strip")
     assert mobile.locator("#products-list h2").inner_text().strip() == "Browser Test"
 
     # Mobile search retains the current category and submits a real GET query.
@@ -131,9 +312,37 @@ with sync_playwright() as playwright:
     response = mobile.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
     assert response is not None and response.status == 200
     expect_visible(mobile, "#desktop-search-form")
+    expect_visible(mobile, "#storefront-hero")
+    expect_visible(mobile, "#storefront-trust-strip")
     expect_hidden(mobile, "#mobile-nav-toggle")
     assert mobile.locator("#product-grid").get_attribute("data-total-count") == "13"
+    assert_footer_layout(mobile, 1440)
     mobile.screenshot(path=str(ARTIFACTS / "storefront-desktop-home.png"), full_page=True)
+    desktop_card = mobile.locator("#product-grid article").first
+    desktop_card.hover()
+    desktop_card_transform = desktop_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    assert desktop_card_transform != "none", (
+        "Desktop product card hover treatment did not activate."
+    )
+    mobile.emulate_media(reduced_motion="reduce")
+    reduced_desktop_transform = desktop_card.evaluate(
+        "(card) => getComputedStyle(card).transform"
+    )
+    reduced_desktop_transition = desktop_card.evaluate(
+        "(card) => getComputedStyle(card).transitionProperty"
+    )
+    assert reduced_desktop_transform == "none", (
+        "Product card still moves on hover when reduced motion is requested: "
+        f"{reduced_desktop_transform}"
+    )
+    assert reduced_desktop_transition == "none", (
+        "Product card still transitions on hover when reduced motion is requested: "
+        f"{reduced_desktop_transition}"
+    )
+    mobile.emulate_media(reduced_motion="no-preference")
+    mobile.mouse.move(0, 0)
     mobile.locator("#desktop-search-input").fill("NorthwindBrowser")
     expect_visible(mobile, "#desktop-search-suggestions")
     desktop_suggestions = mobile.locator("#desktop-search-suggestions a[role='option']")
@@ -322,6 +531,7 @@ with sync_playwright() as playwright:
 
     guest_context.close()
     authenticated_context.close()
+    touch_context.close()
     mobile_context.close()
     browser.close()
 
