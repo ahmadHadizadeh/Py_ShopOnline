@@ -186,7 +186,9 @@
                 <div id="storefront-footer-brand" class="md:col-span-2">
                     <div class="mb-3 flex min-w-0 items-center gap-3">
                         {% if storefront_settings and storefront_settings.logo %}
-                            <img src="{{ storefront_settings.logo.url }}" alt="" class="h-12 w-28 shrink-0 object-contain" loading="lazy" decoding="async">
+                            <span class="inline-flex shrink-0 items-center justify-center rounded-lg bg-white p-2">
+                                <img src="{{ storefront_settings.logo.url }}" alt="" class="h-12 w-28 object-contain" loading="lazy" decoding="async">
+                            </span>
                         {% endif %}
                         <h2 id="storefront-footer-name" class="text-white text-xl font-bold">{{ storefront_name }}</h2>
                     </div>
