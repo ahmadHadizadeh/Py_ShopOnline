@@ -58,7 +58,7 @@
             <div class="flex min-w-0 items-center gap-2 lg:gap-10">
                 <a href="{% url 'catalog:product_list' %}" aria-label="{{ storefront_name }}" class="flex min-w-0 items-center gap-2 text-xl sm:text-2xl font-extrabold text-indigo-700 hover:scale-105 transition-transform">
                     {% if storefront_settings and storefront_settings.logo %}
-                        <img src="{{ storefront_settings.logo.url }}" alt="" class="h-9 w-32 shrink-0 object-contain" decoding="async">
+                        <img src="{{ storefront_settings.logo.url }}" alt="" class="h-9 w-16 shrink-0 object-contain" decoding="async">
                     {% else %}
                         <i class="fa-solid fa-cart-shopping shrink-0" aria-hidden="true"></i>
                     {% endif %}
@@ -186,7 +186,7 @@
                 <div id="storefront-footer-brand" class="md:col-span-2">
                     <div class="mb-3 flex min-w-0 items-center gap-3">
                         {% if storefront_settings and storefront_settings.logo %}
-                            <img src="{{ storefront_settings.logo.url }}" alt="" class="h-12 w-40 shrink-0 object-contain" loading="lazy" decoding="async">
+                            <img src="{{ storefront_settings.logo.url }}" alt="" class="h-12 w-28 shrink-0 object-contain" loading="lazy" decoding="async">
                         {% endif %}
                         <h2 id="storefront-footer-name" class="text-white text-xl font-bold">{{ storefront_name }}</h2>
                     </div>

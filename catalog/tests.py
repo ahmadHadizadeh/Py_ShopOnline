@@ -1708,7 +1708,7 @@ class StorefrontBrandRenderingTests(TestCase):
             logo_url = settings.logo.url
             self.assertEqual(response.content.decode().count(logo_url), 3)
             self.assertContains(response, 'rel="icon" href="%s"' % logo_url, html=False)
-            self.assertContains(response, 'id="storefront-header-name">مای کالا</span>', html=False)
+            self.assertContains(response, 'id="storefront-header-name" class="whitespace-nowrap tracking-tight italic">مای کالا</span>', html=False)
             self.assertContains(response, 'id="storefront-footer-name"', html=False)
 
 
