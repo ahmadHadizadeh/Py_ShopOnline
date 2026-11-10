@@ -1692,6 +1692,8 @@ class StorefrontBrandRenderingTests(TestCase):
             html=False,
         )
         self.assertIn("| مای کالا</title>", response.content.decode())
+        self.assertContains(response, 'fa-cart-shopping', html=False)
+        self.assertNotContains(response, 'rel="icon"', html=False)
 
     def test_uploaded_brand_logo_is_shared_and_used_as_favicon(self):
         with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
