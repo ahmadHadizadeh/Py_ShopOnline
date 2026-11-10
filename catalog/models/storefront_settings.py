@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
+from django.core.validators import FileExtensionValidator, URLValidator
 from django.db import models
 
 
@@ -9,12 +9,42 @@ _https_url_validator = URLValidator(
 )
 
 
+MAX_STOREFRONT_LOGO_SIZE = 2 * 1024 * 1024
+
+
+def validate_storefront_logo_size(value):
+    """Limit public storefront logo uploads to 2 MiB."""
+    if value and value.size > MAX_STOREFRONT_LOGO_SIZE:
+        raise ValidationError("حجم لوگوی فروشگاه نباید بیشتر از ۲ مگابایت باشد.")
+
+
 class StorefrontSettings(models.Model):
     """Single, owner-managed set of optional public storefront links."""
 
     SINGLETON_PK = 1
+    DEFAULT_STORE_NAME = "آنلاین شاپ"
     DEFAULT_HERO_TITLE_LINE_1 = "محصول موردنیازتان، فقط چند کلیک با شما فاصله دارد."
     DEFAULT_HERO_TITLE_LINE_2 = "در آنلاین‌شاپ احمد، ساده و آگاهانه انتخاب کنید."
+
+    store_name = models.CharField(
+        max_length=100,
+        default=DEFAULT_STORE_NAME,
+        verbose_name="نام فروشگاه",
+        help_text="این نام به‌صورت یکسان در هدر، فوتر و عنوان مرورگر نمایش داده می‌شود.",
+    )
+    logo = models.ImageField(
+        upload_to="storefront/branding/",
+        blank=True,
+        validators=[
+            FileExtensionValidator(
+                allowed_extensions=("png", "jpg", "jpeg", "webp"),
+                message="فرمت لوگو باید PNG، JPG یا WEBP باشد.",
+            ),
+            validate_storefront_logo_size,
+        ],
+        verbose_name="لوگوی فروشگاه",
+        help_text="یک تصویر PNG، JPG یا WEBP با حداکثر حجم ۲ مگابایت؛ همین لوگو در هدر، فوتر و آیکون مرورگر استفاده می‌شود.",
+    )
 
     hero_title_line_1 = models.CharField(
         max_length=160,
