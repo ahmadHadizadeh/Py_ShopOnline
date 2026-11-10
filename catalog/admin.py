@@ -667,6 +667,20 @@ class WishlistAdmin(admin.ModelAdmin):
 class StorefrontSettingsAdmin(admin.ModelAdmin):
     fieldsets = (
         (
+            "هویت فروشگاه",
+            {
+                "fields": (
+                    "store_name",
+                    "logo",
+                    "logo_preview",
+                ),
+                "description": (
+                    "نام و لوگوی واحد فروشگاه در هدر، فوتر و عنوان مرورگر استفاده می‌شوند. "
+                    "برای حذف لوگوی فعلی، گزینه حذف فایل را هنگام ویرایش انتخاب کنید."
+                ),
+            },
+        ),
+        (
             "متن بنر صفحه اصلی",
             {
                 "fields": (
@@ -696,9 +710,37 @@ class StorefrontSettingsAdmin(admin.ModelAdmin):
             },
         ),
     )
-    list_display = ("__str__", "instagram_url", "whatsapp_url", "telegram_url", "bale_url")
-    list_display_links = ("__str__",)
+    readonly_fields = ("logo_preview",)
+    list_display = ("store_name", "instagram_url", "whatsapp_url", "telegram_url", "bale_url")
+    list_display_links = ("store_name",)
     list_per_page = 1
+
+    @admin.display(description="پیش‌نمایش لوگو")
+    def logo_preview(self, obj):
+        if not obj or not obj.logo:
+            return "لوگویی بارگذاری نشده است."
+        return format_html(
+            '<img src="{}" alt="" style="max-width: 240px; max-height: 100px; object-fit: contain;">',
+            obj.logo.url,
+        )
+
+    def save_model(self, request, obj, form, change):
+        previous_logo_name = None
+        if change:
+            previous_logo_name = (
+                StorefrontSettings.objects.filter(pk=obj.pk)
+                .values_list("logo", flat=True)
+                .first()
+            )
+
+        super().save_model(request, obj, form, change)
+
+        current_logo_name = obj.logo.name if obj.logo else ""
+        if previous_logo_name and previous_logo_name != current_logo_name:
+            logo_storage = self.model._meta.get_field("logo").storage
+            transaction.on_commit(
+                lambda name=previous_logo_name, storage=logo_storage: storage.delete(name)
+            )
 
     @staticmethod
     def _is_store_owner(request):

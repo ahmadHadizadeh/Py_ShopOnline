@@ -9,8 +9,14 @@ def storefront_categories(request):
     storefront_settings = StorefrontSettings.objects.filter(
         pk=StorefrontSettings.SINGLETON_PK
     ).first()
+    storefront_name = (
+        storefront_settings.store_name.strip()
+        if storefront_settings and storefront_settings.store_name.strip()
+        else StorefrontSettings.DEFAULT_STORE_NAME
+    )
     return {
         "categories": Category.objects.filter(is_active=True),
+        "storefront_name": storefront_name,
         "storefront_settings": storefront_settings,
         "storefront_hero_title_line_1": (
             storefront_settings.hero_title_line_1

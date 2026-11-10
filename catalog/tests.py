@@ -1,6 +1,10 @@
 from decimal import Decimal
+from io import BytesIO
+import tempfile
 # فایل: catalog/tests.py
-from django.test import TestCase, Client, RequestFactory, SimpleTestCase
+from django.test import TestCase, Client, RequestFactory, SimpleTestCase, override_settings
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -26,6 +30,16 @@ from catalog.services import (
 )
 
 User = get_user_model()
+
+
+def make_storefront_test_logo():
+    buffer = BytesIO()
+    Image.new("RGB", (48, 48), color=(35, 60, 120)).save(buffer, format="PNG")
+    return SimpleUploadedFile(
+        "store-logo.png",
+        buffer.getvalue(),
+        content_type="image/png",
+    )
 
 class BaseTestCase(TestCase):
     def setUp(self):
@@ -1540,6 +1554,7 @@ class StorefrontSettingsModelTests(TestCase):
         settings = StorefrontSettings()
         settings.full_clean()
 
+        self.assertEqual(settings.store_name, StorefrontSettings.DEFAULT_STORE_NAME)
         self.assertEqual(
             settings.hero_title_line_1,
             StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1,
@@ -1602,6 +1617,7 @@ class StorefrontSettingsContextTests(TestCase):
         self.assertIn("categories", context)
         self.assertIn("storefront_settings", context)
         self.assertIsNone(context["storefront_settings"])
+        self.assertEqual(context["storefront_name"], StorefrontSettings.DEFAULT_STORE_NAME)
         self.assertEqual(
             context["storefront_hero_title_line_1"],
             StorefrontSettings.DEFAULT_HERO_TITLE_LINE_1,
@@ -1612,6 +1628,7 @@ class StorefrontSettingsContextTests(TestCase):
         )
 
         settings = StorefrontSettings.objects.create(
+            store_name="مای کالا",
             whatsapp_url="https://wa.me/989120000000",
             hero_title_line_1="عنوان آزمایشی اول",
             hero_title_line_2="عنوان آزمایشی دوم",
@@ -1619,6 +1636,7 @@ class StorefrontSettingsContextTests(TestCase):
         context = storefront_categories(request)
 
         self.assertEqual(context["storefront_settings"], settings)
+        self.assertEqual(context["storefront_name"], "مای کالا")
         self.assertEqual(context["storefront_hero_title_line_1"], "عنوان آزمایشی اول")
         self.assertEqual(context["storefront_hero_title_line_2"], "عنوان آزمایشی دوم")
         self.assertEqual(
@@ -1656,6 +1674,44 @@ class StorefrontSettingsContextTests(TestCase):
         )
 
 
+class StorefrontBrandRenderingTests(TestCase):
+    def test_brand_name_is_shared_by_header_footer_and_browser_title(self):
+        StorefrontSettings.objects.create(store_name="مای کالا")
+
+        response = self.client.get(reverse("catalog:product_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'id="storefront-header-name" class="whitespace-nowrap tracking-tight italic">مای کالا</span>',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            'id="storefront-footer-name" class="text-white text-xl font-bold">مای کالا</h2>',
+            html=False,
+        )
+        self.assertIn("| مای کالا</title>", response.content.decode())
+        self.assertContains(response, 'fa-cart-shopping', html=False)
+        self.assertNotContains(response, 'rel="icon"', html=False)
+
+    def test_uploaded_brand_logo_is_shared_and_used_as_favicon(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            settings = StorefrontSettings.objects.create(
+                store_name="مای کالا",
+                logo=make_storefront_test_logo(),
+            )
+
+            response = self.client.get(reverse("catalog:product_list"))
+
+            self.assertEqual(response.status_code, 200)
+            logo_url = settings.logo.url
+            self.assertEqual(response.content.decode().count(logo_url), 3)
+            self.assertContains(response, 'rel="icon" href="%s"' % logo_url, html=False)
+            self.assertContains(response, 'id="storefront-header-name" class="whitespace-nowrap tracking-tight italic">مای کالا</span>', html=False)
+            self.assertContains(response, 'id="storefront-footer-name"', html=False)
+
+
 class StorefrontSettingsAdminAccessTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_superuser(
@@ -1674,6 +1730,36 @@ class StorefrontSettingsAdminAccessTests(TestCase):
         )
         self.manager.groups.add(manager_group)
         self.model_admin = admin.site._registry[StorefrontSettings]
+
+    def test_owner_can_update_store_name_and_upload_shared_logo(self):
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            settings = StorefrontSettings.objects.create()
+            self.client.force_login(self.owner)
+            change_url = reverse(
+                "admin:catalog_storefrontsettings_change",
+                args=[settings.pk],
+            )
+
+            response = self.client.post(
+                change_url,
+                {
+                    "store_name": "مای کالا",
+                    "logo": make_storefront_test_logo(),
+                    "hero_title_line_1": settings.hero_title_line_1,
+                    "hero_title_line_2": settings.hero_title_line_2,
+                    "instagram_url": "",
+                    "whatsapp_url": "",
+                    "telegram_url": "",
+                    "bale_url": "",
+                    "_save": "ذخیره",
+                },
+            )
+
+            self.assertEqual(response.status_code, 302)
+            settings.refresh_from_db()
+            self.assertEqual(settings.store_name, "مای کالا")
+            self.assertTrue(settings.logo.name.startswith("storefront/branding/"))
+            self.assertTrue(settings.logo.name.endswith("store-logo.png"))
 
     def test_only_store_owner_can_access_settings_admin(self):
         self.client.force_login(self.manager)
@@ -1703,6 +1789,7 @@ class StorefrontSettingsAdminAccessTests(TestCase):
         save_response = self.client.post(
             add_url,
             {
+                "store_name": StorefrontSettings.DEFAULT_STORE_NAME,
                 "hero_title_line_1": "عنوان آزمایشی اول در پنل مالک",
                 "hero_title_line_2": "عنوان آزمایشی دوم در پنل مالک",
                 "instagram_url": "https://www.instagram.com/example",
