@@ -1046,6 +1046,32 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         self.assertFalse(Order.objects.filter(cart=self.cart).exists())
         self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
 
+    def test_missing_address_and_shipping_report_both_errors_together(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(
+                shipping_method_id="",
+                recipient_name="",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "برای ادامه خرید، لطفاً یکی از روش‌های ارسال را انتخاب کنید.")
+        self.assertContains(response, 'id="checkout-validation-summary"')
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+    def test_extremely_large_shipping_method_id_is_rejected_safely(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(shipping_method_id="9" * 100),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "برای ادامه خرید، لطفاً یکی از روش‌های ارسال را انتخاب کنید.")
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+
     def test_missing_required_address_field_displays_friendly_validation(self):
         response = self.client.post(
             reverse("cart:checkout"),
