@@ -356,6 +356,32 @@ class CheckoutVariantIntegrationTests(TestCase):
 
         self.client.force_login(self.user)
 
+    def test_checkout_renders_persian_inline_address_error_without_creating_order(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            {
+                "shipping_method_id": self.shipping_method.id,
+                "recipient_name": "",
+                "phone_number": "09123456789",
+                "postal_code": "1234567890",
+                "province": "تهران",
+                "city": "تهران",
+                "address_line": "آدرس تست",
+                "is_default": False,
+                "customer_note": "یادداشت اختیاری",
+            },
+        )
+
+        content = response.content.decode("utf-8")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("نام گیرنده را وارد کنید.", content)
+        self.assertIn('id="id_recipient_name_error"', content)
+        self.assertIn("fa-circle-exclamation", content)
+        self.assertEqual(content.count("نام گیرنده را وارد کنید."), 1)
+        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
+
     def test_checkout_creates_order_with_variant_snapshot(self):
         response = self.client.post(
             reverse("cart:checkout"),
@@ -1087,15 +1113,16 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         self.cart.refresh_from_db()
         self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
 
-    def test_missing_city_shows_non_field_address_error(self):
+    def test_missing_city_shows_inline_city_field_error(self):
         response = self.client.post(
             reverse("cart:checkout"),
             self.checkout_payload(city=""),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="checkout-validation-summary"')
-        self.assertContains(response, "لطفاً شهر مربوط به استان انتخاب شده را انتخاب کنید.")
+        self.assertContains(response, 'id="id_city_error"')
+        self.assertContains(response, "شهر را انتخاب کنید.")
+        self.assertContains(response, "fa-circle-exclamation")
         self.assertFalse(Order.objects.filter(cart=self.cart).exists())
         self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
 
