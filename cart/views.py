@@ -312,6 +312,7 @@ class CheckoutView(View):
         selected_address_id=None,
         customer_note="",
         shipping_method_error=None,
+        checkout_error=None,
     ):
         user = request.user
         if user.is_authenticated:
@@ -341,6 +342,7 @@ class CheckoutView(View):
             "selected_address_id": selected_address_id or "",
             "customer_note": customer_note,
             "shipping_method_error": shipping_method_error,
+            "checkout_error": checkout_error,
             "province_cities": PROVINCES_AND_CITIES,
         }
 
@@ -429,13 +431,10 @@ class CheckoutView(View):
                     customer_note=request.POST.get("customer_note", "").strip(),
                 )
         except ValidationError as exc:
-            messages.error(
-                request,
-                (
-                    exc.messages[0]
-                    if hasattr(exc, "messages") and exc.messages
-                    else str(exc)
-                ),
+            checkout_error = (
+                exc.messages[0]
+                if hasattr(exc, "messages") and exc.messages
+                else str(exc)
             )
             return render(
                 request,
@@ -449,6 +448,7 @@ class CheckoutView(View):
                         address_instance.pk if address_instance else None
                     ),
                     customer_note=request.POST.get("customer_note", ""),
+                    checkout_error=checkout_error,
                 ),
             )
 
