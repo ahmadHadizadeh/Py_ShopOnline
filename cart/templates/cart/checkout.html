@@ -387,23 +387,29 @@
       </div>
       {% endif %}
 
-      <form method="post" id="checkoutForm" novalidate class="space-y-6">
+      <form method="post" id="checkoutForm" data-form-bound="{{ form.is_bound|yesno:'true,false' }}" novalidate class="space-y-6">
         {% csrf_token %}
         <input type="hidden" name="address_id" id="selected_address_id" value="{{ selected_address_id|default_if_none:'' }}">
 
-        {% if form.errors or shipping_method_error %}
-        <div id="checkout-validation-summary" role="alert" aria-live="assertive" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        {% if form.errors or shipping_method_error or checkout_error %}
+        <div id="checkout-validation-summary" role="alert" aria-live="assertive" tabindex="-1" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p class="font-black">برای ادامه خرید، لطفاً موارد مشخص‌شده را تکمیل یا اصلاح کنید.</p>
-          {% if form.non_field_errors %}
-            <ul class="mt-2 list-disc pr-5 space-y-1">
-              {% for error in form.non_field_errors %}
-                <li>{{ error }}</li>
+          <ul class="mt-2 list-disc pr-5 space-y-1">
+            {% if checkout_error %}
+              <li>{{ checkout_error }}</li>
+            {% endif %}
+            {% for error in form.non_field_errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+            {% for field in form %}
+              {% for error in field.errors %}
+                <li>{{ field.label }}: {{ error }}</li>
               {% endfor %}
-            </ul>
-          {% endif %}
-          {% if shipping_method_error %}
-            <p class="mt-2 font-bold">{{ shipping_method_error }}</p>
-          {% endif %}
+            {% endfor %}
+            {% if shipping_method_error %}
+              <li>{{ shipping_method_error }}</li>
+            {% endif %}
+          </ul>
         </div>
         {% endif %}
 
@@ -763,16 +769,20 @@
       updateCityOptions(currentProvince, currentCity);
     }
 
+    const checkoutForm = document.getElementById('checkoutForm');
+    const isBoundForm = checkoutForm?.dataset.formBound === 'true';
     const defaultAddressCard = document.querySelector(
       '.address-card.active-address'
     );
 
-    if (defaultAddressCard) {
+    // On GET, populate the default saved address. On a failed POST, preserve
+    // the values the customer entered instead of replacing them with saved data.
+    if (!isBoundForm && defaultAddressCard) {
       selectSavedAddress(defaultAddressCard);
     }
 
     const existingAddressId = document.getElementById('selected_address_id');
-    if (existingAddressId && !existingAddressId.value && defaultAddressCard) {
+    if (!isBoundForm && existingAddressId && !existingAddressId.value && defaultAddressCard) {
       existingAddressId.value = defaultAddressCard.dataset.id || '';
     }
 
@@ -793,6 +803,12 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    const validationSummary = document.getElementById('checkout-validation-summary');
+    if (validationSummary) {
+        validationSummary.focus({ preventScroll: true });
+        validationSummary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     function scrollToSection(sectionId) {
         const el = document.getElementById(sectionId);
         if (el) {
