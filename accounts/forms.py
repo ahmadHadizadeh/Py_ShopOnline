@@ -730,6 +730,23 @@ class AddressForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Keep checkout validation messages short, Persian, and specific to each input.
+        persian_error_messages = {
+            "recipient_name": {"required": _("نام گیرنده را وارد کنید.")},
+            "phone_number": {"required": _("شماره تماس را وارد کنید.")},
+            "postal_code": {"required": _("کد پستی را وارد کنید.")},
+            "province": {
+                "required": _("استان را انتخاب کنید."),
+                "invalid_choice": _("استان انتخاب‌شده معتبر نیست."),
+            },
+            "city": {
+                "invalid_choice": _("شهر انتخاب‌شده برای این استان معتبر نیست."),
+            },
+            "address_line": {"required": _("نشانی کامل را وارد کنید.")},
+        }
+        for field_name, messages in persian_error_messages.items():
+            self.fields[field_name].error_messages.update(messages)
+
         province = None
         city_choices = [("", "ابتدا استان را انتخاب کنید")]
 
@@ -768,21 +785,16 @@ class AddressForm(forms.ModelForm):
         city = cleaned_data.get("city")
 
         if province and province not in PROVINCES_AND_CITIES:
-            raise forms.ValidationError(_("استان انتخاب شده معتبر نیست."))
-
-        if province and not city:
-            raise forms.ValidationError(
-                _("لطفاً شهر مربوط به استان انتخاب شده را انتخاب کنید.")
-            )
-
-        if not province and city:
-            raise forms.ValidationError(_("لطفاً ابتدا استان را انتخاب کنید."))
-
-        if province and city:
+            self.add_error("province", _("استان انتخاب‌شده معتبر نیست."))
+        elif province and not city:
+            self.add_error("city", _("شهر را انتخاب کنید."))
+        elif not province and city:
+            self.add_error("province", _("ابتدا استان را انتخاب کنید."))
+        elif province and city:
             valid_cities = PROVINCES_AND_CITIES.get(province, [])
             if city not in valid_cities:
-                raise forms.ValidationError(
-                    _("شهر انتخاب شده برای این استان معتبر نیست.")
+                self.add_error(
+                    "city", _("شهر انتخاب‌شده برای این استان معتبر نیست.")
                 )
 
         return cleaned_data
