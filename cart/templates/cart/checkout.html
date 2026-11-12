@@ -806,17 +806,34 @@
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.form-field-wrapper.has-error').forEach(function (wrapper) {
-        const control = wrapper.querySelector('input:not([type="hidden"]), textarea, select');
+        const controls = [
+            wrapper.querySelector('input:not([type="hidden"]), textarea, select'),
+            wrapper.querySelector('.select2-selection')
+        ].filter(Boolean);
         const error = wrapper.querySelector('.checkout-field-error');
-        if (control && error) {
-            control.setAttribute('aria-invalid', 'true');
-            control.setAttribute('aria-describedby', error.id);
+
+        if (error) {
+            controls.forEach(function (control) {
+                control.setAttribute('aria-invalid', 'true');
+                control.setAttribute('aria-describedby', error.id);
+            });
         }
     });
 
     const validationSummary = document.getElementById('checkout-validation-summary');
     if (validationSummary) {
         validationSummary.focus({ preventScroll: true });
+    }
+
+    const firstInvalidField = document.querySelector('.form-field-wrapper.has-error');
+    if (firstInvalidField) {
+        const focusTarget = firstInvalidField.querySelector('.select2-selection')
+            || firstInvalidField.querySelector('input:not([type="hidden"]), textarea, select');
+        if (focusTarget) {
+            focusTarget.focus({ preventScroll: true });
+        }
+        firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (validationSummary) {
         validationSummary.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
