@@ -374,10 +374,22 @@
 
       {% if user_addresses %}
       <div id="saved-addresses-section" class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
-        <label class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
-          <i class="fa-solid fa-map-location-dot text-indigo-600"></i>
-          انتخاب از آدرس‌های ذخیره شده
-        </label>
+        <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+          <label class="text-lg font-black text-gray-700 flex items-center gap-2">
+            <i class="fa-solid fa-map-location-dot text-indigo-600"></i>
+            انتخاب از آدرس‌های ذخیره شده
+          </label>
+          <button
+            type="button"
+            id="new-address-button"
+            aria-controls="address-section"
+            onclick="startNewAddress()"
+            class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black px-4 py-2 rounded-xl transition-all"
+          >
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            ثبت آدرس جدید
+          </button>
+        </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-3 md:pb-0">
           {% for addr in user_addresses %}
@@ -672,6 +684,59 @@
       $citySelect.val(selectedCity).trigger('change');
     } else {
       $citySelect.val('').trigger('change');
+    }
+  }
+
+  function startNewAddress() {
+    document.querySelectorAll('.address-card').forEach(function(card) {
+      card.classList.remove('active-address', 'border-indigo-600', 'bg-indigo-50/30');
+      card.classList.add('border-gray-100', 'bg-white');
+    });
+
+    const addressIdInput = document.getElementById('selected_address_id');
+    if (addressIdInput) {
+      addressIdInput.value = '';
+    }
+
+    ['recipient_name', 'phone_number', 'postal_code', 'address_line'].forEach(function(name) {
+      const field = document.querySelector('#checkoutForm [name="' + name + '"]');
+      if (field) {
+        field.value = '';
+      }
+    });
+
+    const $provinceSelect = $('select[name="province"]');
+    setSelectValue($provinceSelect, '');
+
+    const defaultAddressCheckbox = document.getElementById('id_is_default');
+    if (defaultAddressCheckbox) {
+      defaultAddressCheckbox.checked = false;
+    }
+
+    document.querySelectorAll('#address-section .form-field-wrapper').forEach(function(wrapper) {
+      wrapper.classList.remove('has-error');
+      const error = wrapper.querySelector('.checkout-field-error');
+      if (error) {
+        error.remove();
+      }
+      wrapper.querySelectorAll('[aria-invalid], [aria-describedby]').forEach(function(control) {
+        control.removeAttribute('aria-invalid');
+        control.removeAttribute('aria-describedby');
+      });
+    });
+
+    const validationSummary = document.getElementById('checkout-validation-summary');
+    if (validationSummary && !validationSummary.querySelector('ul')) {
+      validationSummary.remove();
+    }
+
+    const recipientField = document.querySelector('#checkoutForm [name="recipient_name"]');
+    if (recipientField) {
+      recipientField.focus({ preventScroll: true });
+    }
+    const addressSection = document.getElementById('address-section');
+    if (addressSection) {
+      addressSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
 
