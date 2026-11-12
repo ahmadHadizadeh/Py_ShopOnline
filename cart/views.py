@@ -251,7 +251,9 @@ class CheckoutView(View):
             user__isnull=True,
         ).first()
 
-    def get_shipping_methods_data(self, request, cart):
+    def get_shipping_methods_data(
+        self, request, cart, selected_shipping_method_id=None
+    ):
         shipping_methods_with_costs = []
         if not cart or cart.total_price is None:
             return shipping_methods_with_costs
@@ -267,6 +269,7 @@ class CheckoutView(View):
                             "method": method,
                             "cost": cost,
                             "formatted_cost": formatted_cost_display,
+                            "selected": str(method.pk) == str(selected_shipping_method_id or ""),
                         }
                     )
                 except Exception as e:
@@ -284,7 +287,17 @@ class CheckoutView(View):
 
         return shipping_methods_with_costs
 
-    def get_context_data(self, request, cart=None, address_form=None):
+    def get_context_data(
+        self,
+        request,
+        cart=None,
+        address_form=None,
+        *,
+        selected_shipping_method_id=None,
+        selected_address_id=None,
+        customer_note="",
+        shipping_method_error=None,
+    ):
         user = request.user
         if user.is_authenticated:
             if address_form is None:
@@ -297,11 +310,22 @@ class CheckoutView(View):
                 address_form = AddressForm()
             user_addresses = Address.objects.none()
 
+        if selected_address_id is None and not address_form.is_bound:
+            selected_address_id = getattr(address_form.instance, "pk", None)
+
         return {
             "cart": cart,
             "form": address_form,
             "user_addresses": user_addresses,
-            "shipping_methods_data": self.get_shipping_methods_data(request, cart),
+            "shipping_methods_data": self.get_shipping_methods_data(
+                request,
+                cart,
+                selected_shipping_method_id=selected_shipping_method_id,
+            ),
+            "selected_shipping_method_id": selected_shipping_method_id or "",
+            "selected_address_id": selected_address_id or "",
+            "customer_note": customer_note,
+            "shipping_method_error": shipping_method_error,
             "province_cities": PROVINCES_AND_CITIES,
         }
 
@@ -326,30 +350,56 @@ class CheckoutView(View):
             messages.error(request, "سبد خرید معتبر نیست.")
             return redirect("cart:detail")
 
-        shipping_method_id = request.POST.get("shipping_method_id")
-        shipping_method = ShippingMethod.objects.filter(
-            id=shipping_method_id, is_active=True
-        ).first()
+        raw_shipping_method_id = (
+            request.POST.get("shipping_method_id") or ""
+        ).strip()
+        try:
+            shipping_method_id = int(raw_shipping_method_id)
+        except (TypeError, ValueError):
+            shipping_method_id = None
 
-        if not shipping_method:
-            messages.error(request, "لطفاً روش ارسال معتبری انتخاب کنید.")
-            return render(
-                request, self.template_name, self.get_context_data(request, cart=cart)
-            )
+        shipping_method = (
+            ShippingMethod.objects.filter(
+                pk=shipping_method_id,
+                is_active=True,
+            ).first()
+            if shipping_method_id is not None and shipping_method_id > 0
+            else None
+        )
 
-        address_id = request.POST.get("address_id")
+        raw_address_id = (request.POST.get("address_id") or "").strip()
+        try:
+            address_id = int(raw_address_id) if raw_address_id else None
+        except (TypeError, ValueError):
+            address_id = None
+
         address_instance = (
-            Address.objects.filter(id=address_id, user=request.user).first()
-            if (address_id and request.user.is_authenticated)
+            Address.objects.filter(pk=address_id, user=request.user).first()
+            if address_id is not None and request.user.is_authenticated
             else None
         )
 
         address_form = AddressForm(request.POST, instance=address_instance)
-        if not address_form.is_valid():
+        address_is_valid = address_form.is_valid()
+        shipping_method_error = (
+            "برای ادامه خرید، لطفاً یکی از روش‌های ارسال را انتخاب کنید."
+            if shipping_method is None
+            else None
+        )
+
+        if not address_is_valid or shipping_method is None:
             return render(
                 request,
                 self.template_name,
-                self.get_context_data(request, cart=cart, address_form=address_form),
+                self.get_context_data(
+                    request,
+                    cart=cart,
+                    address_form=address_form,
+                    selected_shipping_method_id=shipping_method_id,
+                    selected_address_id=address_instance.pk if address_instance else None,
+                    customer_note=request.POST.get("customer_note", ""),
+                    shipping_method_error=shipping_method_error,
+                ),
             )
 
         try:
@@ -381,7 +431,14 @@ class CheckoutView(View):
             return render(
                 request,
                 self.template_name,
-                self.get_context_data(request, cart=cart, address_form=address_form),
+                self.get_context_data(
+                    request,
+                    cart=cart,
+                    address_form=address_form,
+                    selected_shipping_method_id=shipping_method.pk,
+                    selected_address_id=address_instance.pk if address_instance else None,
+                    customer_note=request.POST.get("customer_note", ""),
+                ),
             )
 
         if not request.user.is_authenticated and "cart_id" in request.session:
