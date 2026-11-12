@@ -341,7 +341,7 @@
       </div>
 
       {% if user_addresses %}
-      <div id="address-section" class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
+      <div id="saved-addresses-section" class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
         <label class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
           <i class="fa-solid fa-map-location-dot text-indigo-600"></i>
           انتخاب از آدرس‌های ذخیره شده
@@ -358,7 +358,7 @@
             data-city="{{ addr.city }}"
             data-postal="{{ addr.postal_code }}"
             data-address="{{ addr.address_line }}"
-            class="address-card w-full min-w-0 relative p-5 rounded-2xl border-2 transition-all cursor-pointer hover:shadow-md group {% if addr.is_default %}border-indigo-600 active-address bg-indigo-50/30{% else %}border-gray-100 bg-white{% endif %}">
+            class="address-card w-full min-w-0 relative p-5 rounded-2xl border-2 transition-all cursor-pointer hover:shadow-md group {% if selected_address_id and addr.id == selected_address_id %}border-indigo-600 active-address bg-indigo-50/30{% else %}border-gray-100 bg-white{% endif %}">
 
             <div class="flex justify-between items-start mb-3">
               <span class="font-black text-base text-gray-800">{{ addr.recipient_name }}</span>
@@ -389,9 +389,25 @@
 
       <form method="post" id="checkoutForm" novalidate class="space-y-6">
         {% csrf_token %}
-        <input type="hidden" name="address_id" id="selected_address_id" value="{% if shipping_address %}{{ shipping_address.id }}{% endif %}">
+        <input type="hidden" name="address_id" id="selected_address_id" value="{{ selected_address_id|default_if_none:'' }}">
 
-        <div class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        {% if form.errors or shipping_method_error %}
+        <div id="checkout-validation-summary" role="alert" aria-live="assertive" class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p class="font-black">برای ادامه خرید، لطفاً موارد مشخص‌شده را تکمیل یا اصلاح کنید.</p>
+          {% if form.non_field_errors %}
+            <ul class="mt-2 list-disc pr-5 space-y-1">
+              {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if shipping_method_error %}
+            <p class="mt-2 font-bold">{{ shipping_method_error }}</p>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div id="address-section" class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
           <label class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
             <i class="fa-solid fa-location-dot text-indigo-600"></i>
             ویرایش یا ثبت آدرس تحویل
@@ -448,7 +464,7 @@
         <div class="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
           <label for="id_customer_note" class="text-lg font-black text-gray-700 mb-4 flex items-center gap-2">
             <i class="fa-solid fa-note-sticky text-indigo-600"></i>
-            توضیحات سفارش
+            توضیحات سفارش (اختیاری)
           </label>
           <textarea
             name="customer_note"
@@ -464,6 +480,9 @@
             انتخاب روش ارسال
           </label>
 
+          {% if shipping_method_error %}
+            <p class="mb-3 rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700" role="alert">{{ shipping_method_error }}</p>
+          {% endif %}
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             {% if shipping_methods_data %}
               {% for item in shipping_methods_data %}
