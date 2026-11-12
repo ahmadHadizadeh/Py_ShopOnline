@@ -1113,15 +1113,16 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         self.cart.refresh_from_db()
         self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
 
-    def test_missing_city_shows_non_field_address_error(self):
+    def test_missing_city_shows_inline_city_field_error(self):
         response = self.client.post(
             reverse("cart:checkout"),
             self.checkout_payload(city=""),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="checkout-validation-summary"')
-        self.assertContains(response, "لطفاً شهر مربوط به استان انتخاب شده را انتخاب کنید.")
+        self.assertContains(response, 'id="id_city_error"')
+        self.assertContains(response, "شهر را انتخاب کنید.")
+        self.assertContains(response, "fa-circle-exclamation")
         self.assertFalse(Order.objects.filter(cart=self.cart).exists())
         self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
 
