@@ -93,6 +93,60 @@ def test_address_form_and_model_share_phone_number_length_contract(
     assert form.is_valid() is is_valid
 
 
+@pytest.mark.parametrize(
+    ("field_name", "expected_message"),
+    [
+        ("recipient_name", "نام گیرنده را وارد کنید."),
+        ("phone_number", "شماره تماس را وارد کنید."),
+        ("postal_code", "کد پستی را وارد کنید."),
+        ("province", "استان را انتخاب کنید."),
+        ("city", "شهر را انتخاب کنید."),
+        ("address_line", "نشانی کامل را وارد کنید."),
+    ],
+)
+def test_address_form_required_errors_are_short_and_persian(
+    field_name, expected_message
+):
+    data = {
+        "recipient_name": "گیرنده تست",
+        "phone_number": "09123456789",
+        "postal_code": "1234567890",
+        "province": "تهران",
+        "city": "تهران",
+        "address_line": "نشانی تست",
+        "is_default": "",
+    }
+    data[field_name] = ""
+
+    form = AddressForm(data=data)
+
+    assert not form.is_valid()
+    assert expected_message in form.errors[field_name]
+    assert all(
+        "This field is required" not in error
+        for errors in form.errors.values()
+        for error in errors
+    )
+
+
+@pytest.mark.django_db
+def test_address_form_rejects_city_not_belonging_to_selected_province():
+    form = AddressForm(
+        data={
+            "recipient_name": "گیرنده تست",
+            "phone_number": "09123456789",
+            "postal_code": "1234567890",
+            "province": "تهران",
+            "city": "مشهد",
+            "address_line": "نشانی تست",
+            "is_default": "",
+        }
+    )
+
+    assert not form.is_valid()
+    assert "شهر انتخاب‌شده برای این استان معتبر نیست." in form.errors["city"]
+
+
 @pytest.mark.django_db
 def test_address_default_logic(django_user_model):
     user = django_user_model.objects.create_user(
