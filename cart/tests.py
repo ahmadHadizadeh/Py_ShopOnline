@@ -1016,6 +1016,161 @@ class CheckoutOrderIntegrityContractTests(TestCase):
             Cart.STATUS_ACTIVE,
         )
 
+    def test_blank_shipping_method_id_returns_clear_validation_instead_of_500(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(
+                shipping_method_id="",
+                customer_note="این توضیح باید حفظ شود",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "برای ادامه خرید، لطفاً یکی از روش‌های ارسال را انتخاب کنید.")
+        self.assertContains(response, "این توضیح باید حفظ شود")
+        self.assertContains(response, "value=\"کاربر تست\"")
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
+
+    def test_non_numeric_shipping_method_id_returns_validation_instead_of_500(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(shipping_method_id="not-a-number"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "برای ادامه خرید، لطفاً یکی از روش‌های ارسال را انتخاب کنید.")
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+    def test_missing_address_and_shipping_report_both_errors_together(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(
+                shipping_method_id="",
+                recipient_name="",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "برای ادامه خرید، لطفاً یکی از روش‌های ارسال را انتخاب کنید.")
+        self.assertContains(response, 'id="checkout-validation-summary"')
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+    def test_extremely_large_shipping_method_id_is_rejected_safely(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(shipping_method_id="9" * 100),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "برای ادامه خرید، لطفاً یکی از روش‌های ارسال را انتخاب کنید.")
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+
+    def test_missing_required_address_field_displays_friendly_validation(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(recipient_name=""),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="checkout-validation-summary"')
+        self.assertContains(response, "برای ادامه خرید، لطفاً موارد مشخص‌شده را تکمیل یا اصلاح کنید.")
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
+
+    def test_missing_city_shows_non_field_address_error(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(city=""),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="checkout-validation-summary"')
+        self.assertContains(response, "لطفاً شهر مربوط به استان انتخاب شده را انتخاب کنید.")
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+
+    def test_bound_checkout_preserves_edits_to_a_selected_saved_address(self):
+        saved_address = Address.objects.create(
+            user=self.user,
+            recipient_name="گیرنده قبلی",
+            phone_number="09123456789",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس قبلی",
+            is_default=True,
+        )
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(
+                address_id=saved_address.pk,
+                recipient_name="نام ویرایش‌شده",
+                postal_code="123",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-form-bound="true"')
+        self.assertContains(response, f'value="{saved_address.pk}"')
+        self.assertContains(response, 'value="نام ویرایش‌شده"')
+        self.assertContains(response, "active-address")
+        saved_address.refresh_from_db()
+        self.assertEqual(saved_address.recipient_name, "گیرنده قبلی")
+        self.assertEqual(saved_address.postal_code, "1234567890")
+
+    def test_order_validation_error_is_displayed_and_saved_address_rolls_back(self):
+        error_message = "موجودی یکی از محصولات تغییر کرده است؛ لطفاً سبد خرید را بررسی کنید."
+        with patch(
+            "cart.views.OrderService.create_order",
+            side_effect=ValidationError(error_message),
+        ):
+            response = self.client.post(
+                reverse("cart:checkout"),
+                self.checkout_payload(customer_note="یادداشت حفظ‌شده"),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="checkout-validation-summary"')
+        self.assertContains(response, error_message)
+        self.assertContains(response, "یادداشت حفظ‌شده")
+        self.assertFalse(Order.objects.filter(cart=self.cart).exists())
+        self.assertFalse(Payment.objects.filter(order__cart=self.cart).exists())
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
+
+    def test_malformed_address_id_does_not_cause_server_error(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(address_id="not-a-number"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(cart=self.cart)
+        self.assertEqual(order.address_snapshot.recipient_name, "کاربر تست")
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 1)
+
+    def test_customer_note_is_optional_and_blank_note_does_not_block_checkout(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(customer_note=""),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(cart=self.cart)
+        self.assertEqual(order.customer_note, "")
+
     def test_inactive_shipping_method_does_not_create_order(self):
         self.shipping_method.is_active = False
         self.shipping_method.save(update_fields=["is_active"])
