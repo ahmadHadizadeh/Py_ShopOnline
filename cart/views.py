@@ -45,6 +45,19 @@ def _parse_quantity(raw_value, default=1):
         return default
 
 
+def _parse_positive_id(raw_value):
+    raw_value = str(raw_value or "").strip()
+    if not raw_value or len(raw_value) > 19 or not raw_value.isdecimal():
+        return None
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+    return value if 0 < value <= (2**63 - 1) else None
+
+
 def cart_detail(request):
     cart = get_or_create_cart(request)
 
@@ -269,7 +282,9 @@ class CheckoutView(View):
                             "method": method,
                             "cost": cost,
                             "formatted_cost": formatted_cost_display,
-                            "selected": str(method.pk) == str(selected_shipping_method_id or ""),
+                            "selected": (
+                                str(method.pk) == str(selected_shipping_method_id or "")
+                            ),
                         }
                     )
                 except Exception as e:
@@ -350,13 +365,9 @@ class CheckoutView(View):
             messages.error(request, "سبد خرید معتبر نیست.")
             return redirect("cart:detail")
 
-        raw_shipping_method_id = (
-            request.POST.get("shipping_method_id") or ""
-        ).strip()
-        try:
-            shipping_method_id = int(raw_shipping_method_id)
-        except (TypeError, ValueError):
-            shipping_method_id = None
+        shipping_method_id = _parse_positive_id(
+            request.POST.get("shipping_method_id")
+        )
 
         shipping_method = (
             ShippingMethod.objects.filter(
@@ -367,11 +378,7 @@ class CheckoutView(View):
             else None
         )
 
-        raw_address_id = (request.POST.get("address_id") or "").strip()
-        try:
-            address_id = int(raw_address_id) if raw_address_id else None
-        except (TypeError, ValueError):
-            address_id = None
+        address_id = _parse_positive_id(request.POST.get("address_id"))
 
         address_instance = (
             Address.objects.filter(pk=address_id, user=request.user).first()
@@ -396,7 +403,9 @@ class CheckoutView(View):
                     cart=cart,
                     address_form=address_form,
                     selected_shipping_method_id=shipping_method_id,
-                    selected_address_id=address_instance.pk if address_instance else None,
+                    selected_address_id=(
+                        address_instance.pk if address_instance else None
+                    ),
                     customer_note=request.POST.get("customer_note", ""),
                     shipping_method_error=shipping_method_error,
                 ),
@@ -436,7 +445,9 @@ class CheckoutView(View):
                     cart=cart,
                     address_form=address_form,
                     selected_shipping_method_id=shipping_method.pk,
-                    selected_address_id=address_instance.pk if address_instance else None,
+                    selected_address_id=(
+                        address_instance.pk if address_instance else None
+                    ),
                     customer_note=request.POST.get("customer_note", ""),
                 ),
             )
