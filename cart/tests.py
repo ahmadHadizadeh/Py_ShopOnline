@@ -356,6 +356,32 @@ class CheckoutVariantIntegrationTests(TestCase):
 
         self.client.force_login(self.user)
 
+    def test_checkout_renders_persian_inline_address_error_without_creating_order(self):
+        response = self.client.post(
+            reverse("cart:checkout"),
+            {
+                "shipping_method_id": self.shipping_method.id,
+                "recipient_name": "",
+                "phone_number": "09123456789",
+                "postal_code": "1234567890",
+                "province": "تهران",
+                "city": "تهران",
+                "address_line": "آدرس تست",
+                "is_default": False,
+                "customer_note": "یادداشت اختیاری",
+            },
+        )
+
+        content = response.content.decode("utf-8")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("نام گیرنده را وارد کنید.", content)
+        self.assertIn('id="id_recipient_name_error"', content)
+        self.assertIn("fa-circle-exclamation", content)
+        self.assertEqual(content.count("نام گیرنده را وارد کنید."), 1)
+        self.assertFalse(Order.objects.filter(user=self.user).exists())
+        self.cart.refresh_from_db()
+        self.assertEqual(self.cart.status, Cart.STATUS_ACTIVE)
+
     def test_checkout_creates_order_with_variant_snapshot(self):
         response = self.client.post(
             reverse("cart:checkout"),
