@@ -1581,3 +1581,230 @@ def test_otp_views_return_service_unavailable_when_database_fails(client):
     assert verify_response.status_code == 503
     assert verify_response.json()["status"] == "error"
 
+
+
+# HMAC OTP cache-key privacy regressions
+@pytest.mark.django_db(transaction=True)
+def test_otp_cache_hmac_keys_do_not_store_raw_phone():
+    from django.core.cache import cache
+    from django.core.management import call_command
+    from django.db import connection
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09000000001"
+    code = "223456"
+    hashed_keys = (
+        SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone),
+        SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_COOLDOWN, phone),
+        SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_ATTEMPTS, phone),
+    )
+    legacy_keys = (
+        SMSIRService._legacy_cache_key(SMSIRService.CACHE_PREFIX_CODE, phone),
+        SMSIRService._legacy_cache_key(SMSIRService.CACHE_PREFIX_COOLDOWN, phone),
+        SMSIRService._legacy_cache_key(SMSIRService.CACHE_PREFIX_ATTEMPTS, phone),
+    )
+    for key in (*hashed_keys, *legacy_keys):
+        cache.delete(key)
+
+    try:
+        with (
+            patch.object(
+                SMSIRService,
+                "send_verification_code",
+                return_value=(True, "mock accepted"),
+            ),
+            patch("accounts.services.otp.secrets.randbelow", return_value=123456),
+        ):
+            sent, _, ttl = SMSIRService.send_otp(phone)
+
+        assert sent is True
+        assert ttl > 0
+        assert cache.get(hashed_keys[0]) == SMSIRService._hash_code(phone, code)
+        assert cache.get(hashed_keys[1]) is not None
+
+        # Create an attempts key as well, then verify all three persisted keys
+        # are HMAC-addressed and no key contains the customer's phone number.
+        valid, _ = SMSIRService.verify_otp(phone, "000000")
+        assert valid is False
+        assert cache.get(hashed_keys[2]) == 1
+
+        table = connection.ops.quote_name("pyshop_cache")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT cache_key FROM {table} WHERE cache_key LIKE %s",
+                [f"%{phone}%"],
+            )
+            matching_keys = cursor.fetchall()
+
+        assert matching_keys == []
+    finally:
+        for key in (*hashed_keys, *legacy_keys):
+            cache.delete(key)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_otp_cache_migration_preserves_active_legacy_challenge():
+    import importlib
+    import time
+    from types import SimpleNamespace
+
+    from django.core.cache import cache
+    from django.core.management import call_command
+    from django.db import connection
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09000000002"
+    code = "654321"
+    legacy_keys = (
+        SMSIRService._legacy_cache_key(SMSIRService.CACHE_PREFIX_CODE, phone),
+        SMSIRService._legacy_cache_key(SMSIRService.CACHE_PREFIX_COOLDOWN, phone),
+        SMSIRService._legacy_cache_key(SMSIRService.CACHE_PREFIX_ATTEMPTS, phone),
+    )
+    hashed_keys = (
+        SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone),
+        SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_COOLDOWN, phone),
+        SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_ATTEMPTS, phone),
+    )
+    for key in (*hashed_keys, *legacy_keys):
+        cache.delete(key)
+
+    try:
+        cache.set(
+            legacy_keys[0],
+            SMSIRService._hash_code(phone, code),
+            timeout=SMSIRService.EXPIRATION_SECONDS,
+        )
+        cache.set(
+            legacy_keys[1],
+            time.time() + 90,
+            timeout=90,
+        )
+        cache.set(legacy_keys[2], 2, timeout=SMSIRService.EXPIRATION_SECONDS)
+
+        backend = cache
+        table = connection.ops.quote_name("pyshop_cache")
+
+        def get_expiry(logical_key):
+            storage_key = backend.make_key(logical_key)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT expires FROM {table} WHERE cache_key = %s",
+                    [storage_key],
+                )
+                row = cursor.fetchone()
+            assert row is not None
+            return row[0]
+
+        original_expiries = [get_expiry(key) for key in legacy_keys]
+
+        migration = importlib.import_module(
+            "accounts.migrations.0004_hash_otp_cache_identifiers"
+        )
+        migration.rekey_legacy_otp_cache_entries(
+            None,
+            SimpleNamespace(connection=connection),
+        )
+
+        assert cache.get(hashed_keys[0]) == SMSIRService._hash_code(phone, code)
+        assert cache.get(hashed_keys[1]) is not None
+        assert cache.get(hashed_keys[2]) == 2
+        assert [get_expiry(key) for key in hashed_keys] == original_expiries
+
+        # The challenge issued before deployment remains verifiable after its
+        # database cache key has been re-addressed with HMAC.
+        valid, _ = SMSIRService.verify_otp(phone, code)
+        assert valid is True
+        assert cache.get(hashed_keys[0]) is None
+        assert SMSIRService.get_remaining_cooldown(phone) > 0
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT cache_key FROM {table} WHERE cache_key LIKE %s",
+                [f"%{phone}%"],
+            )
+            matching_keys = cursor.fetchall()
+
+        assert matching_keys == []
+    finally:
+        for key in (*hashed_keys, *legacy_keys):
+            cache.delete(key)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_otp_verify_accepts_unmigrated_legacy_cache_key_and_removes_raw_keys():
+    import time
+
+    from django.core.cache import cache
+    from django.core.management import call_command
+    from django.db import connection
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09000000003"
+    code = "765432"
+    legacy_code_key = SMSIRService._legacy_cache_key(
+        SMSIRService.CACHE_PREFIX_CODE, phone
+    )
+    legacy_cd_key = SMSIRService._legacy_cache_key(
+        SMSIRService.CACHE_PREFIX_COOLDOWN, phone
+    )
+    legacy_attempts_key = SMSIRService._legacy_cache_key(
+        SMSIRService.CACHE_PREFIX_ATTEMPTS, phone
+    )
+    hashed_cd_key = SMSIRService._cache_key(
+        SMSIRService.CACHE_PREFIX_COOLDOWN, phone
+    )
+
+    for key in (
+        legacy_code_key,
+        legacy_cd_key,
+        legacy_attempts_key,
+        hashed_cd_key,
+    ):
+        cache.delete(key)
+
+    try:
+        cache.set(
+            legacy_code_key,
+            SMSIRService._hash_code(phone, code),
+            timeout=SMSIRService.EXPIRATION_SECONDS,
+        )
+        cache.set(legacy_cd_key, time.time() + 60, timeout=60)
+        cache.set(legacy_attempts_key, 1, timeout=SMSIRService.EXPIRATION_SECONDS)
+
+        valid, _ = SMSIRService.verify_otp(phone, code)
+
+        assert valid is True
+        assert cache.get(legacy_code_key) is None
+        assert cache.get(legacy_attempts_key) is None
+        assert cache.get(legacy_cd_key) is None
+        assert SMSIRService.get_remaining_cooldown(phone) > 0
+
+        table = connection.ops.quote_name("pyshop_cache")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"SELECT cache_key FROM {table} WHERE cache_key LIKE %s",
+                [f"%{phone}%"],
+            )
+            matching_keys = cursor.fetchall()
+
+        assert matching_keys == []
+    finally:
+        for key in (
+            legacy_code_key,
+            legacy_cd_key,
+            legacy_attempts_key,
+            hashed_cd_key,
+        ):
+            cache.delete(key)
