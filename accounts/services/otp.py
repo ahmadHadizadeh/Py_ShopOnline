@@ -36,6 +36,7 @@ class SMSIRService:
     CACHE_PREFIX_CODE = "otp_code:"
     CACHE_PREFIX_COOLDOWN = "otp_cooldown:"
     CACHE_PREFIX_ATTEMPTS = "otp_attempts:"
+    CACHE_KEY_HMAC_DOMAIN = "pyshop:otp-cache:v1"
 
     LOCK_BUSY_MESSAGE = "درخواست دیگری برای این شماره در حال پردازش است؛ کمی بعد تلاش کنید."
 
@@ -110,6 +111,71 @@ class SMSIRService:
         secret = getattr(settings, "SECRET_KEY", "otp-secret")
         payload = f"{phone}:{code}:{secret}".encode("utf-8")
         return hashlib.sha256(payload).hexdigest()
+
+    @classmethod
+    def _cache_phone_identifier(cls, phone: str) -> str:
+        """Return a non-reversible, secret-keyed identifier for cache keys."""
+        secret = str(settings.SECRET_KEY).encode("utf-8")
+        message = f"{cls.CACHE_KEY_HMAC_DOMAIN}:{phone}".encode("utf-8")
+        return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+    @classmethod
+    def _cache_key(cls, prefix: str, phone: str) -> str:
+        return f"{prefix}{cls._cache_phone_identifier(phone)}"
+
+    @classmethod
+    def _legacy_cache_key(cls, prefix: str, phone: str) -> str:
+        """Address pre-HMAC entries only during the short compatibility window."""
+        return f"{prefix}{phone}"
+
+    @staticmethod
+    def _cooldown_remaining_from_value(value) -> int:
+        if value is None:
+            return 0
+
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return 0
+
+        # Current entries store an absolute expiry timestamp. Older entries
+        # stored a duration and relied on the cache TTL for their actual expiry.
+        if value >= 1_000_000_000:
+            return max(0, math.ceil(value - time.time()))
+
+        return max(0, int(value))
+
+    @classmethod
+    def _migrate_legacy_cooldown(cls, phone: str) -> None:
+        """
+        Move a legacy cooldown to its HMAC key before deleting the raw key.
+
+        This runs inside verify_otp's transaction. Read-back is required because
+        Django DatabaseCache may silently swallow a failed write.
+        """
+        legacy_key = cls._legacy_cache_key(cls.CACHE_PREFIX_COOLDOWN, phone)
+        legacy_value = cache.get(legacy_key)
+        if legacy_value is None:
+            return
+
+        hashed_key = cls._cache_key(cls.CACHE_PREFIX_COOLDOWN, phone)
+        hashed_value = cache.get(hashed_key)
+        remaining = max(
+            cls._cooldown_remaining_from_value(legacy_value),
+            cls._cooldown_remaining_from_value(hashed_value),
+        )
+
+        if remaining > 0:
+            expires_at = time.time() + remaining
+            cache.set(hashed_key, expires_at, timeout=remaining)
+            if cache.get(hashed_key) != expires_at:
+                raise DatabaseError(
+                    "OTP cooldown migration could not be verified."
+                )
+        else:
+            cache.delete(hashed_key)
+
+        cache.delete(legacy_key)
 
     @classmethod
     def _advisory_lock_id(cls, phone: str) -> int:
@@ -205,23 +271,14 @@ class SMSIRService:
         if not norm_phone:
             return 0
 
-        cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
-        remaining = cache.get(cd_key)
-        if remaining is None:
-            return 0
-
-        try:
-            value = float(remaining)
-        except (TypeError, ValueError):
-            return 0
-
-        # New entries store an absolute expiry timestamp for a real countdown.
-        # Small values are legacy cache entries and remain valid until their
-        # original cache TTL expires.
-        if value >= 1_000_000_000:
-            return max(0, math.ceil(value - time.time()))
-
-        return max(0, int(value))
+        # Prefer the HMAC identifier, but honor an in-flight challenge created
+        # by the pre-HMAC release until it is verified or expires.
+        hashed_key = cls._cache_key(cls.CACHE_PREFIX_COOLDOWN, norm_phone)
+        legacy_key = cls._legacy_cache_key(cls.CACHE_PREFIX_COOLDOWN, norm_phone)
+        return max(
+            cls._cooldown_remaining_from_value(cache.get(hashed_key)),
+            cls._cooldown_remaining_from_value(cache.get(legacy_key)),
+        )
 
     # -------------------------------------------------------------------------
     # ارسال خام SMS.ir
@@ -339,10 +396,16 @@ class SMSIRService:
                 )
 
             code = str(secrets.randbelow(900000) + 100000)
-            code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
-            cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
-            attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
+            code_key = cls._cache_key(cls.CACHE_PREFIX_CODE, norm_phone)
+            cd_key = cls._cache_key(cls.CACHE_PREFIX_COOLDOWN, norm_phone)
+            attempts_key = cls._cache_key(cls.CACHE_PREFIX_ATTEMPTS, norm_phone)
             hashed_code = cls._hash_code(norm_phone, code)
+
+            legacy_keys = (
+                cls._legacy_cache_key(cls.CACHE_PREFIX_CODE, norm_phone),
+                cls._legacy_cache_key(cls.CACHE_PREFIX_COOLDOWN, norm_phone),
+                cls._legacy_cache_key(cls.CACHE_PREFIX_ATTEMPTS, norm_phone),
+            )
 
             # Reserve a usable challenge before the external side effect. If
             # the cache/database write fails, no SMS request is made. The extra
@@ -351,6 +414,12 @@ class SMSIRService:
             reservation_seconds = cls.COOLDOWN_SECONDS + cls.TIMEOUT
             reservation_cooldown_until = time.time() + reservation_seconds
             with transaction.atomic():
+                # No active legacy challenge remains (the cooldown check above
+                # covered it). Remove any expired raw-phone entries before
+                # reserving the new HMAC-addressed challenge.
+                for legacy_key in legacy_keys:
+                    cache.delete(legacy_key)
+
                 cache.set(
                     code_key,
                     hashed_code,
@@ -433,7 +502,31 @@ class SMSIRService:
             if not lock_acquired:
                 return False, cls.LOCK_BUSY_MESSAGE
 
-            attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
+            hashed_code_key = cls._cache_key(
+                cls.CACHE_PREFIX_CODE, norm_phone
+            )
+            legacy_code_key = cls._legacy_cache_key(
+                cls.CACHE_PREFIX_CODE, norm_phone
+            )
+            cached_hash = cache.get(hashed_code_key)
+            if cached_hash is not None:
+                code_key = hashed_code_key
+                attempts_key = cls._cache_key(
+                    cls.CACHE_PREFIX_ATTEMPTS, norm_phone
+                )
+            else:
+                # A challenge created before the HMAC-key release remains
+                # verifiable. Keep its attempt counter in the same namespace
+                # until successful verification or natural expiry.
+                code_key = legacy_code_key
+                attempts_key = cls._legacy_cache_key(
+                    cls.CACHE_PREFIX_ATTEMPTS, norm_phone
+                )
+                cached_hash = cache.get(code_key)
+
+            if not cached_hash:
+                return False, "کد تأیید منقضی شده یا هنوز درخواستی ثبت نشده است."
+
             try:
                 attempts = int(cache.get(attempts_key, 0) or 0)
             except (TypeError, ValueError):
@@ -444,11 +537,6 @@ class SMSIRService:
                     False,
                     "تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً کد جدید دریافت کنید.",
                 )
-
-            code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
-            cached_hash = cache.get(code_key)
-            if not cached_hash:
-                return False, "کد تأیید منقضی شده یا هنوز درخواستی ثبت نشده است."
 
             input_hash = cls._hash_code(norm_phone, entered_code)
             if not hmac.compare_digest(str(cached_hash), input_hash):
@@ -467,8 +555,17 @@ class SMSIRService:
                     f"کد تأیید وارد شده اشتباه است. ({remaining_tries} فرصت باقی‌مانده)",
                 )
 
-            # The transaction-level advisory lock remains held until this
-            # deletion commits, so another worker cannot accept the same code.
+            # Preserve the remaining legacy cooldown under its HMAC key before
+            # removing any raw-phone cache keys. DatabaseCache writes are
+            # checked because they may fail silently.
+            cls._migrate_legacy_cooldown(norm_phone)
+
+            # Remove both namespaces in case a rolling deployment left a
+            # legacy entry beside the current HMAC-addressed challenge.
             cache.delete(code_key)
             cache.delete(attempts_key)
+            cache.delete(legacy_code_key)
+            cache.delete(
+                cls._legacy_cache_key(cls.CACHE_PREFIX_ATTEMPTS, norm_phone)
+            )
             return True, "کد تأیید با موفقیت احراز شد."
