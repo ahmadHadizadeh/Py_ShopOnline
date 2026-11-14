@@ -1425,3 +1425,159 @@ def test_otp_login_failure_rolls_back_user_profile_cart_session_and_code(client)
     assert restored_session.session_key == guest_session_key
     assert restored_session["cart_id"] == guest_cart.pk
     assert restored_session.get("_auth_user_id") is None
+
+@pytest.mark.django_db(transaction=True)
+def test_otp_send_timeout_keeps_reserved_code_verifiable():
+    import requests
+    from django.core.cache import cache
+    from django.core.management import call_command
+    from django.db import connection
+    from django.test import override_settings
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09123456789"
+    code = "223456"
+    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    cooldown_key = f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}"
+
+    with (
+        override_settings(
+            DEBUG=False,
+            SMSIR_CONFIG={"API_KEY": "TEST_API_KEY", "TEMPLATE_ID": 358253},
+        ),
+        patch("accounts.services.otp.secrets.randbelow", return_value=123456),
+        patch(
+            "accounts.services.otp.requests.post",
+            side_effect=requests.exceptions.ReadTimeout("response timed out"),
+        ) as mocked_post,
+    ):
+        sent, message, ttl = SMSIRService.send_otp(phone)
+
+    assert sent is False
+    assert ttl > 0
+    assert "وضعیت ارسال پیامک مشخص نشد" in message
+    mocked_post.assert_called_once()
+    assert cache.get(code_key) == SMSIRService._hash_code(phone, code)
+    assert cache.get(cooldown_key) is not None
+
+    valid, _ = SMSIRService.verify_otp(phone, code)
+    assert valid is True
+    assert cache.get(code_key) is None
+    cache.delete(cooldown_key)
+
+@pytest.mark.django_db(transaction=True)
+def test_otp_send_cache_reservation_failure_prevents_sms_request():
+    from django.core.cache import cache
+    from django.core.cache.backends.db import DatabaseCache
+    from django.core.management import call_command
+    from django.db import DatabaseError, connection
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09123456789"
+    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    original_base_set = DatabaseCache._base_set
+    set_calls = 0
+
+    def silently_fail_second_cache_write(backend, mode, key, value, timeout):
+        nonlocal set_calls
+        set_calls += 1
+        if set_calls == 2:
+            # DatabaseCache._base_set() returns False when its internal write
+            # hits DatabaseError; DatabaseCache.set() discards that result.
+            return False
+        return original_base_set(backend, mode, key, value, timeout)
+
+    with (
+        patch.object(
+            DatabaseCache,
+            "_base_set",
+            new=silently_fail_second_cache_write,
+        ),
+        patch.object(SMSIRService, "send_verification_code") as send_sms,
+    ):
+        with pytest.raises(DatabaseError, match="reservation could not be verified"):
+            SMSIRService.send_otp(phone)
+
+    send_sms.assert_not_called()
+    assert cache.get(code_key) is None
+    assert cache.get(f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}") is None
+
+@pytest.mark.django_db(transaction=True)
+def test_otp_send_definitive_provider_rejection_clears_reservation():
+    from django.core.cache import cache
+    from django.core.management import call_command
+    from django.db import connection
+    from django.test import override_settings
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09123456789"
+    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    cooldown_key = f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}"
+
+    class RejectedResponse:
+        status_code = 400
+        text = "invalid request"
+
+    with (
+        override_settings(
+            DEBUG=False,
+            SMSIR_CONFIG={"API_KEY": "TEST_API_KEY", "TEMPLATE_ID": 358253},
+        ),
+        patch("accounts.services.otp.secrets.randbelow", return_value=123456),
+        patch(
+            "accounts.services.otp.requests.post",
+            return_value=RejectedResponse(),
+        ) as mocked_post,
+    ):
+        sent, message, ttl = SMSIRService.send_otp(phone)
+
+    assert sent is False
+    assert ttl == 0
+    assert "نپذیرفت" in message
+    mocked_post.assert_called_once()
+    assert cache.get(code_key) is None
+    assert cache.get(cooldown_key) is None
+
+@pytest.mark.django_db
+def test_otp_views_return_service_unavailable_when_database_fails(client):
+    from django.db import DatabaseError
+
+    phone = "09123456789"
+    with patch(
+        "accounts.otp_views.SMSIRService.send_otp",
+        side_effect=DatabaseError("forced cache database outage"),
+    ):
+        send_response = client.post(
+            reverse("accounts:send_otp"),
+            data=dumps({"phone": phone}),
+            content_type="application/json",
+        )
+
+    assert send_response.status_code == 503
+    assert send_response.json()["status"] == "error"
+
+    with patch(
+        "accounts.otp_views.SMSIRService.verify_otp",
+        side_effect=DatabaseError("forced OTP database outage"),
+    ):
+        verify_response = client.post(
+            reverse("accounts:verify_otp"),
+            data=dumps({"phone": phone, "code": "123456"}),
+            content_type="application/json",
+        )
+
+    assert verify_response.status_code == 503
+    assert verify_response.json()["status"] == "error"
+

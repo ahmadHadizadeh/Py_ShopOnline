@@ -643,7 +643,39 @@ with sync_playwright() as playwright:
     guest.keyboard.press("Escape")
     expect_hidden(guest, "#otp-modal")
 
-    # Do not send SMS or verify a real OTP in this smoke test.
+    # Simulate an active OTP cooldown response. This must recover the
+    # verification step without sending a real SMS or verifying a real code.
+    send_endpoint = guest.locator("#otp-modal").get_attribute("data-send-endpoint")
+    assert send_endpoint
+
+    def fulfill_active_cooldown(route):
+        if route.request.url.endswith(send_endpoint):
+            assert route.request.method == "POST"
+            route.fulfill(
+                status=400,
+                content_type="application/json",
+                body=(
+                    '{"status":"error",'
+                    '"message":"کد قبلی هنوز فعال است؛ در صورت دریافت وارد کنید.",'
+                    '"ttl":90}'
+                ),
+            )
+        else:
+            route.continue_()
+
+    guest.route("**/*", fulfill_active_cooldown)
+    guest.locator("[data-otp-open]").click()
+    expect_visible(guest, "#otp-modal")
+    guest.locator("#otp-phone").fill("09123456789")
+    guest.locator("#btn-send-otp").click()
+    expect_hidden(guest, "#otp-step-1")
+    expect_visible(guest, "#otp-step-2")
+    assert guest.locator("#display-phone").inner_text() == "09123456789"
+    expect_visible(guest, "#otp-timer-container")
+    expect_hidden(guest, "#btn-resend")
+    assert "کد قبلی هنوز فعال است" in guest.locator("#otp-alert").inner_text()
+
+    # No real SMS is sent and no real OTP is verified in this smoke test.
     assert not page_errors, "Browser JavaScript errors:\n" + "\n".join(page_errors)
 
     guest_context.close()

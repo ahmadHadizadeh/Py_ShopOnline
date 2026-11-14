@@ -5,7 +5,7 @@ from importlib import import_module
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.http import JsonResponse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -73,6 +73,15 @@ def send_otp_view(request):
 
     try:
         success, message, ttl = SMSIRService.send_otp(phone)
+    except DatabaseError:
+        logger.exception("[Send OTP] OTP storage is temporarily unavailable")
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "سامانه احراز هویت موقتاً در دسترس نیست؛ لطفاً بعداً دوباره تلاش کنید.",
+            },
+            status=503,
+        )
     except Exception:
         logger.exception("[Send OTP] Unexpected error")
         return JsonResponse(
@@ -254,7 +263,7 @@ def verify_otp_view(request):
             # Save it now so the session row participates in this transaction.
             request.session.save()
 
-    except Exception:
+    except Exception as exc:
         try:
             _restore_login_request_state(
                 request,
@@ -268,6 +277,16 @@ def verify_otp_view(request):
             )
         except Exception:
             logger.exception("[Verify OTP] Failed to restore request session after rollback")
+
+        if isinstance(exc, DatabaseError):
+            logger.exception("[Verify OTP] OTP or login storage is temporarily unavailable")
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "سامانه احراز هویت موقتاً در دسترس نیست؛ لطفاً بعداً دوباره تلاش کنید.",
+                },
+                status=503,
+            )
 
         logger.exception("[Verify OTP] Atomic login operation failed")
         return JsonResponse(
