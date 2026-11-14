@@ -1348,10 +1348,24 @@ def test_otp_wrong_attempt_counter_enforces_the_configured_limit():
         cache.clear()
 
 @pytest.mark.django_db
-def test_otp_login_failure_rolls_back_user_profile_cart_and_session(client):
+def test_otp_login_failure_rolls_back_user_profile_cart_session_and_code(client):
     from django.contrib.auth import login as django_login
+    from django.core.cache import cache
+    from django.core.management import call_command
+    from django.db import connection
+
+    from accounts.services.otp import SMSIRService
 
     phone = "09123456789"
+    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    code_hash = SMSIRService._hash_code(phone, "123456")
+
+    # DatabaseCache is the configured production backend. Ensure its table
+    # exists in the isolated test database so OTP deletion participates in
+    # the same transaction as the login workflow.
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+    cache.set(code_key, code_hash, timeout=SMSIRService.EXPIRATION_SECONDS)
     session = client.session
     session.save()
     guest_session_key = session.session_key
@@ -1389,13 +1403,7 @@ def test_otp_login_failure_rolls_back_user_profile_cart_and_session(client):
         django_login(request, user)
         raise RuntimeError("forced failure after session rotation")
 
-    with (
-        patch(
-            "accounts.otp_views.SMSIRService.verify_otp",
-            return_value=(True, "ok"),
-        ),
-        patch("accounts.otp_views.login", side_effect=login_then_fail),
-    ):
+    with patch("accounts.otp_views.login", side_effect=login_then_fail):
         response = client.post(
             reverse("accounts:verify_otp"),
             data=dumps({"phone": phone, "code": "123456"}),
@@ -1403,6 +1411,7 @@ def test_otp_login_failure_rolls_back_user_profile_cart_and_session(client):
         )
 
     assert response.status_code == 500
+    assert cache.get(code_key) == code_hash
     assert not get_user_model().objects.filter(username=phone).exists()
     assert not Profile.objects.filter(phone_number=phone).exists()
 
