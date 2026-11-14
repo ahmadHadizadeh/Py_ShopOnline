@@ -262,6 +262,7 @@ class SMSIRService:
         # request itself stays outside the transaction and cannot block DB rows.
         with transaction.atomic():
             challenge = cls._get_locked_challenge(phone_hash)
+            now = timezone.now()
 
             if (
                 challenge.send_lock_token is not None
