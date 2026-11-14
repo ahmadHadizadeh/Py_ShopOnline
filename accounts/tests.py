@@ -1318,25 +1318,58 @@ def test_otp_expired_challenge_is_cleared_without_becoming_valid():
 
 
 @pytest.mark.django_db
-def test_failed_sms_send_releases_reservation_and_allows_retry():
+def test_ambiguous_sms_failure_keeps_short_reservation_before_retry():
+    from datetime import timedelta
+    from django.utils import timezone
     from accounts.services.otp import SMSIRService
 
     phone = "09123456789"
     with patch.object(
         SMSIRService,
         "send_verification_code",
-        side_effect=[(False, "provider unavailable"), (True, "sent")],
+        side_effect=[(False, "provider timeout"), (True, "sent")],
     ) as send_sms:
         failed = SMSIRService.send_otp(phone)
         challenge = OTPChallenge.objects.get()
         assert failed[0] is False
-        assert challenge.send_lock_token is None
+        assert failed[2] > 0
+        assert challenge.send_lock_token is not None
+        assert challenge.send_lock_expires_at is not None
+        assert challenge.send_lock_expires_at > timezone.now()
         assert challenge.cooldown_until is None
 
+        blocked_retry = SMSIRService.send_otp(phone)
+        assert blocked_retry[0] is False
+        assert blocked_retry[2] > 0
+        send_sms.assert_called_once()
+
+        OTPChallenge.objects.filter(pk=challenge.pk).update(
+            send_lock_expires_at=timezone.now() - timedelta(seconds=1)
+        )
         succeeded = SMSIRService.send_otp(phone)
 
     assert succeeded[0] is True
     assert send_sms.call_count == 2
+
+
+@pytest.mark.django_db
+def test_unexpected_sms_exception_keeps_reservation_for_safe_retry():
+    from django.utils import timezone
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    with patch.object(
+        SMSIRService,
+        "send_verification_code",
+        side_effect=RuntimeError("provider response lost"),
+    ):
+        with pytest.raises(RuntimeError):
+            SMSIRService.send_otp(phone)
+
+    challenge = OTPChallenge.objects.get()
+    assert challenge.send_lock_token is not None
+    assert challenge.send_lock_expires_at > timezone.now()
+    assert challenge.cooldown_until is None
 
 
 class OTPConcurrencyTests(TransactionTestCase):
