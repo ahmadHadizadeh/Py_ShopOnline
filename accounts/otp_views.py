@@ -111,6 +111,7 @@ def _restore_login_request_state(
     session_accessed,
     original_user,
     original_csrf_cookie,
+    original_csrf_cookie_needs_update,
 ):
     """
     Restore in-memory request state after the surrounding DB transaction rolls
@@ -135,6 +136,11 @@ def _restore_login_request_state(
         request.META.pop("CSRF_COOKIE", None)
     else:
         request.META["CSRF_COOKIE"] = original_csrf_cookie
+
+    if original_csrf_cookie_needs_update is None:
+        request.META.pop("CSRF_COOKIE_NEEDS_UPDATE", None)
+    else:
+        request.META["CSRF_COOKIE_NEEDS_UPDATE"] = original_csrf_cookie_needs_update
 
 
 @require_POST
@@ -181,6 +187,9 @@ def verify_otp_view(request):
     original_session_accessed = request.session.accessed
     original_user = request.user
     original_csrf_cookie = request.META.get("CSRF_COOKIE")
+    original_csrf_cookie_needs_update = request.META.get(
+        "CSRF_COOKIE_NEEDS_UPDATE"
+    )
 
     try:
         with transaction.atomic():
@@ -255,6 +264,7 @@ def verify_otp_view(request):
                 session_accessed=original_session_accessed,
                 original_user=original_user,
                 original_csrf_cookie=original_csrf_cookie,
+                original_csrf_cookie_needs_update=original_csrf_cookie_needs_update,
             )
         except Exception:
             logger.exception("[Verify OTP] Failed to restore request session after rollback")
