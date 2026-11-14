@@ -1137,11 +1137,27 @@ class CheckoutOrderIntegrityContractTests(TestCase):
             address_line="آدرس قبلی",
             is_default=True,
         )
+        other_address = Address.objects.create(
+            user=self.user,
+            recipient_name="گیرنده دوم",
+            phone_number="09122222222",
+            postal_code="2222222222",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس دوم",
+            is_default=False,
+        )
 
         get_response = self.client.get(reverse("cart:checkout"))
         self.assertEqual(get_response.status_code, 200)
         self.assertContains(get_response, 'id="new-address-button"')
         self.assertContains(get_response, f'value="{saved_address.pk}"')
+        self.assertContains(get_response, 'data-is-default="true"')
+        self.assertContains(get_response, 'data-is-default="false"')
+        self.assertContains(
+            get_response,
+            "defaultAddressCheckbox.checked = data.isDefault === 'true';",
+        )
 
         response = self.client.post(
             reverse("cart:checkout"),
@@ -1155,14 +1171,18 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(Address.objects.filter(user=self.user).count(), 2)
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 3)
 
         saved_address.refresh_from_db()
         self.assertEqual(saved_address.recipient_name, "گیرنده قبلی")
         self.assertEqual(saved_address.address_line, "آدرس قبلی")
         self.assertTrue(saved_address.is_default)
 
-        new_address = Address.objects.exclude(pk=saved_address.pk).get()
+        other_address.refresh_from_db()
+        self.assertEqual(other_address.recipient_name, "گیرنده دوم")
+        self.assertFalse(other_address.is_default)
+
+        new_address = Address.objects.get(user=self.user, recipient_name="گیرنده جدید")
         self.assertEqual(new_address.recipient_name, "گیرنده جدید")
         self.assertEqual(new_address.address_line, "آدرس جدید")
         self.assertFalse(new_address.is_default)
