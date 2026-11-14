@@ -1,4 +1,10 @@
 <!-- cart/partials/_summary_sidebar.html -->
+<style>
+    .cart-checkout-cta:focus-visible {
+        outline: 3px solid #a5b4fc;
+        outline-offset: 3px;
+    }
+</style>
 <div class="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm sticky top-24">
     <h2 class="font-extrabold text-gray-900 mb-4">خلاصه سفارش</h2>
     <div class="space-y-3 mb-6">
@@ -19,7 +25,7 @@
     </div>
     {% if request.user.is_authenticated %}
         <a href="{% url 'cart:checkout' %}"
-           class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-bold text-white shadow-md transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-indigo-700 hover:shadow-lg focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 active:translate-y-0 active:shadow-sm motion-reduce:transform-none motion-reduce:transition-none">
+           class="cart-checkout-cta w-full inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-bold text-white shadow-md transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-indigo-700 hover:shadow-lg active:translate-y-0 active:shadow-sm motion-reduce:transform-none motion-reduce:transition-none">
             <span>ادامه به تکمیل اطلاعات تحویل</span>
             <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
         </a>
