@@ -134,7 +134,18 @@ def verify_otp_view(request):
             status=400,
         )
 
-    is_valid, message = SMSIRService.verify_otp(phone, code)
+    try:
+        is_valid, message = SMSIRService.verify_otp(phone, code)
+    except Exception:
+        logger.exception("[Verify OTP] Verification service error")
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "خطای سیستمی در بررسی کد تأیید رخ داده است.",
+            },
+            status=500,
+        )
+
     if not is_valid:
         return JsonResponse(
             {
