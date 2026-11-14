@@ -1543,3 +1543,34 @@ def test_otp_send_definitive_provider_rejection_clears_reservation():
     assert cache.get(code_key) is None
     assert cache.get(cooldown_key) is None
 
+@pytest.mark.django_db
+def test_otp_views_return_service_unavailable_when_database_fails(client):
+    from django.db import DatabaseError
+
+    phone = "09123456789"
+    with patch(
+        "accounts.otp_views.SMSIRService.send_otp",
+        side_effect=DatabaseError("forced cache database outage"),
+    ):
+        send_response = client.post(
+            reverse("accounts:send_otp"),
+            data=dumps({"phone": phone}),
+            content_type="application/json",
+        )
+
+    assert send_response.status_code == 503
+    assert send_response.json()["status"] == "error"
+
+    with patch(
+        "accounts.otp_views.SMSIRService.verify_otp",
+        side_effect=DatabaseError("forced OTP database outage"),
+    ):
+        verify_response = client.post(
+            reverse("accounts:verify_otp"),
+            data=dumps({"phone": phone, "code": "123456"}),
+            content_type="application/json",
+        )
+
+    assert verify_response.status_code == 503
+    assert verify_response.json()["status"] == "error"
+
