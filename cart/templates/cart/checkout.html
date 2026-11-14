@@ -396,6 +396,7 @@
           <div
             onclick="selectSavedAddress(this)"
             data-id="{{ addr.id }}"
+            data-is-default="{{ addr.is_default|yesno:'true,false' }}"
             data-name="{{ addr.recipient_name }}"
             data-phone="{{ addr.phone_number }}"
             data-province="{{ addr.province }}"
@@ -750,6 +751,11 @@
     element.classList.remove('border-gray-100', 'bg-white');
 
     const data = element.dataset;
+
+    const defaultAddressCheckbox = document.getElementById('id_is_default');
+    if (defaultAddressCheckbox) {
+      defaultAddressCheckbox.checked = data.isDefault === 'true';
+    }
 
     const idField = document.getElementById('selected_address_id');
     if (idField) {
