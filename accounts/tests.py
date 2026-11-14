@@ -1346,3 +1346,73 @@ def test_otp_wrong_attempt_counter_enforces_the_configured_limit():
         assert cache.get(attempts_key) == SMSIRService.MAX_VERIFY_ATTEMPTS
 
         cache.clear()
+
+@pytest.mark.django_db
+def test_otp_login_failure_rolls_back_user_profile_cart_and_session(client):
+    from django.contrib.auth import login as django_login
+
+    phone = "09123456789"
+    session = client.session
+    session.save()
+    guest_session_key = session.session_key
+
+    category = Category.objects.create(
+        name="OTP Rollback Category",
+        slug="otp-rollback-category",
+    )
+    product = Product.objects.create(
+        name="OTP Rollback Product",
+        slug="otp-rollback-product",
+        price=1500,
+        stock=4,
+        is_active=True,
+        category=category,
+    )
+    guest_cart = Cart.objects.create(
+        session_key=guest_session_key,
+        user=None,
+        status=Cart.STATUS_ACTIVE,
+    )
+    guest_item = CartItem.objects.create(
+        cart=guest_cart,
+        product=product,
+        quantity=2,
+        unit_price_snapshot=1500,
+        status=CartItem.STATUS_ACTIVE,
+    )
+
+    session = client.session
+    session["cart_id"] = guest_cart.pk
+    session.save()
+
+    def login_then_fail(request, user):
+        django_login(request, user)
+        raise RuntimeError("forced failure after session rotation")
+
+    with (
+        patch(
+            "accounts.otp_views.SMSIRService.verify_otp",
+            return_value=(True, "ok"),
+        ),
+        patch("accounts.otp_views.login", side_effect=login_then_fail),
+    ):
+        response = client.post(
+            reverse("accounts:verify_otp"),
+            data=dumps({"phone": phone, "code": "123456"}),
+            content_type="application/json",
+        )
+
+    assert response.status_code == 500
+    assert not get_user_model().objects.filter(username=phone).exists()
+    assert not Profile.objects.filter(phone_number=phone).exists()
+
+    guest_cart.refresh_from_db()
+    guest_item.refresh_from_db()
+    assert guest_cart.session_key == guest_session_key
+    assert guest_item.cart_id == guest_cart.pk
+    assert guest_item.quantity == 2
+
+    restored_session = client.session
+    assert restored_session.session_key == guest_session_key
+    assert restored_session["cart_id"] == guest_cart.pk
+    assert restored_session.get("_auth_user_id") is None
