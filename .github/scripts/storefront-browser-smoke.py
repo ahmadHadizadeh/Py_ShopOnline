@@ -512,7 +512,7 @@ with sync_playwright() as playwright:
     assert authenticated.locator('input[name="recipient_name"]').input_value() == (
         "گیرنده پیش‌فرض مرورگر"
     )
-    assert authenticated.locator('input[name="province"]').input_value() == "تهران"
+    assert authenticated.locator('select[name="province"]').input_value() == "تهران"
     assert authenticated.locator('select[name="city"]').input_value() == "تهران"
 
     shipping_card = authenticated.locator(".shipping-method-card").first
