@@ -133,11 +133,12 @@ class SMSIRService:
                 with transaction.atomic():
                     with connection.cursor() as cursor:
                         cursor.execute(
-                            "SELECT pg_try_advisory_xact_lock(%s)",
+                            "SELECT pg_advisory_xact_lock(%s)",
                             [lock_id],
                         )
-                        acquired = bool(cursor.fetchone()[0])
-                    yield acquired
+                    # Verification is a short critical section. Queue concurrent
+                    # attempts so each one is counted rather than discarded.
+                    yield True
                 return
 
             with connection.cursor() as cursor:
@@ -177,7 +178,9 @@ class SMSIRService:
                 "Atomic OTP locking supports PostgreSQL and SQLite only."
             )
 
-        acquired = cls._local_otp_lock.acquire(blocking=False)
+        acquired = cls._local_otp_lock.acquire(
+            blocking=transaction_scoped,
+        )
         if not acquired:
             yield False
             return
