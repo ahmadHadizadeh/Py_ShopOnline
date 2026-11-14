@@ -3,6 +3,7 @@ import json
 import logging
 
 from django.contrib.auth import get_user_model, login
+from django.db import DatabaseError, transaction
 from django.http import JsonResponse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -70,6 +71,15 @@ def send_otp_view(request):
 
     try:
         success, message, ttl = SMSIRService.send_otp(phone)
+    except DatabaseError:
+        logger.exception("[Send OTP] OTP storage is temporarily unavailable")
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "سامانه احراز هویت موقتاً در دسترس نیست؛ لطفاً دوباره تلاش کنید.",
+            },
+            status=503,
+        )
     except Exception:
         logger.exception("[Send OTP] Unexpected error")
         return JsonResponse(
@@ -134,53 +144,67 @@ def verify_otp_view(request):
             status=400,
         )
 
-    is_valid, message = SMSIRService.verify_otp(phone, code)
-    if not is_valid:
+    try:
+        # Keep OTP consumption, account/profile updates, guest-cart merge, and
+        # login session rotation in one transaction. A failed merge/login rolls
+        # the OTP consumption back so the customer can safely retry.
+        with transaction.atomic():
+            is_valid, message = SMSIRService.verify_otp(phone, code)
+            if not is_valid:
+                return JsonResponse(
+                    {
+                        "status": "error",
+                        "message": message,
+                    },
+                    status=400,
+                )
+
+            guest_session_key = request.session.session_key
+            profile = (
+                Profile.objects.select_related("user")
+                .filter(phone_number=phone)
+                .first()
+            )
+
+            if profile is not None:
+                user = profile.user
+            else:
+                user = User.objects.filter(username=phone).first()
+
+                if user is None:
+                    user = User.objects.create_user(username=phone)
+
+                profile, _ = Profile.objects.get_or_create(user=user)
+
+            if not user.is_active:
+                return JsonResponse(
+                    {
+                        "status": "error",
+                        "message": "این حساب کاربری غیرفعال است؛ برای پیگیری با پشتیبانی تماس بگیرید.",
+                    },
+                    status=403,
+                )
+
+            profile.phone_number = phone
+            profile.is_verified = True
+            profile.save(update_fields=["phone_number", "is_verified", "updated_at"])
+
+            merge_guest_cart_to_user(
+                request,
+                user=user,
+                guest_session_key=guest_session_key,
+            )
+            login(request, user)
+
+    except DatabaseError:
+        logger.exception("[Verify OTP] OTP or account storage is temporarily unavailable")
         return JsonResponse(
             {
                 "status": "error",
-                "message": message,
+                "message": "سامانه احراز هویت موقتاً در دسترس نیست؛ لطفاً دوباره تلاش کنید.",
             },
-            status=400,
+            status=503,
         )
-
-    guest_session_key = request.session.session_key
-
-    try:
-        profile = (
-            Profile.objects.select_related("user").filter(phone_number=phone).first()
-        )
-
-        if profile is not None:
-            user = profile.user
-        else:
-            user = User.objects.filter(username=phone).first()
-
-            if user is None:
-                user = User.objects.create_user(username=phone)
-
-            profile, _ = Profile.objects.get_or_create(user=user)
-
-        if not user.is_active:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "message": "این حساب کاربری غیرفعال است؛ برای پیگیری با پشتیبانی تماس بگیرید.",
-                },
-                status=403,
-            )
-
-        profile.phone_number = phone
-        profile.is_verified = True
-        profile.save(update_fields=["phone_number", "is_verified", "updated_at"])
-
-        merge_guest_cart_to_user(
-            request,
-            user=user,
-            guest_session_key=guest_session_key,
-        )
-        login(request, user)
-
     except Exception:
         logger.exception("[Verify OTP] Login error")
         return JsonResponse(
