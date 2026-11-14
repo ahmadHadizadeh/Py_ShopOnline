@@ -13,7 +13,7 @@ from typing import Optional, Tuple
 import requests
 from django.conf import settings
 from django.core.cache import cache
-from django.db import connection, transaction
+from django.db import DatabaseError, connection, transaction
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +349,7 @@ class SMSIRService:
             # provider timeout keeps the code/cooldown valid for the full user
             # window even when SMS.ir responds near its request timeout.
             reservation_seconds = cls.COOLDOWN_SECONDS + cls.TIMEOUT
+            reservation_cooldown_until = time.time() + reservation_seconds
             with transaction.atomic():
                 cache.set(
                     code_key,
@@ -357,10 +358,25 @@ class SMSIRService:
                 )
                 cache.set(
                     cd_key,
-                    time.time() + reservation_seconds,
+                    reservation_cooldown_until,
                     timeout=reservation_seconds,
                 )
                 cache.delete(attempts_key)
+
+                # Django's DatabaseCache.set() can silently swallow a
+                # DatabaseError raised by its internal UPDATE/INSERT and
+                # return None. Read both values back in this transaction so
+                # an incomplete reservation rolls back before any SMS side
+                # effect can happen.
+                stored_reservation = cache.get_many([code_key, cd_key])
+                if (
+                    stored_reservation.get(code_key) != hashed_code
+                    or stored_reservation.get(cd_key)
+                    != reservation_cooldown_until
+                ):
+                    raise DatabaseError(
+                        "OTP cache reservation could not be verified."
+                    )
 
             # A timeout/connection interruption does not prove that SMS.ir
             # rejected the request. Keep the reserved code and cooldown so a
