@@ -38,6 +38,13 @@ on:
     paths:
       - ".github/workflows/storefront-ui-verify.yml"
       - ".github/scripts/storefront-browser-smoke.py"
+      - "cart/templates/cart/checkout.html"
+      - "cart/views.py"
+      - "cart/models.py"
+      - "cart/tests.py"
+      - "accounts/forms.py"
+      - "accounts/models/address.py"
+      - "orders/models/shipping.py"
       - "package.json"
       - "package-lock.json"
       - "tailwind.config.js"
@@ -103,7 +110,10 @@ jobs:
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
 
+      # The pull-request verification workflow already runs Django checks and
+      # the complete pytest suite; keep this focused subset for manual dispatches.
       - name: Run Django checks and product/cart/checkout regression tests
+        if: github.event_name == 'workflow_dispatch'
         run: |
           python manage.py check
           pytest -q catalog/tests.py \
@@ -135,9 +145,12 @@ jobs:
           )
           from django.contrib.sessions.backends.db import SessionStore
           from django.test import Client
+          from accounts.models.address import Address
+          from cart.models import Cart, CartItem
           from catalog.models.category import Category
           from catalog.models.product import Product
           from catalog.models.variant import ProductVariant
+          from orders.models.shipping import ShippingMethod
           from decimal import Decimal
 
           category, _ = Category.objects.update_or_create(
@@ -189,6 +202,53 @@ jobs:
           )
           user, _ = get_user_model().objects.get_or_create(
               username="storefront-browser-user",
+          )
+
+          browser_cart, _ = Cart.objects.update_or_create(
+              user=user,
+              status=Cart.STATUS_ACTIVE,
+          )
+          CartItem.objects.update_or_create(
+              cart=browser_cart,
+              product=detail_product,
+              variant=None,
+              defaults={
+                  "quantity": 1,
+                  "unit_price_snapshot": Decimal("2100.00"),
+                  "status": CartItem.STATUS_ACTIVE,
+              },
+          )
+          ShippingMethod.objects.update_or_create(
+              name="Browser Test Shipping",
+              defaults={
+                  "description": "Isolated browser checkout fixture",
+                  "cost": Decimal("100"),
+                  "is_active": True,
+              },
+          )
+          Address.objects.update_or_create(
+              user=user,
+              recipient_name="گیرنده پیش‌فرض مرورگر",
+              defaults={
+                  "phone_number": "09123456789",
+                  "postal_code": "1234567890",
+                  "province": "تهران",
+                  "city": "تهران",
+                  "address_line": "نشانی پیش‌فرض مرورگر",
+                  "is_default": True,
+              },
+          )
+          Address.objects.update_or_create(
+              user=user,
+              recipient_name="گیرنده دوم مرورگر",
+              defaults={
+                  "phone_number": "09122222222",
+                  "postal_code": "2222222222",
+                  "province": "تهران",
+                  "city": "تهران",
+                  "address_line": "نشانی دوم مرورگر",
+                  "is_default": False,
+              },
           )
 
           # Build the signed session contract consumed by AuthenticationMiddleware.

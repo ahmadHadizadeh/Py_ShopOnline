@@ -95,6 +95,21 @@ def expect_hidden(page, selector: str) -> None:
     assert not locator.is_visible(), f"Expected hidden element: {selector}"
 
 
+def assert_checkout_non_address_state(
+    page,
+    shipping_method_id: str,
+    customer_note: str,
+) -> None:
+    shipping_input = page.locator("#selected_shipping_method_id")
+    assert shipping_input.input_value() == shipping_method_id
+
+    active_shipping = page.locator(".shipping-method-card.active-shipping")
+    assert active_shipping.count() == 1
+    assert active_shipping.get_attribute("data-id") == shipping_method_id
+
+    assert page.locator("#id_customer_note").input_value() == customer_note
+
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch()
 
@@ -470,6 +485,108 @@ with sync_playwright() as playwright:
         path=str(ARTIFACTS / "storefront-authenticated-mobile.png"),
         full_page=True,
     )
+
+    # Exercise the real authenticated Checkout page without submitting the form.
+    checkout_response = authenticated.goto(
+        f"{BASE_URL}/cart/checkout/",
+        wait_until="domcontentloaded",
+    )
+    assert checkout_response is not None and checkout_response.status == 200, (
+        "Authenticated Checkout did not return HTTP 200: "
+        f"{None if checkout_response is None else checkout_response.status}"
+    )
+
+    default_address_card = authenticated.locator(
+        '.address-card[data-is-default="true"]'
+    )
+    secondary_address_card = authenticated.locator(
+        '.address-card[data-is-default="false"]'
+    )
+    assert default_address_card.count() == 1
+    assert secondary_address_card.count() == 1
+
+    default_address_id = default_address_card.get_attribute("data-id")
+    assert default_address_id
+    assert authenticated.locator("#selected_address_id").input_value() == default_address_id
+    assert authenticated.locator("#id_is_default").is_checked()
+    assert authenticated.locator('input[name="recipient_name"]').input_value() == (
+        "گیرنده پیش‌فرض مرورگر"
+    )
+    assert authenticated.locator('select[name="province"]').input_value() == "تهران"
+    assert authenticated.locator('select[name="city"]').input_value() == "تهران"
+
+    shipping_card = authenticated.locator(".shipping-method-card").first
+    assert shipping_card.count() == 1
+    shipping_card.click()
+    shipping_method_id = shipping_card.get_attribute("data-id")
+    assert shipping_method_id
+
+    customer_note = "یادداشت مرورگر برای آزمون Checkout"
+    authenticated.locator("#id_customer_note").fill(customer_note)
+
+    # Starting a new address must clear only address state.
+    authenticated.locator("#new-address-button").click()
+    assert authenticated.locator("#selected_address_id").input_value() == ""
+    assert not authenticated.locator("#id_is_default").is_checked()
+    for field_name in ("recipient_name", "phone_number", "postal_code", "address_line"):
+        assert authenticated.locator(
+            f'#checkoutForm [name="{field_name}"]'
+        ).input_value() == "", f"New address did not clear {field_name}."
+    assert authenticated.locator('select[name="province"]').input_value() == ""
+    assert authenticated.locator('select[name="city"]').input_value() == ""
+    assert_checkout_non_address_state(
+        authenticated,
+        shipping_method_id,
+        customer_note,
+    )
+
+    # Selecting a non-default saved address must keep its checkbox unchecked.
+    secondary_address_card.click()
+    assert authenticated.locator("#selected_address_id").input_value() == (
+        secondary_address_card.get_attribute("data-id")
+    )
+    assert not authenticated.locator("#id_is_default").is_checked()
+    assert authenticated.locator('input[name="recipient_name"]').input_value() == (
+        "گیرنده دوم مرورگر"
+    )
+    assert_checkout_non_address_state(
+        authenticated,
+        shipping_method_id,
+        customer_note,
+    )
+
+    # Re-selecting the default address must restore the checked state.
+    default_address_card.click()
+    assert authenticated.locator("#selected_address_id").input_value() == default_address_id
+    assert authenticated.locator("#id_is_default").is_checked()
+    assert authenticated.locator('input[name="recipient_name"]').input_value() == (
+        "گیرنده پیش‌فرض مرورگر"
+    )
+    assert_checkout_non_address_state(
+        authenticated,
+        shipping_method_id,
+        customer_note,
+    )
+    authenticated.screenshot(
+        path=str(ARTIFACTS / "storefront-checkout-default-address-mobile.png"),
+        full_page=True,
+    )
+
+    # Starting a new address again after selecting the default must still reset it.
+    authenticated.locator("#new-address-button").click()
+    assert authenticated.locator("#selected_address_id").input_value() == ""
+    assert not authenticated.locator("#id_is_default").is_checked()
+    assert_checkout_non_address_state(
+        authenticated,
+        shipping_method_id,
+        customer_note,
+    )
+    assert_no_horizontal_overflow(authenticated, 390)
+    authenticated.screenshot(
+        path=str(ARTIFACTS / "storefront-checkout-new-address-mobile.png"),
+        full_page=True,
+    )
+
     authenticated.set_viewport_size({"width": 1440, "height": 900})
     authenticated.locator("#accountDropdown").focus()
     authenticated.keyboard.press("Enter")

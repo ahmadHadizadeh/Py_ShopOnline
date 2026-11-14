@@ -1126,6 +1126,71 @@ class CheckoutOrderIntegrityContractTests(TestCase):
         self.assertFalse(Order.objects.filter(cart=self.cart).exists())
         self.assertEqual(Address.objects.filter(user=self.user).count(), 0)
 
+    def test_checkout_can_create_new_address_without_overwriting_saved_address(self):
+        saved_address = Address.objects.create(
+            user=self.user,
+            recipient_name="گیرنده قبلی",
+            phone_number="09123456789",
+            postal_code="1234567890",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس قبلی",
+            is_default=True,
+        )
+        other_address = Address.objects.create(
+            user=self.user,
+            recipient_name="گیرنده دوم",
+            phone_number="09122222222",
+            postal_code="2222222222",
+            province="تهران",
+            city="تهران",
+            address_line="آدرس دوم",
+            is_default=False,
+        )
+
+        get_response = self.client.get(reverse("cart:checkout"))
+        self.assertEqual(get_response.status_code, 200)
+        self.assertContains(get_response, 'id="new-address-button"')
+        self.assertContains(get_response, f'value="{saved_address.pk}"')
+        self.assertContains(get_response, 'data-is-default="true"')
+        self.assertContains(get_response, 'data-is-default="false"')
+        self.assertContains(
+            get_response,
+            "defaultAddressCheckbox.checked = data.isDefault === 'true';",
+        )
+
+        response = self.client.post(
+            reverse("cart:checkout"),
+            self.checkout_payload(
+                address_id="",
+                recipient_name="گیرنده جدید",
+                phone_number="09111111111",
+                postal_code="1111111111",
+                address_line="آدرس جدید",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Address.objects.filter(user=self.user).count(), 3)
+
+        saved_address.refresh_from_db()
+        self.assertEqual(saved_address.recipient_name, "گیرنده قبلی")
+        self.assertEqual(saved_address.address_line, "آدرس قبلی")
+        self.assertTrue(saved_address.is_default)
+
+        other_address.refresh_from_db()
+        self.assertEqual(other_address.recipient_name, "گیرنده دوم")
+        self.assertFalse(other_address.is_default)
+
+        new_address = Address.objects.get(user=self.user, recipient_name="گیرنده جدید")
+        self.assertEqual(new_address.recipient_name, "گیرنده جدید")
+        self.assertEqual(new_address.address_line, "آدرس جدید")
+        self.assertFalse(new_address.is_default)
+
+        order = Order.objects.get(cart=self.cart)
+        self.assertEqual(order.address_snapshot.recipient_name, "گیرنده جدید")
+        self.assertEqual(order.address_snapshot.address_line, "آدرس جدید")
+
     def test_bound_checkout_preserves_edits_to_a_selected_saved_address(self):
         saved_address = Address.objects.create(
             user=self.user,
