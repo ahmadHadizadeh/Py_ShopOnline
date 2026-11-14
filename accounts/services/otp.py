@@ -1,14 +1,21 @@
 # accounts/services/otp.py
 import hashlib
+import hmac
 import json
 import logging
+import math
 import secrets
 import re
+from datetime import timedelta
 from typing import Optional, Tuple
+from uuid import uuid4
 
 import requests
 from django.conf import settings
-from django.core.cache import cache
+from django.db import transaction
+from django.utils import timezone
+
+from accounts.models import OTPChallenge
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +31,7 @@ class SMSIRService:
     COOLDOWN_SECONDS = 120
     MAX_VERIFY_ATTEMPTS = 5
 
-    CACHE_PREFIX_CODE = "otp_code:"
-    CACHE_PREFIX_COOLDOWN = "otp_cooldown:"
-    CACHE_PREFIX_ATTEMPTS = "otp_attempts:"
+    SEND_LOCK_SECONDS = 30
 
     # -------------------------------------------------------------------------
     # تنظیمات و نرمال‌سازی شماره
@@ -88,26 +93,54 @@ class SMSIRService:
     _normalize_mobile = normalize_phone
 
     # -------------------------------------------------------------------------
-    # کش و کلیدها
+    # شناسه‌های امن و وضعیت اتمیک OTP
     # -------------------------------------------------------------------------
     @classmethod
+    def _hash_phone(cls, phone: str) -> str:
+        secret = str(settings.SECRET_KEY).encode("utf-8")
+        payload = f"otp-phone:{phone}".encode("utf-8")
+        return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+    @classmethod
     def _hash_code(cls, phone: str, code: str) -> str:
-        secret = getattr(settings, "SECRET_KEY", "otp-secret")
-        payload = f"{phone}:{code}:{secret}".encode("utf-8")
-        return hashlib.sha256(payload).hexdigest()
+        secret = str(settings.SECRET_KEY).encode("utf-8")
+        payload = f"otp-code:{phone}:{code}".encode("utf-8")
+        return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+    @staticmethod
+    def _seconds_until(deadline, now=None) -> int:
+        if deadline is None:
+            return 0
+        now = now or timezone.now()
+        return max(0, math.ceil((deadline - now).total_seconds()))
+
+    @classmethod
+    def _get_locked_challenge(cls, phone_hash: str) -> OTPChallenge:
+        challenge, _ = OTPChallenge.objects.get_or_create(phone_hash=phone_hash)
+        return OTPChallenge.objects.select_for_update().get(pk=challenge.pk)
 
     @classmethod
     def get_remaining_cooldown(cls, phone: str) -> int:
         norm_phone = cls.normalize_phone(phone)
         if not norm_phone:
             return 0
-        cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
-        remaining = cache.get(cd_key)
-        return int(remaining) if remaining is not None else 0
 
-    # -------------------------------------------------------------------------
-    # ارسال خام SMS.ir
-    # -------------------------------------------------------------------------
+        challenge = OTPChallenge.objects.filter(
+            phone_hash=cls._hash_phone(norm_phone)
+        ).only("send_lock_token", "send_lock_expires_at", "cooldown_until").first()
+        if challenge is None:
+            return 0
+
+        now = timezone.now()
+        if (
+            challenge.send_lock_token is not None
+            and challenge.send_lock_expires_at is not None
+            and challenge.send_lock_expires_at > now
+        ):
+            return cls._seconds_until(challenge.send_lock_expires_at, now)
+
+        return cls._seconds_until(challenge.cooldown_until, now)
+
     # -------------------------------------------------------------------------
     # ارسال خام SMS.ir
     # -------------------------------------------------------------------------
@@ -191,7 +224,7 @@ class SMSIRService:
         return False, msg
 
     # -------------------------------------------------------------------------
-    # منطق اصلی OTP (تولید، ثبت در کش و ارسال)
+    # منطق اصلی OTP (رزرو اتمیک، ارسال و نهایی‌سازی)
     # -------------------------------------------------------------------------
     @classmethod
     def send_otp(cls, phone: str) -> Tuple[bool, str, int]:
@@ -199,35 +232,111 @@ class SMSIRService:
         if not norm_phone:
             return False, "شماره موبایل وارد شده نامعتبر است (فرمت: 09xxxxxxxxx).", 0
 
-        # کنترل محدودیت زمانی ارسال مجدد (Cooldown)
-        cooldown_left = cls.get_remaining_cooldown(norm_phone)
-        if cooldown_left > 0:
-            return (
-                False,
-                f"لطفاً {cooldown_left} ثانیه دیگر مجدداً تلاش کنید.",
-                cooldown_left,
-            )
-
-        # تولید کد ۶ رقمی یکپارچه با قالب
+        phone_hash = cls._hash_phone(norm_phone)
         code = str(secrets.randbelow(900000) + 100000)
+        token = uuid4()
+        now = timezone.now()
 
-        # ارسال از طریق پیامک
+        # Reserve the phone's send slot under a database row lock. The SMS
+        # request itself stays outside the transaction and cannot block DB rows.
+        with transaction.atomic():
+            challenge = cls._get_locked_challenge(phone_hash)
+            now = timezone.now()
+
+            if (
+                challenge.send_lock_token is not None
+                and challenge.send_lock_expires_at is not None
+                and challenge.send_lock_expires_at > now
+            ):
+                remaining = cls._seconds_until(
+                    challenge.send_lock_expires_at, now
+                )
+                return (
+                    False,
+                    "درخواست ارسال کد قبلی هنوز در حال انجام است؛ کمی بعد دوباره تلاش کنید.",
+                    remaining,
+                )
+
+            cooldown_left = cls._seconds_until(challenge.cooldown_until, now)
+            if cooldown_left > 0:
+                return (
+                    False,
+                    f"لطفاً {cooldown_left} ثانیه دیگر مجدداً تلاش کنید.",
+                    cooldown_left,
+                )
+
+            challenge.send_lock_token = token
+            challenge.send_lock_expires_at = now + timedelta(
+                seconds=cls.SEND_LOCK_SECONDS
+            )
+            # Persist the hash before contacting SMS.ir. If the worker exits
+            # after the provider accepted the message but before finalization,
+            # the delivered code can still be verified after the short send lock.
+            challenge.code_hash = cls._hash_code(norm_phone, code)
+            challenge.expires_at = now + timedelta(
+                seconds=cls.SEND_LOCK_SECONDS + cls.EXPIRATION_SECONDS
+            )
+            challenge.failed_attempts = 0
+            challenge.save(
+                update_fields=[
+                    "send_lock_token",
+                    "send_lock_expires_at",
+                    "code_hash",
+                    "expires_at",
+                    "failed_attempts",
+                    "updated_at",
+                ]
+            )
+            challenge_id = challenge.pk
+
+        # A timeout or interrupted provider response is ambiguous: the
+        # provider may already have accepted the SMS. Keep the reservation until
+        # its short expiry on every unsuccessful/exceptional outcome so a second
+        # request cannot immediately produce a duplicate message. The code hash
+        # remains usable after the reservation expires.
         sent_ok, send_msg = cls.send_verification_code(norm_phone, code)
         if not sent_ok:
-            return False, send_msg, 0
+            failed_at = timezone.now()
+            remaining = cls._seconds_until(
+                failed_at + timedelta(seconds=cls.SEND_LOCK_SECONDS),
+                failed_at,
+            )
+            return (
+                False,
+                f"{send_msg} برای جلوگیری از ارسال تکراری، لطفاً {remaining} ثانیه دیگر تلاش کنید.",
+                remaining,
+            )
 
-        # ذخیره در کش
-        code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
-        hashed_code = cls._hash_code(norm_phone, code)
-        cache.set(code_key, hashed_code, timeout=cls.EXPIRATION_SECONDS)
+        sent_at = timezone.now()
+        with transaction.atomic():
+            challenge = OTPChallenge.objects.select_for_update().get(
+                pk=challenge_id
+            )
+            # Never let an old, delayed sender overwrite a newer reservation.
+            if challenge.send_lock_token != token:
+                return (
+                    False,
+                    "وضعیت ارسال کد تغییر کرده است؛ لطفاً دوباره درخواست دهید.",
+                    0,
+                )
 
-        # ثبت زمان کول‌داون
-        cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
-        cache.set(cd_key, cls.COOLDOWN_SECONDS, timeout=cls.COOLDOWN_SECONDS)
-
-        # ریست شمارنده تلاش‌های ناموفق
-        attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
-        cache.delete(attempts_key)
+            challenge.cooldown_until = sent_at + timedelta(
+                seconds=cls.COOLDOWN_SECONDS
+            )
+            challenge.expires_at = sent_at + timedelta(
+                seconds=cls.EXPIRATION_SECONDS
+            )
+            challenge.send_lock_token = None
+            challenge.send_lock_expires_at = None
+            challenge.save(
+                update_fields=[
+                    "cooldown_until",
+                    "expires_at",
+                    "send_lock_token",
+                    "send_lock_expires_at",
+                    "updated_at",
+                ]
+            )
 
         return True, "کد تأیید ۶ رقمی با موفقیت ارسال شد.", cls.COOLDOWN_SECONDS
 
@@ -235,6 +344,7 @@ class SMSIRService:
     # بررسی و تأیید OTP
     # -------------------------------------------------------------------------
     @classmethod
+    @transaction.atomic
     def verify_otp(cls, phone: str, entered_code: str) -> Tuple[bool, str]:
         norm_phone = cls.normalize_phone(phone)
         if not norm_phone:
@@ -243,7 +353,6 @@ class SMSIRService:
         if not entered_code:
             return False, "کد تأیید را وارد کنید."
 
-        # تبدیل ارقام احتمالی فارسی کد به انگلیسی
         fa_digits = "۰۱۲۳۴۵۶۷۸۹"
         ar_digits = "٠١٢٣٤٥٦٧٨٩"
         en_digits = "0123456789"
@@ -253,30 +362,103 @@ class SMSIRService:
         if len(entered_code) != cls.CODE_LENGTH or not entered_code.isdigit():
             return False, f"کد تأیید باید دقیقاً {cls.CODE_LENGTH} رقم باشد."
 
-        attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
-        attempts = cache.get(attempts_key, 0)
-        if attempts >= cls.MAX_VERIFY_ATTEMPTS:
+        phone_hash = cls._hash_phone(norm_phone)
+        challenge = (
+            OTPChallenge.objects.select_for_update()
+            .filter(phone_hash=phone_hash)
+            .first()
+        )
+        if challenge is None:
+            return False, "کد تأیید منقضی شده یا هنوز درخواستی ثبت نشده است."
+
+        now = timezone.now()
+        if (
+            challenge.send_lock_token is not None
+            and challenge.send_lock_expires_at is not None
+            and challenge.send_lock_expires_at > now
+        ):
+            remaining = cls._seconds_until(
+                challenge.send_lock_expires_at, now
+            )
+            return (
+                False,
+                f"ارسال کد هنوز در حال انجام است؛ لطفاً {remaining} ثانیه دیگر تلاش کنید.",
+            )
+
+        stale_send_lock = challenge.send_lock_token is not None
+        if challenge.failed_attempts >= cls.MAX_VERIFY_ATTEMPTS:
+            if stale_send_lock:
+                challenge.send_lock_token = None
+                challenge.send_lock_expires_at = None
+                challenge.save(
+                    update_fields=[
+                        "send_lock_token",
+                        "send_lock_expires_at",
+                        "updated_at",
+                    ]
+                )
             return (
                 False,
                 "تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً کد جدید دریافت کنید.",
             )
 
-        code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
-        cached_hash = cache.get(code_key)
-
-        if not cached_hash:
+        if (
+            not challenge.code_hash
+            or challenge.expires_at is None
+            or challenge.expires_at <= now
+        ):
+            challenge.code_hash = ""
+            challenge.expires_at = None
+            challenge.failed_attempts = 0
+            challenge.send_lock_token = None
+            challenge.send_lock_expires_at = None
+            challenge.save(
+                update_fields=[
+                    "code_hash",
+                    "expires_at",
+                    "failed_attempts",
+                    "send_lock_token",
+                    "send_lock_expires_at",
+                    "updated_at",
+                ]
+            )
             return False, "کد تأیید منقضی شده یا هنوز درخواستی ثبت نشده است."
 
         input_hash = cls._hash_code(norm_phone, entered_code)
-        if cached_hash != input_hash:
-            cache.set(attempts_key, attempts + 1, timeout=cls.EXPIRATION_SECONDS)
-            remaining_tries = max(0, cls.MAX_VERIFY_ATTEMPTS - (attempts + 1))
+        if not hmac.compare_digest(challenge.code_hash, input_hash):
+            challenge.failed_attempts += 1
+            challenge.send_lock_token = None
+            challenge.send_lock_expires_at = None
+            challenge.save(
+                update_fields=[
+                    "failed_attempts",
+                    "send_lock_token",
+                    "send_lock_expires_at",
+                    "updated_at",
+                ]
+            )
+            remaining_tries = max(
+                0, cls.MAX_VERIFY_ATTEMPTS - challenge.failed_attempts
+            )
             return (
                 False,
                 f"کد تأیید وارد شده اشتباه است. ({remaining_tries} فرصت باقی‌مانده)",
             )
 
-        # کد صحیح: پاکسازی کش
-        cache.delete(code_key)
-        cache.delete(attempts_key)
+        # The row lock makes consumption single-use across application workers.
+        challenge.code_hash = ""
+        challenge.expires_at = None
+        challenge.failed_attempts = 0
+        challenge.send_lock_token = None
+        challenge.send_lock_expires_at = None
+        challenge.save(
+            update_fields=[
+                "code_hash",
+                "expires_at",
+                "failed_attempts",
+                "send_lock_token",
+                "send_lock_expires_at",
+                "updated_at",
+            ]
+        )
         return True, "کد تأیید با موفقیت احراز شد."

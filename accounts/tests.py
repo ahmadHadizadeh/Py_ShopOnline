@@ -12,10 +12,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.test import RequestFactory, TestCase, TransactionTestCase
+from django.test import RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature
+from django.db import close_old_connections
 from django.urls import NoReverseMatch, reverse
 
-from accounts.models import Address, Profile
+from accounts.models import Address, Profile, OTPChallenge
 from accounts.forms import AddressForm
 from accounts.apps import STORE_MANAGER_GROUP_NAME
 from accounts.signals import ensure_store_manager_group
@@ -1169,3 +1170,331 @@ class ProfileLegacyOTPTests(TestCase):
         self.assertIsNone(self.profile.otp_code)
         self.assertIsNone(self.profile.otp_created_at)
         self.assertFalse(self.profile.is_otp_valid("123456"))
+
+
+
+# ---------------------------------------------------------------------------
+# Atomic OTP state and cross-worker concurrency contracts
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db
+def test_otp_state_stores_only_keyed_phone_and_code_hashes():
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    with (
+        patch(
+            "accounts.services.otp.secrets.randbelow",
+            return_value=123456,
+        ),
+        patch.object(
+            SMSIRService,
+            "send_verification_code",
+            return_value=(True, "sent"),
+        ) as send_sms,
+    ):
+        ok, _, ttl = SMSIRService.send_otp(phone)
+
+    assert ok is True
+    assert ttl == SMSIRService.COOLDOWN_SECONDS
+    challenge = OTPChallenge.objects.get()
+    assert challenge.phone_hash == SMSIRService._hash_phone(phone)
+    assert phone not in challenge.phone_hash
+    assert challenge.code_hash == SMSIRService._hash_code(phone, "223456")
+    assert challenge.send_lock_token is None
+    assert challenge.cooldown_until is not None
+    assert challenge.expires_at is not None
+    assert challenge.failed_attempts == 0
+    send_sms.assert_called_once_with(phone, "223456")
+
+
+@pytest.mark.django_db
+def test_otp_cooldown_blocks_a_second_send():
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    with patch.object(
+        SMSIRService,
+        "send_verification_code",
+        return_value=(True, "sent"),
+    ) as send_sms:
+        first = SMSIRService.send_otp(phone)
+        second = SMSIRService.send_otp(phone)
+
+    assert first[0] is True
+    assert second[0] is False
+    assert "ثانیه دیگر" in second[1]
+    assert second[2] > 0
+    send_sms.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_otp_verification_consumes_the_code_exactly_once():
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    with (
+        patch(
+            "accounts.services.otp.secrets.randbelow",
+            return_value=123456,
+        ),
+        patch.object(
+            SMSIRService,
+            "send_verification_code",
+            return_value=(True, "sent"),
+        ),
+    ):
+        assert SMSIRService.send_otp(phone)[0] is True
+
+    challenge = OTPChallenge.objects.get()
+    cooldown_until = challenge.cooldown_until
+
+    assert SMSIRService.verify_otp(phone, "223456") == (
+        True,
+        "کد تأیید با موفقیت احراز شد.",
+    )
+    challenge.refresh_from_db()
+    assert challenge.code_hash == ""
+    assert challenge.expires_at is None
+    assert challenge.cooldown_until == cooldown_until
+
+    valid, message = SMSIRService.verify_otp(phone, "223456")
+    assert valid is False
+    assert "منقضی شده" in message
+
+
+@pytest.mark.django_db
+def test_otp_wrong_attempts_are_counted_and_limited():
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    with (
+        patch(
+            "accounts.services.otp.secrets.randbelow",
+            return_value=123456,
+        ),
+        patch.object(
+            SMSIRService,
+            "send_verification_code",
+            return_value=(True, "sent"),
+        ),
+    ):
+        assert SMSIRService.send_otp(phone)[0] is True
+
+    for expected_remaining in (4, 3, 2, 1, 0):
+        valid, message = SMSIRService.verify_otp(phone, "000000")
+        assert valid is False
+        assert f"{expected_remaining} فرصت باقی‌مانده" in message
+
+    challenge = OTPChallenge.objects.get()
+    assert challenge.failed_attempts == SMSIRService.MAX_VERIFY_ATTEMPTS
+
+    valid, message = SMSIRService.verify_otp(phone, "223456")
+    assert valid is False
+    assert "بیش از حد مجاز" in message
+
+
+@pytest.mark.django_db
+def test_otp_expired_challenge_is_cleared_without_becoming_valid():
+    from datetime import timedelta
+    from django.utils import timezone
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    OTPChallenge.objects.create(
+        phone_hash=SMSIRService._hash_phone(phone),
+        code_hash=SMSIRService._hash_code(phone, "223456"),
+        expires_at=timezone.now() - timedelta(seconds=1),
+        failed_attempts=2,
+    )
+
+    valid, message = SMSIRService.verify_otp(phone, "223456")
+    assert valid is False
+    assert "منقضی شده" in message
+
+    challenge = OTPChallenge.objects.get()
+    assert challenge.code_hash == ""
+    assert challenge.expires_at is None
+    assert challenge.failed_attempts == 0
+
+
+@pytest.mark.django_db
+def test_ambiguous_sms_failure_keeps_short_reservation_before_retry():
+    from datetime import timedelta
+    from django.utils import timezone
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    with patch.object(
+        SMSIRService,
+        "send_verification_code",
+        side_effect=[(False, "provider timeout"), (True, "sent")],
+    ) as send_sms:
+        failed = SMSIRService.send_otp(phone)
+        challenge = OTPChallenge.objects.get()
+        assert failed[0] is False
+        assert failed[2] > 0
+        assert challenge.send_lock_token is not None
+        assert challenge.send_lock_expires_at is not None
+        assert challenge.send_lock_expires_at > timezone.now()
+        assert challenge.cooldown_until is None
+
+        blocked_retry = SMSIRService.send_otp(phone)
+        assert blocked_retry[0] is False
+        assert blocked_retry[2] > 0
+        send_sms.assert_called_once()
+
+        OTPChallenge.objects.filter(pk=challenge.pk).update(
+            send_lock_expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        succeeded = SMSIRService.send_otp(phone)
+
+    assert succeeded[0] is True
+    assert send_sms.call_count == 2
+
+
+@pytest.mark.django_db
+def test_unexpected_sms_exception_keeps_reservation_for_safe_retry():
+    from django.utils import timezone
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    with patch.object(
+        SMSIRService,
+        "send_verification_code",
+        side_effect=RuntimeError("provider response lost"),
+    ):
+        with pytest.raises(RuntimeError):
+            SMSIRService.send_otp(phone)
+
+    challenge = OTPChallenge.objects.get()
+    assert challenge.send_lock_token is not None
+    assert challenge.send_lock_expires_at > timezone.now()
+    assert challenge.cooldown_until is None
+
+
+class OTPConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_overlapping_send_requests_call_sms_provider_only_once(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event, Lock
+        from accounts.services.otp import SMSIRService
+
+        phone = "09123456789"
+        provider_started = Event()
+        release_provider = Event()
+        calls = []
+        calls_lock = Lock()
+
+        def fake_send(*args, **kwargs):
+            with calls_lock:
+                calls.append((args, kwargs))
+            provider_started.set()
+            if not release_provider.wait(timeout=8):
+                raise AssertionError("test did not release the mocked provider")
+            return True, "sent"
+
+        def worker():
+            close_old_connections()
+            try:
+                return SMSIRService.send_otp(phone)
+            finally:
+                close_old_connections()
+
+        with patch.object(
+            SMSIRService,
+            "send_verification_code",
+            side_effect=fake_send,
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first_future = executor.submit(worker)
+                self.assertTrue(provider_started.wait(timeout=5))
+                second_future = executor.submit(worker)
+                second_result = second_future.result(timeout=5)
+                release_provider.set()
+                first_result = first_future.result(timeout=10)
+
+        self.assertTrue(first_result[0])
+        self.assertFalse(second_result[0])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(OTPChallenge.objects.count(), 1)
+
+    @skipUnlessDBFeature("has_select_for_update")
+    def test_two_concurrent_verifications_cannot_consume_one_code_twice(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from datetime import timedelta
+        from django.utils import timezone
+        from accounts.services.otp import SMSIRService
+
+        phone = "09123456789"
+        OTPChallenge.objects.create(
+            phone_hash=SMSIRService._hash_phone(phone),
+            code_hash=SMSIRService._hash_code(phone, "123456"),
+            expires_at=timezone.now() + timedelta(seconds=120),
+        )
+        barrier = Barrier(2)
+
+        def worker():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                return SMSIRService.verify_otp(phone, "123456")
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(worker) for _ in range(2)]
+            results = [future.result(timeout=10) for future in futures]
+
+        self.assertEqual(sum(1 for valid, _ in results if valid), 1)
+        challenge = OTPChallenge.objects.get()
+        self.assertEqual(challenge.code_hash, "")
+        self.assertIsNone(challenge.expires_at)
+
+
+
+@pytest.mark.django_db
+def test_verify_otp_rolls_back_code_consumption_when_login_merge_fails(client):
+    from datetime import timedelta
+    from django.utils import timezone
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    OTPChallenge.objects.create(
+        phone_hash=SMSIRService._hash_phone(phone),
+        code_hash=SMSIRService._hash_code(phone, "123456"),
+        expires_at=timezone.now() + timedelta(seconds=120),
+    )
+    payload = dumps({"phone": phone, "code": "123456"})
+
+    with patch(
+        "accounts.otp_views.merge_guest_cart_to_user",
+        side_effect=RuntimeError("forced merge failure"),
+    ):
+        failed_response = client.post(
+            reverse("accounts:verify_otp"),
+            data=payload,
+            content_type="application/json",
+        )
+
+    assert failed_response.status_code == 500
+    challenge = OTPChallenge.objects.get()
+    assert challenge.code_hash == SMSIRService._hash_code(phone, "123456")
+    assert not get_user_model().objects.filter(username=phone).exists()
+
+    with patch("accounts.otp_views.merge_guest_cart_to_user") as merge_cart:
+        success_response = client.post(
+            reverse("accounts:verify_otp"),
+            data=payload,
+            content_type="application/json",
+        )
+
+    assert success_response.status_code == 200
+    assert success_response.json()["status"] == "success"
+    merge_cart.assert_called_once()
+    challenge.refresh_from_db()
+    assert challenge.code_hash == ""
+    user = get_user_model().objects.get(username=phone)
+    assert user.profile.is_verified is True

@@ -63,4 +63,4 @@ jobs:
         run: python manage.py check
 
       - name: Run PostgreSQL-only concurrency and transaction tests
-        run: pytest -q orders/test_postgresql_concurrency.py
+        run: pytest -q orders/test_postgresql_concurrency.py accounts/tests.py::OTPConcurrencyTests
