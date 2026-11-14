@@ -1169,3 +1169,176 @@ class ProfileLegacyOTPTests(TestCase):
         self.assertIsNone(self.profile.otp_code)
         self.assertIsNone(self.profile.otp_created_at)
         self.assertFalse(self.profile.is_otp_valid("123456"))
+
+# ---------------------------------------------------------------------------
+# Atomic OTP concurrency regression tests
+# ---------------------------------------------------------------------------
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_otp_sends_do_not_send_two_codes_for_one_phone():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from django.core.cache import cache
+    from django.db import close_old_connections
+    from django.test import override_settings
+
+    from accounts.services.otp import SMSIRService
+
+    cache_settings = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "otp-atomic-concurrency-tests",
+        }
+    }
+
+    with override_settings(CACHES=cache_settings):
+        cache.clear()
+        phone = "09123456789"
+        sms_started = Event()
+        release_sms = Event()
+        sent_codes = []
+
+        def fake_send(mobile, code):
+            sent_codes.append((mobile, code))
+            sms_started.set()
+            if not release_sms.wait(timeout=5):
+                raise TimeoutError("Test did not release the mocked SMS request.")
+            return True, "ok"
+
+        def send_from_worker():
+            close_old_connections()
+            try:
+                return SMSIRService.send_otp(phone)
+            finally:
+                close_old_connections()
+
+        with patch.object(
+            SMSIRService,
+            "send_verification_code",
+            side_effect=fake_send,
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(send_from_worker)
+                assert sms_started.wait(timeout=5)
+
+                second = executor.submit(send_from_worker)
+                second_result = second.result(timeout=5)
+
+                release_sms.set()
+                first_result = first.result(timeout=5)
+
+        assert first_result[0] is True
+        assert second_result[0] is False
+        assert len(sent_codes) == 1
+        assert sent_codes[0][0] == phone
+
+        cache.clear()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_otp_verification_accepts_the_code_only_once():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from django.core.cache import cache
+    from django.db import close_old_connections
+    from django.test import override_settings
+
+    from accounts.services.otp import SMSIRService
+
+    cache_settings = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "otp-atomic-verify-tests",
+        }
+    }
+
+    with override_settings(CACHES=cache_settings):
+        cache.clear()
+        phone = "09123456789"
+        valid_code = "123456"
+        code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+        cache.set(
+            code_key,
+            SMSIRService._hash_code(phone, valid_code),
+            timeout=SMSIRService.EXPIRATION_SECONDS,
+        )
+
+        hash_started = Event()
+        release_hash = Event()
+        original_hash = SMSIRService._hash_code.__func__
+
+        def blocking_hash(cls, normalized_phone, code):
+            if code == valid_code:
+                hash_started.set()
+                if not release_hash.wait(timeout=5):
+                    raise TimeoutError("Test did not release OTP verification.")
+            return original_hash(cls, normalized_phone, code)
+
+        def verify_from_worker():
+            close_old_connections()
+            try:
+                return SMSIRService.verify_otp(phone, valid_code)
+            finally:
+                close_old_connections()
+
+        with patch.object(
+            SMSIRService,
+            "_hash_code",
+            classmethod(blocking_hash),
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(verify_from_worker)
+                assert hash_started.wait(timeout=5)
+
+                second = executor.submit(verify_from_worker)
+                second_result = second.result(timeout=5)
+
+                release_hash.set()
+                first_result = first.result(timeout=5)
+
+        assert first_result[0] is True
+        assert second_result[0] is False
+        assert cache.get(code_key) is None
+
+        cache.clear()
+
+
+@pytest.mark.django_db
+def test_otp_wrong_attempt_counter_reaches_limit_without_lost_updates():
+    from django.core.cache import cache
+    from django.test import override_settings
+
+    from accounts.services.otp import SMSIRService
+
+    cache_settings = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "otp-atomic-attempt-tests",
+        }
+    }
+
+    with override_settings(CACHES=cache_settings):
+        cache.clear()
+        phone = "09123456789"
+        code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+        attempts_key = f"{SMSIRService.CACHE_PREFIX_ATTEMPTS}{phone}"
+
+        cache.set(
+            code_key,
+            SMSIRService._hash_code(phone, "123456"),
+            timeout=SMSIRService.EXPIRATION_SECONDS,
+        )
+
+        for _ in range(SMSIRService.MAX_VERIFY_ATTEMPTS):
+            valid, _ = SMSIRService.verify_otp(phone, "000000")
+            assert valid is False
+
+        assert cache.get(attempts_key) == SMSIRService.MAX_VERIFY_ATTEMPTS
+
+        valid, message = SMSIRService.verify_otp(phone, "000000")
+        assert valid is False
+        assert "بیش از حد مجاز" in message
+        assert cache.get(attempts_key) == SMSIRService.MAX_VERIFY_ATTEMPTS
+
+        cache.clear()
