@@ -1425,3 +1425,47 @@ def test_otp_login_failure_rolls_back_user_profile_cart_session_and_code(client)
     assert restored_session.session_key == guest_session_key
     assert restored_session["cart_id"] == guest_cart.pk
     assert restored_session.get("_auth_user_id") is None
+
+@pytest.mark.django_db(transaction=True)
+def test_otp_send_timeout_keeps_reserved_code_verifiable():
+    import requests
+    from django.core.cache import cache
+    from django.core.management import call_command
+    from django.db import connection
+    from django.test import override_settings
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09123456789"
+    code = "223456"
+    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    cooldown_key = f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}"
+
+    with (
+        override_settings(
+            DEBUG=False,
+            SMSIR_CONFIG={"API_KEY": "TEST_API_KEY", "TEMPLATE_ID": 358253},
+        ),
+        patch("accounts.services.otp.secrets.randbelow", return_value=123456),
+        patch(
+            "accounts.services.otp.requests.post",
+            side_effect=requests.exceptions.ReadTimeout("response timed out"),
+        ) as mocked_post,
+    ):
+        sent, message, ttl = SMSIRService.send_otp(phone)
+
+    assert sent is False
+    assert ttl > 0
+    assert "وضعیت ارسال پیامک مشخص نشد" in message
+    mocked_post.assert_called_once()
+    assert cache.get(code_key) == SMSIRService._hash_code(phone, code)
+    assert cache.get(cooldown_key) is not None
+
+    valid, _ = SMSIRService.verify_otp(phone, code)
+    assert valid is True
+    assert cache.get(code_key) is None
+    cache.delete(cooldown_key)
+
