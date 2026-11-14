@@ -1,14 +1,19 @@
 # accounts/services/otp.py
 import hashlib
-import json
+import hmac
 import logging
-import secrets
+import math
 import re
+import secrets
+import threading
+import time
+from contextlib import contextmanager
 from typing import Optional, Tuple
 
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.db import connection, transaction
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,12 @@ class SMSIRService:
     CACHE_PREFIX_CODE = "otp_code:"
     CACHE_PREFIX_COOLDOWN = "otp_cooldown:"
     CACHE_PREFIX_ATTEMPTS = "otp_attempts:"
+
+    LOCK_BUSY_MESSAGE = "درخواست دیگری برای این شماره در حال پردازش است؛ کمی بعد تلاش کنید."
+
+    # SQLite is used only for local development/tests. Production uses
+    # PostgreSQL advisory locks, shared by all Gunicorn workers.
+    _local_otp_lock = threading.Lock()
 
     # -------------------------------------------------------------------------
     # تنظیمات و نرمال‌سازی شماره
@@ -97,13 +108,116 @@ class SMSIRService:
         return hashlib.sha256(payload).hexdigest()
 
     @classmethod
+    def _advisory_lock_id(cls, phone: str) -> int:
+        digest = hashlib.blake2b(
+            f"pyshop:otp:{phone}".encode("utf-8"),
+            digest_size=8,
+        ).digest()
+        return int.from_bytes(digest, byteorder="big", signed=True)
+
+    @classmethod
+    @contextmanager
+    def _otp_lock(cls, phone: str, *, transaction_scoped: bool = False):
+        """
+        Serialize OTP operations for one phone across application workers.
+
+        PostgreSQL advisory locks are shared by all Gunicorn workers. Sending
+        holds a session lock across the SMS request; verification uses a
+        transaction lock so cache changes commit before the lock is released.
+        SQLite falls back to a process-local lock for development and tests.
+        """
+        if connection.vendor == "postgresql":
+            lock_id = cls._advisory_lock_id(phone)
+
+            if transaction_scoped:
+                with transaction.atomic():
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT pg_advisory_xact_lock(%s)",
+                            [lock_id],
+                        )
+                    # Verification is a short critical section. Queue concurrent
+                    # attempts so each one is counted rather than discarded.
+                    yield True
+                return
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT pg_try_advisory_lock(%s)",
+                    [lock_id],
+                )
+                acquired = bool(cursor.fetchone()[0])
+
+            if not acquired:
+                yield False
+                return
+
+            try:
+                yield True
+            finally:
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT pg_advisory_unlock(%s)",
+                            [lock_id],
+                        )
+                        released = bool(cursor.fetchone()[0])
+                    if not released:
+                        logger.error(
+                            "[OTP] PostgreSQL advisory lock was not held "
+                            "when release was attempted."
+                        )
+                except Exception:
+                    # PostgreSQL releases session locks when a lost connection
+                    # is closed, so this is safe to log and leave to the server.
+                    logger.exception("[OTP] Failed to release advisory lock.")
+            return
+
+        if connection.vendor != "sqlite":
+            raise RuntimeError(
+                "Atomic OTP locking supports PostgreSQL and SQLite only."
+            )
+
+        acquired = cls._local_otp_lock.acquire(
+            blocking=transaction_scoped,
+        )
+        if not acquired:
+            yield False
+            return
+
+        try:
+            if transaction_scoped:
+                # Release only after the SQLite transaction has completed.
+                with transaction.atomic():
+                    yield True
+            else:
+                yield True
+        finally:
+            cls._local_otp_lock.release()
+
+    @classmethod
     def get_remaining_cooldown(cls, phone: str) -> int:
         norm_phone = cls.normalize_phone(phone)
         if not norm_phone:
             return 0
+
         cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
         remaining = cache.get(cd_key)
-        return int(remaining) if remaining is not None else 0
+        if remaining is None:
+            return 0
+
+        try:
+            value = float(remaining)
+        except (TypeError, ValueError):
+            return 0
+
+        # New entries store an absolute expiry timestamp for a real countdown.
+        # Small values are legacy cache entries and remain valid until their
+        # original cache TTL expires.
+        if value >= 1_000_000_000:
+            return max(0, math.ceil(value - time.time()))
+
+        return max(0, int(value))
 
     # -------------------------------------------------------------------------
     # ارسال خام SMS.ir
@@ -199,37 +313,46 @@ class SMSIRService:
         if not norm_phone:
             return False, "شماره موبایل وارد شده نامعتبر است (فرمت: 09xxxxxxxxx).", 0
 
-        # کنترل محدودیت زمانی ارسال مجدد (Cooldown)
-        cooldown_left = cls.get_remaining_cooldown(norm_phone)
-        if cooldown_left > 0:
-            return (
-                False,
-                f"لطفاً {cooldown_left} ثانیه دیگر مجدداً تلاش کنید.",
-                cooldown_left,
-            )
+        with cls._otp_lock(norm_phone) as lock_acquired:
+            if not lock_acquired:
+                return False, cls.LOCK_BUSY_MESSAGE, 0
 
-        # تولید کد ۶ رقمی یکپارچه با قالب
-        code = str(secrets.randbelow(900000) + 100000)
+            cooldown_left = cls.get_remaining_cooldown(norm_phone)
+            if cooldown_left > 0:
+                return (
+                    False,
+                    f"لطفاً {cooldown_left} ثانیه دیگر مجدداً تلاش کنید.",
+                    cooldown_left,
+                )
 
-        # ارسال از طریق پیامک
-        sent_ok, send_msg = cls.send_verification_code(norm_phone, code)
-        if not sent_ok:
-            return False, send_msg, 0
+            code = str(secrets.randbelow(900000) + 100000)
 
-        # ذخیره در کش
-        code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
-        hashed_code = cls._hash_code(norm_phone, code)
-        cache.set(code_key, hashed_code, timeout=cls.EXPIRATION_SECONDS)
+            # Keep the per-phone lock while talking to SMS.ir. A second worker
+            # cannot pass the cooldown check and send another code concurrently.
+            sent_ok, send_msg = cls.send_verification_code(norm_phone, code)
+            if not sent_ok:
+                return False, send_msg, 0
 
-        # ثبت زمان کول‌داون
-        cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
-        cache.set(cd_key, cls.COOLDOWN_SECONDS, timeout=cls.COOLDOWN_SECONDS)
+            code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
+            cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
+            attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
+            hashed_code = cls._hash_code(norm_phone, code)
 
-        # ریست شمارنده تلاش‌های ناموفق
-        attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
-        cache.delete(attempts_key)
+            # Commit the hash, cooldown, and attempt reset as one unit.
+            with transaction.atomic():
+                cache.set(
+                    code_key,
+                    hashed_code,
+                    timeout=cls.EXPIRATION_SECONDS,
+                )
+                cache.set(
+                    cd_key,
+                    time.time() + cls.COOLDOWN_SECONDS,
+                    timeout=cls.COOLDOWN_SECONDS,
+                )
+                cache.delete(attempts_key)
 
-        return True, "کد تأیید ۶ رقمی با موفقیت ارسال شد.", cls.COOLDOWN_SECONDS
+            return True, "کد تأیید ۶ رقمی با موفقیت ارسال شد.", cls.COOLDOWN_SECONDS
 
     # -------------------------------------------------------------------------
     # بررسی و تأیید OTP
@@ -243,7 +366,6 @@ class SMSIRService:
         if not entered_code:
             return False, "کد تأیید را وارد کنید."
 
-        # تبدیل ارقام احتمالی فارسی کد به انگلیسی
         fa_digits = "۰۱۲۳۴۵۶۷۸۹"
         ar_digits = "٠١٢٣٤٥٦٧٨٩"
         en_digits = "0123456789"
@@ -253,30 +375,46 @@ class SMSIRService:
         if len(entered_code) != cls.CODE_LENGTH or not entered_code.isdigit():
             return False, f"کد تأیید باید دقیقاً {cls.CODE_LENGTH} رقم باشد."
 
-        attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
-        attempts = cache.get(attempts_key, 0)
-        if attempts >= cls.MAX_VERIFY_ATTEMPTS:
-            return (
-                False,
-                "تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً کد جدید دریافت کنید.",
-            )
+        with cls._otp_lock(norm_phone, transaction_scoped=True) as lock_acquired:
+            if not lock_acquired:
+                return False, cls.LOCK_BUSY_MESSAGE
 
-        code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
-        cached_hash = cache.get(code_key)
+            attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
+            try:
+                attempts = int(cache.get(attempts_key, 0) or 0)
+            except (TypeError, ValueError):
+                attempts = 0
 
-        if not cached_hash:
-            return False, "کد تأیید منقضی شده یا هنوز درخواستی ثبت نشده است."
+            if attempts >= cls.MAX_VERIFY_ATTEMPTS:
+                return (
+                    False,
+                    "تعداد تلاش‌های ناموفق بیش از حد مجاز است. لطفاً کد جدید دریافت کنید.",
+                )
 
-        input_hash = cls._hash_code(norm_phone, entered_code)
-        if cached_hash != input_hash:
-            cache.set(attempts_key, attempts + 1, timeout=cls.EXPIRATION_SECONDS)
-            remaining_tries = max(0, cls.MAX_VERIFY_ATTEMPTS - (attempts + 1))
-            return (
-                False,
-                f"کد تأیید وارد شده اشتباه است. ({remaining_tries} فرصت باقی‌مانده)",
-            )
+            code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
+            cached_hash = cache.get(code_key)
+            if not cached_hash:
+                return False, "کد تأیید منقضی شده یا هنوز درخواستی ثبت نشده است."
 
-        # کد صحیح: پاکسازی کش
-        cache.delete(code_key)
-        cache.delete(attempts_key)
-        return True, "کد تأیید با موفقیت احراز شد."
+            input_hash = cls._hash_code(norm_phone, entered_code)
+            if not hmac.compare_digest(str(cached_hash), input_hash):
+                next_attempts = attempts + 1
+                cache.set(
+                    attempts_key,
+                    next_attempts,
+                    timeout=cls.EXPIRATION_SECONDS,
+                )
+                remaining_tries = max(
+                    0,
+                    cls.MAX_VERIFY_ATTEMPTS - next_attempts,
+                )
+                return (
+                    False,
+                    f"کد تأیید وارد شده اشتباه است. ({remaining_tries} فرصت باقی‌مانده)",
+                )
+
+            # The transaction-level advisory lock remains held until this
+            # deletion commits, so another worker cannot accept the same code.
+            cache.delete(code_key)
+            cache.delete(attempts_key)
+            return True, "کد تأیید با موفقیت احراز شد."
