@@ -18,6 +18,10 @@ from django.db import connection, transaction
 logger = logging.getLogger(__name__)
 
 
+class SMSDeliveryUncertain(Exception):
+    """The provider may have accepted an SMS but its outcome was not confirmed."""
+
+
 class SMSIRService:
 
     ENDPOINT = "https://api.sms.ir/v1/send/verify"
@@ -274,35 +278,44 @@ class SMSIRService:
                 headers=headers,
                 timeout=cls.TIMEOUT,
             )
-        except requests.exceptions.Timeout:
-            logger.error(f"[SMS.ir] Timeout error sending to {norm_mobile}")
-            return False, "خطا در برقراری ارتباط با سامانه پیامک (Timeout)."
-        except requests.exceptions.RequestException as e:
-            logger.error(f"[SMS.ir] Request exception for {norm_mobile}: {e}")
-            return False, "خطا در ارسال پیامک. لطفاً بعداً تلاش کنید."
+        except requests.exceptions.Timeout as exc:
+            logger.warning("[SMS.ir] Delivery outcome is unknown after a timeout.")
+            raise SMSDeliveryUncertain from exc
+        except requests.exceptions.RequestException as exc:
+            logger.warning(
+                "[SMS.ir] Delivery outcome is unknown after %s.",
+                type(exc).__name__,
+            )
+            raise SMSDeliveryUncertain from exc
 
         if response.status_code != 200:
             logger.error(
-                f"[SMS.ir] HTTP {response.status_code} for {norm_mobile}: {response.text}"
+                "[SMS.ir] HTTP %s while sending verification message.",
+                response.status_code,
             )
-            return False, f"سامانه پیامک با خطای {response.status_code} پاسخ داد."
+            if 400 <= response.status_code < 500:
+                return False, f"سامانه پیامک درخواست را نپذیرفت (HTTP {response.status_code})."
+            raise SMSDeliveryUncertain(
+                f"SMS.ir returned HTTP {response.status_code}; delivery is not confirmed."
+            )
 
         try:
             data = response.json()
-        except ValueError:
-            logger.error(f"[SMS.ir] Invalid JSON: {response.text}")
-            return False, "پاسخ نامعتبر از سامانه پیامک دریافت شد."
+        except ValueError as exc:
+            logger.error("[SMS.ir] Provider returned a non-JSON response.")
+            raise SMSDeliveryUncertain from exc
+
+        if not isinstance(data, dict) or "status" not in data:
+            logger.error("[SMS.ir] Provider returned an invalid response structure.")
+            raise SMSDeliveryUncertain("SMS.ir returned an invalid response structure.")
 
         if data.get("status") == 1:
-            if data.get("status") == 1:
-                logger.info( "[SMS.ir] Code sent to %s. data=%s", norm_mobile, data)
-                return True, "کد تایید پیامک شد."
-
-            return True, "کد تأیید با موفقیت پیامک شد."
+            logger.info("[SMS.ir] Verification message accepted by provider.")
+            return True, "کد تأیید پیامک شد."
 
         msg = data.get("message") or "ارسال پیامک توسط سرویس‌دهنده انجام نشد."
-        logger.warning(f"[SMS.ir] Failed for {norm_mobile}: {data}")
-        return False, msg
+        logger.warning("[SMS.ir] Provider rejected the verification message.")
+        return False, str(msg)
 
     # -------------------------------------------------------------------------
     # منطق اصلی OTP (تولید، ثبت در کش و ارسال)
@@ -326,33 +339,58 @@ class SMSIRService:
                 )
 
             code = str(secrets.randbelow(900000) + 100000)
-
-            # Keep the per-phone lock while talking to SMS.ir. A second worker
-            # cannot pass the cooldown check and send another code concurrently.
-            sent_ok, send_msg = cls.send_verification_code(norm_phone, code)
-            if not sent_ok:
-                return False, send_msg, 0
-
             code_key = f"{cls.CACHE_PREFIX_CODE}{norm_phone}"
             cd_key = f"{cls.CACHE_PREFIX_COOLDOWN}{norm_phone}"
             attempts_key = f"{cls.CACHE_PREFIX_ATTEMPTS}{norm_phone}"
             hashed_code = cls._hash_code(norm_phone, code)
 
-            # Commit the hash, cooldown, and attempt reset as one unit.
+            # Reserve a usable challenge before the external side effect. If
+            # the cache/database write fails, no SMS request is made. The extra
+            # provider timeout keeps the code/cooldown valid for the full user
+            # window even when SMS.ir responds near its request timeout.
+            reservation_seconds = cls.COOLDOWN_SECONDS + cls.TIMEOUT
             with transaction.atomic():
                 cache.set(
                     code_key,
                     hashed_code,
-                    timeout=cls.EXPIRATION_SECONDS,
+                    timeout=cls.EXPIRATION_SECONDS + cls.TIMEOUT,
                 )
                 cache.set(
                     cd_key,
-                    time.time() + cls.COOLDOWN_SECONDS,
-                    timeout=cls.COOLDOWN_SECONDS,
+                    time.time() + reservation_seconds,
+                    timeout=reservation_seconds,
                 )
                 cache.delete(attempts_key)
 
-            return True, "کد تأیید ۶ رقمی با موفقیت ارسال شد.", cls.COOLDOWN_SECONDS
+            # A timeout/connection interruption does not prove that SMS.ir
+            # rejected the request. Keep the reserved code and cooldown so a
+            # delivered code remains usable and an immediate retry cannot send
+            # a duplicate message.
+            try:
+                sent_ok, send_msg = cls.send_verification_code(norm_phone, code)
+            except SMSDeliveryUncertain:
+                remaining = cls.get_remaining_cooldown(norm_phone)
+                return (
+                    False,
+                    "وضعیت ارسال پیامک مشخص نشد. اگر کد را دریافت کرده‌اید وارد کنید؛ "
+                    "در غیر این صورت پس از پایان زمان اعلام‌شده دوباره درخواست دهید.",
+                    remaining,
+                )
+
+            if not sent_ok:
+                # A definitive provider rejection means no code was accepted.
+                # Remove the reservation so the customer can retry immediately.
+                with transaction.atomic():
+                    cache.delete(code_key)
+                    cache.delete(cd_key)
+                    cache.delete(attempts_key)
+                return False, send_msg, 0
+
+            return (
+                True,
+                "کد تأیید ۶ رقمی با موفقیت ارسال شد.",
+                cls.get_remaining_cooldown(norm_phone),
+            )
 
     # -------------------------------------------------------------------------
     # بررسی و تأیید OTP
