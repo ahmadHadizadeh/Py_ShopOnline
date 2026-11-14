@@ -1275,7 +1275,9 @@ def test_concurrent_otp_verification_accepts_the_code_only_once():
                     raise TimeoutError("Test did not release OTP verification.")
             return original_hash(cls, normalized_phone, code)
 
-        def verify_from_worker():
+        def verify_from_worker(started=None):
+            if started is not None:
+                started.set()
             close_old_connections()
             try:
                 return SMSIRService.verify_otp(phone, valid_code)
@@ -1291,11 +1293,13 @@ def test_concurrent_otp_verification_accepts_the_code_only_once():
                 first = executor.submit(verify_from_worker)
                 assert hash_started.wait(timeout=5)
 
-                second = executor.submit(verify_from_worker)
-                second_result = second.result(timeout=5)
+                second_started = Event()
+                second = executor.submit(verify_from_worker, second_started)
+                assert second_started.wait(timeout=5)
 
                 release_hash.set()
                 first_result = first.result(timeout=5)
+                second_result = second.result(timeout=5)
 
         assert first_result[0] is True
         assert second_result[0] is False
@@ -1305,7 +1309,7 @@ def test_concurrent_otp_verification_accepts_the_code_only_once():
 
 
 @pytest.mark.django_db
-def test_otp_wrong_attempt_counter_reaches_limit_without_lost_updates():
+def test_otp_wrong_attempt_counter_enforces_the_configured_limit():
     from django.core.cache import cache
     from django.test import override_settings
 
