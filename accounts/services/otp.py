@@ -120,27 +120,6 @@ class SMSIRService:
         return OTPChallenge.objects.select_for_update().get(pk=challenge.pk)
 
     @classmethod
-    def _release_send_reservation(cls, phone_hash: str, token) -> None:
-        with transaction.atomic():
-            challenge = (
-                OTPChallenge.objects.select_for_update()
-                .filter(phone_hash=phone_hash)
-                .first()
-            )
-            if challenge is None or challenge.send_lock_token != token:
-                return
-
-            challenge.send_lock_token = None
-            challenge.send_lock_expires_at = None
-            challenge.save(
-                update_fields=[
-                    "send_lock_token",
-                    "send_lock_expires_at",
-                    "updated_at",
-                ]
-            )
-
-    @classmethod
     def get_remaining_cooldown(cls, phone: str) -> int:
         norm_phone = cls.normalize_phone(phone)
         if not norm_phone:
@@ -310,18 +289,23 @@ class SMSIRService:
             )
             challenge_id = challenge.pk
 
-        try:
-            sent_ok, send_msg = cls.send_verification_code(norm_phone, code)
-        except Exception:
-            cls._release_send_reservation(phone_hash, token)
-            raise
-
+        # A timeout or interrupted provider response is ambiguous: the
+        # provider may already have accepted the SMS. Keep the reservation until
+        # its short expiry on every unsuccessful/exceptional outcome so a second
+        # request cannot immediately produce a duplicate message. The code hash
+        # remains usable after the reservation expires.
+        sent_ok, send_msg = cls.send_verification_code(norm_phone, code)
         if not sent_ok:
-            # Keep the pre-persisted hash briefly because a provider timeout can
-            # be ambiguous: SMS.ir may have accepted the message before the
-            # connection failed. A later send can safely replace this challenge.
-            cls._release_send_reservation(phone_hash, token)
-            return False, send_msg, 0
+            failed_at = timezone.now()
+            remaining = cls._seconds_until(
+                failed_at + timedelta(seconds=cls.SEND_LOCK_SECONDS),
+                failed_at,
+            )
+            return (
+                False,
+                f"{send_msg} برای جلوگیری از ارسال تکراری، لطفاً {remaining} ثانیه دیگر تلاش کنید.",
+                remaining,
+            )
 
         sent_at = timezone.now()
         with transaction.atomic():
