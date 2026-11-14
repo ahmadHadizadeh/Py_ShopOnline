@@ -1441,8 +1441,8 @@ def test_otp_send_timeout_keeps_reserved_code_verifiable():
 
     phone = "09123456789"
     code = "223456"
-    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
-    cooldown_key = f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}"
+    code_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone)
+    cooldown_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_COOLDOWN, phone)
 
     with (
         override_settings(
@@ -1482,7 +1482,7 @@ def test_otp_send_cache_reservation_failure_prevents_sms_request():
         call_command("createcachetable", "pyshop_cache", verbosity=0)
 
     phone = "09123456789"
-    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    code_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone)
     original_base_set = DatabaseCache._base_set
     set_calls = 0
 
@@ -1508,7 +1508,7 @@ def test_otp_send_cache_reservation_failure_prevents_sms_request():
 
     send_sms.assert_not_called()
     assert cache.get(code_key) is None
-    assert cache.get(f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}") is None
+    assert cache.get(SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_COOLDOWN, phone)) is None
 
 @pytest.mark.django_db(transaction=True)
 def test_otp_send_definitive_provider_rejection_clears_reservation():
@@ -1523,8 +1523,8 @@ def test_otp_send_definitive_provider_rejection_clears_reservation():
         call_command("createcachetable", "pyshop_cache", verbosity=0)
 
     phone = "09123456789"
-    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
-    cooldown_key = f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}"
+    code_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone)
+    cooldown_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_COOLDOWN, phone)
 
     class RejectedResponse:
         status_code = 400
