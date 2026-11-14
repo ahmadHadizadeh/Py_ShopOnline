@@ -120,8 +120,11 @@ def _restore_login_request_state(
     """
     session_module = import_module(settings.SESSION_ENGINE)
     restored_session = session_module.SessionStore(session_key=session_key)
-    restored_session.clear()
-    restored_session.update(session_data)
+
+    # Restore the in-memory snapshot without querying the database. The outer
+    # transaction has already rolled back the original session row, and the
+    # database connection may itself be the reason the login transaction failed.
+    restored_session._session_cache = dict(session_data)
     restored_session.modified = session_modified
     restored_session.accessed = session_accessed
 
