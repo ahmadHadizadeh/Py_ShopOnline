@@ -1483,25 +1483,32 @@ def test_otp_send_cache_reservation_failure_prevents_sms_request():
 
     phone = "09123456789"
     code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
-    original_set = DatabaseCache.set
+    original_base_set = DatabaseCache._base_set
     set_calls = 0
 
-    def fail_second_cache_write(backend, *args, **kwargs):
+    def silently_fail_second_cache_write(backend, mode, key, value, timeout):
         nonlocal set_calls
         set_calls += 1
         if set_calls == 2:
-            raise DatabaseError("forced OTP reservation write failure")
-        return original_set(backend, *args, **kwargs)
+            # DatabaseCache._base_set() returns False when its internal write
+            # hits DatabaseError; DatabaseCache.set() discards that result.
+            return False
+        return original_base_set(backend, mode, key, value, timeout)
 
     with (
-        patch.object(DatabaseCache, "set", new=fail_second_cache_write),
+        patch.object(
+            DatabaseCache,
+            "_base_set",
+            new=silently_fail_second_cache_write,
+        ),
         patch.object(SMSIRService, "send_verification_code") as send_sms,
     ):
-        with pytest.raises(DatabaseError):
+        with pytest.raises(DatabaseError, match="reservation could not be verified"):
             SMSIRService.send_otp(phone)
 
     send_sms.assert_not_called()
     assert cache.get(code_key) is None
+    assert cache.get(f"{SMSIRService.CACHE_PREFIX_COOLDOWN}{phone}") is None
 
 @pytest.mark.django_db(transaction=True)
 def test_otp_send_definitive_provider_rejection_clears_reservation():
