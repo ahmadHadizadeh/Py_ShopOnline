@@ -263,7 +263,7 @@ def verify_otp_view(request):
             # Save it now so the session row participates in this transaction.
             request.session.save()
 
-    except Exception:
+    except Exception as exc:
         try:
             _restore_login_request_state(
                 request,
@@ -277,6 +277,16 @@ def verify_otp_view(request):
             )
         except Exception:
             logger.exception("[Verify OTP] Failed to restore request session after rollback")
+
+        if isinstance(exc, DatabaseError):
+            logger.exception("[Verify OTP] OTP or login storage is temporarily unavailable")
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "سامانه احراز هویت موقتاً در دسترس نیست؛ لطفاً بعداً دوباره تلاش کنید.",
+                },
+                status=503,
+            )
 
         logger.exception("[Verify OTP] Atomic login operation failed")
         return JsonResponse(
