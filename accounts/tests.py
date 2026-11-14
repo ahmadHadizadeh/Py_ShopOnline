@@ -12,8 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.test import RequestFactory, TestCase, TransactionTestCase
-from django.test.utils import skipUnlessDBFeature
+from django.test import RequestFactory, TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.db import close_old_connections
 from django.urls import NoReverseMatch, reverse
 
