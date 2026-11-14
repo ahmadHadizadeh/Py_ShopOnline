@@ -1469,3 +1469,37 @@ def test_otp_send_timeout_keeps_reserved_code_verifiable():
     assert cache.get(code_key) is None
     cache.delete(cooldown_key)
 
+@pytest.mark.django_db(transaction=True)
+def test_otp_send_cache_reservation_failure_prevents_sms_request():
+    from django.core.cache import cache
+    from django.core.cache.backends.db import DatabaseCache
+    from django.core.management import call_command
+    from django.db import DatabaseError, connection
+
+    from accounts.services.otp import SMSIRService
+
+    if "pyshop_cache" not in connection.introspection.table_names():
+        call_command("createcachetable", "pyshop_cache", verbosity=0)
+
+    phone = "09123456789"
+    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    original_set = DatabaseCache.set
+    set_calls = 0
+
+    def fail_second_cache_write(backend, *args, **kwargs):
+        nonlocal set_calls
+        set_calls += 1
+        if set_calls == 2:
+            raise DatabaseError("forced OTP reservation write failure")
+        return original_set(backend, *args, **kwargs)
+
+    with (
+        patch.object(DatabaseCache, "set", new=fail_second_cache_write),
+        patch.object(SMSIRService, "send_verification_code") as send_sms,
+    ):
+        with pytest.raises(DatabaseError):
+            SMSIRService.send_otp(phone)
+
+    send_sms.assert_not_called()
+    assert cache.get(code_key) is None
+
