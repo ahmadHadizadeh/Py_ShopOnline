@@ -293,7 +293,7 @@ class SMSIRService:
                 "[SMS.ir] HTTP %s while sending verification message.",
                 response.status_code,
             )
-            if 400 <= response.status_code < 500:
+            if 400 <= response.status_code < 500 and response.status_code not in {408, 425, 429}:
                 return False, f"سامانه پیامک درخواست را نپذیرفت (HTTP {response.status_code})."
             raise SMSDeliveryUncertain(
                 f"SMS.ir returned HTTP {response.status_code}; delivery is not confirmed."
