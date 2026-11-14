@@ -1420,3 +1420,49 @@ class OTPConcurrencyTests(TransactionTestCase):
         challenge = OTPChallenge.objects.get()
         self.assertEqual(challenge.code_hash, "")
         self.assertIsNone(challenge.expires_at)
+
+
+
+@pytest.mark.django_db
+def test_verify_otp_rolls_back_code_consumption_when_login_merge_fails(client):
+    from datetime import timedelta
+    from django.utils import timezone
+    from accounts.services.otp import SMSIRService
+
+    phone = "09123456789"
+    OTPChallenge.objects.create(
+        phone_hash=SMSIRService._hash_phone(phone),
+        code_hash=SMSIRService._hash_code(phone, "123456"),
+        expires_at=timezone.now() + timedelta(seconds=120),
+    )
+    payload = dumps({"phone": phone, "code": "123456"})
+
+    with patch(
+        "accounts.otp_views.merge_guest_cart_to_user",
+        side_effect=RuntimeError("forced merge failure"),
+    ):
+        failed_response = client.post(
+            reverse("accounts:verify_otp"),
+            data=payload,
+            content_type="application/json",
+        )
+
+    assert failed_response.status_code == 500
+    challenge = OTPChallenge.objects.get()
+    assert challenge.code_hash == SMSIRService._hash_code(phone, "123456")
+    assert not get_user_model().objects.filter(username=phone).exists()
+
+    with patch("accounts.otp_views.merge_guest_cart_to_user") as merge_cart:
+        success_response = client.post(
+            reverse("accounts:verify_otp"),
+            data=payload,
+            content_type="application/json",
+        )
+
+    assert success_response.status_code == 200
+    assert success_response.json()["status"] == "success"
+    merge_cart.assert_called_once()
+    challenge.refresh_from_db()
+    assert challenge.code_hash == ""
+    user = get_user_model().objects.get(username=phone)
+    assert user.profile.is_verified is True
