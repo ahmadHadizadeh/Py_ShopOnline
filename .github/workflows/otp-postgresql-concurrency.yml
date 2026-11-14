@@ -57,4 +57,4 @@ jobs:
 
       - name: Run OTP concurrency tests on PostgreSQL
         run: |
-          pytest -q accounts/tests.py -k "concurrent_otp or otp_wrong_attempt_counter"
+          pytest -q accounts/tests.py -k "concurrent_otp or otp_wrong_attempt_counter or otp_login_failure"
