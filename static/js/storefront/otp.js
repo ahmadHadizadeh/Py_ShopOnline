@@ -198,11 +198,21 @@ let currentOtpPhone = "";
             });
 
             const data = await response.json();
+            const serverCooldown = Number(data.ttl ?? data.cooldown ?? 0);
+
             if (response.ok && (data.success === true || data.status === "success" || !data.error)) {
-                goToStep2(phone, data.cooldown || 120);
+                goToStep2(phone, serverCooldown || 120);
                 showAlert(data.message || "کد تأیید ارسال شد.", false);
-            }  
-            else {
+            } else if (Number.isFinite(serverCooldown) && serverCooldown > 0) {
+                // The initial response may have been lost after SMS acceptance,
+                // or a previous active code may still be in its cooldown.
+                // Move to verification so a delivered code remains usable.
+                goToStep2(phone, serverCooldown);
+                showAlert(
+                    data.message || "کد قبلی هنوز در بازه اعتبار است؛ در صورت دریافت، آن را وارد کنید.",
+                    true
+                );
+            } else {
                 showAlert(data.message || "خطا در ارسال کد تأیید.");
             }
         } catch (err) {
