@@ -1257,7 +1257,7 @@ def test_concurrent_otp_verification_accepts_the_code_only_once():
         cache.clear()
         phone = "09123456789"
         valid_code = "123456"
-        code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+        code_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone)
         cache.set(
             code_key,
             SMSIRService._hash_code(phone, valid_code),
@@ -1325,8 +1325,8 @@ def test_otp_wrong_attempt_counter_enforces_the_configured_limit():
     with override_settings(CACHES=cache_settings):
         cache.clear()
         phone = "09123456789"
-        code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
-        attempts_key = f"{SMSIRService.CACHE_PREFIX_ATTEMPTS}{phone}"
+        code_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone)
+        attempts_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_ATTEMPTS, phone)
 
         cache.set(
             code_key,
@@ -1357,7 +1357,7 @@ def test_otp_login_failure_rolls_back_user_profile_cart_session_and_code(client)
     from accounts.services.otp import SMSIRService
 
     phone = "09123456789"
-    code_key = f"{SMSIRService.CACHE_PREFIX_CODE}{phone}"
+    code_key = SMSIRService._cache_key(SMSIRService.CACHE_PREFIX_CODE, phone)
     code_hash = SMSIRService._hash_code(phone, "123456")
 
     # DatabaseCache is the configured production backend. Ensure its table
