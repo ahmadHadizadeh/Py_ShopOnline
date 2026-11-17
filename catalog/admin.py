@@ -8,6 +8,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
+from core.demo_security import exclude_demo_customer_records
 from core.admin_formatting import (
     AdminDisplayFormattingMixin,
     format_jalali_datetime,
@@ -594,6 +595,9 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Review)
 class ReviewAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_customer_records(super().get_queryset(request))
+
     date_display_fields = {"created_display": "created"}
     list_display = ("product", "user", "rating", "is_approved", "created_display")
     list_filter = ("is_approved", "created")
