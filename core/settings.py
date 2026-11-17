@@ -75,19 +75,25 @@ def _required_env(name: str) -> str:
 
 DEBUG = _env_bool("DJANGO_DEBUG", default=True)
 
-# Production admin URL is a high-entropy path segment supplied only through
-# the deployment environment. Development keeps Django's conventional URL.
+# Production admin URL is configured per installation. Accept either a
+# readable lowercase slug for customer-facing access or an existing opaque
+# token. Authentication and staff permissions remain the actual access control.
 if DEBUG:
     ADMIN_URL_PATH = "admin"
 else:
     ADMIN_URL_PATH = _required_env("ADMIN_URL_PATH")
-    if (
-        len(ADMIN_URL_PATH) < 32
-        or len(ADMIN_URL_PATH) > 128
-        or not re.fullmatch(r"[A-Za-z0-9_-]+", ADMIN_URL_PATH)
-    ):
+    readable_admin_path = (
+        3 <= len(ADMIN_URL_PATH) <= 64
+        and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", ADMIN_URL_PATH)
+    )
+    opaque_admin_path = (
+        32 <= len(ADMIN_URL_PATH) <= 128
+        and re.fullmatch(r"[A-Za-z0-9_-]+", ADMIN_URL_PATH)
+    )
+    if not (readable_admin_path or opaque_admin_path):
         raise RuntimeError(
-            "ADMIN_URL_PATH must be a 32-128 character URL-safe path segment."
+            "ADMIN_URL_PATH must be a 3-64 character lowercase slug "
+            "or a 32-128 character URL-safe token."
         )
 
 # SECRET_KEY is always read from the environment. In development only, when
