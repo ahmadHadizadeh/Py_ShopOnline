@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
 
-from catalog.models import Category, Product, Review
+from catalog.models import Category, InventoryMovement, Product, Review
 from catalog.templatetags.admin_dashboard import store_admin_dashboard_data
 from orders.models import (
     Order,
@@ -70,6 +70,26 @@ class DemoAdminPrivacyTests(TestCase):
             rating=5,
             comment="نظر نمونه فروشگاه",
             is_approved=True,
+        )
+        cls.visitor_movement = InventoryMovement.objects.create(
+            product=product,
+            product_name=product.name,
+            delta=-1,
+            quantity_before=10,
+            quantity_after=9,
+            source=InventoryMovement.Source.ORDER_PAYMENT,
+            reason="حرکت موجودی سفارش بازدیدکننده",
+            order_number=cls.visitor_order.order_number,
+        )
+        cls.sample_movement = InventoryMovement.objects.create(
+            product=product,
+            product_name=product.name,
+            delta=-1,
+            quantity_before=9,
+            quantity_after=8,
+            source=InventoryMovement.Source.ORDER_PAYMENT,
+            reason="حرکت موجودی سفارش نمونه",
+            order_number=cls.sample_order.order_number,
         )
 
     @classmethod
@@ -147,6 +167,10 @@ class DemoAdminPrivacyTests(TestCase):
         self.assertEqual(
             self._visible_ids(Review),
             set(Review.objects.filter(user=self.sample_buyer).values_list("pk", flat=True)),
+        )
+        self.assertEqual(
+            self._visible_ids(InventoryMovement),
+            {self.sample_movement.pk},
         )
 
     def test_dashboard_metrics_exclude_visitor_orders_and_payments(self):
