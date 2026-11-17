@@ -2,6 +2,7 @@ from django import template
 from django.db.models import Count, Q, Sum
 from django.urls import reverse
 
+from core.demo_security import exclude_demo_customer_records
 from catalog.models.product import Product
 from orders.models import Order, Payment
 
@@ -115,7 +116,7 @@ def store_admin_dashboard_data(user):
     }
 
     if can_view_orders:
-        order_queryset = Order.objects.all()
+        order_queryset = exclude_demo_customer_records(Order.objects.all())
         data["total_orders"] = order_queryset.count()
         data["orders_processing"] = order_queryset.filter(
             status=Order.Status.PROCESSING
@@ -163,7 +164,7 @@ def store_admin_dashboard_data(user):
         data["out_of_stock_url"] = f"{data['products_url']}?availability=out_of_stock"
 
     if can_view_payments:
-        payment_queryset = Payment.objects.all()
+        payment_queryset = exclude_demo_customer_records(Payment.objects.all())
         data["pending_payments"] = payment_queryset.filter(
             status=Payment.Status.PENDING
         ).count()
@@ -180,7 +181,7 @@ def store_admin_dashboard_data(user):
     # are excluded; this is a paid-transaction total, not accounting net revenue.
     if can_view_orders and can_view_payments:
         data["confirmed_sales_amount"] = (
-            Payment.objects.filter(
+            payment_queryset.filter(
                 status=Payment.Status.SUCCESS,
                 order__status__in=(
                     Order.Status.PAID,
@@ -196,7 +197,7 @@ def store_admin_dashboard_data(user):
     # be fulfilled automatically. Only expose this metric when both models are
     # visible to the current staff user.
     if can_view_orders and can_view_payments:
-        data["successful_payments_on_cancelled_orders"] = Payment.objects.filter(
+        data["successful_payments_on_cancelled_orders"] = payment_queryset.filter(
             status=Payment.Status.SUCCESS,
             order__status=Order.Status.CANCELLED,
         ).count()
