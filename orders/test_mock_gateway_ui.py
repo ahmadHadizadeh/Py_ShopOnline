@@ -138,6 +138,20 @@ class MockGatewayUIContractTests(TestCase):
         self.assertTrue(self.order.stock_reduced)
         self.assertEqual(self.product.stock, 1)
 
+    @override_settings(DEBUG=False, DEMO_MODE=True)
+    def test_demo_rejects_non_mock_provider_callbacks(self):
+        response = self.client.post(
+            reverse(
+                "orders:gateway_payment_callback",
+                kwargs={"gateway_name": "zarinpal"},
+            ),
+            {
+                "Authority": "UNTRUSTED-AUTHORITY",
+                "Status": "OK",
+            },
+        )
+        self.assertEqual(response.status_code, 404)
+
     @override_settings(DEBUG=False)
     def test_mock_page_and_callback_are_disabled_in_production(self):
         page = self.client.get(
