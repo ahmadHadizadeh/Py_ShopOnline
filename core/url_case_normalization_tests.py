@@ -12,8 +12,6 @@ from core.url_case_normalization import (
 class CanonicalizeRoutePathTests(SimpleTestCase):
     def test_known_route_literals_are_normalized_without_changing_identifiers(self):
         cases = (
-            ("/Admin", "/admin/"),
-            ("/ADMIN/CATALOG/PRODUCT/42/CHANGE/", "/admin/catalog/product/42/change/"),
             ("/Product/مودم-روتر", "/product/مودم-روتر/"),
             ("/PRODUCT/Mixed-Case-Slug/", "/product/Mixed-Case-Slug/"),
             ("/Category/Mixed-Category/", "/category/Mixed-Category/"),
@@ -72,7 +70,6 @@ class CanonicalizeRoutePathTests(SimpleTestCase):
     def test_already_canonical_paths_are_not_redirected(self):
         canonical_paths = (
             "/",
-            "/admin/",
             "/product/مودم-روتر/",
             "/category/network/",
             "/cart/",
@@ -145,8 +142,9 @@ class URLCaseNormalizationIntegrationTests(TestCase):
         canonical_response = self.client.get(expected_path)
         self.assertEqual(canonical_response.status_code, 200)
 
-    def test_admin_without_slash_redirects_to_lowercase_canonical_path(self):
-        response = self.client.get("/Admin")
-
-        self.assertEqual(response.status_code, 308)
-        self.assertEqual(response["Location"], "/admin/")
+    def test_legacy_admin_case_variants_are_not_canonicalized_or_redirected(self):
+        # /admin/ remains the development-only URL; mixed-case aliases do not.
+        for path in ("/Admin", "/ADMIN/"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 404)
