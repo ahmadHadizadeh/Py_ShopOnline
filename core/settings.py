@@ -308,10 +308,15 @@ if DEMO_MODE and DB_ENGINE not in {"postgres", "postgresql"}:
 
 if DEMO_MODE:
     demo_database = DATABASES["default"]
+    demo_database_name = demo_database.get("NAME")
+    demo_database_user = demo_database.get("USER")
+    demo_test_database_name = demo_database.get("TEST", {}).get("NAME")
+    production_database_names = {"pyshop_db", "pyshop_test_db"}
     if (
-        demo_database.get("NAME") in {"pyshop_db", "pyshop_test_db"}
-        or demo_database.get("USER") == "pyshop"
-        or demo_database.get("TEST", {}).get("NAME") == "pyshop_test_db"
+        demo_database_name in production_database_names
+        or demo_database_user == "pyshop"
+        or demo_test_database_name in production_database_names
+        or demo_test_database_name == demo_database_name
     ):
         raise RuntimeError(
             "DEMO_MODE cannot use the Production database, role, or test database."
