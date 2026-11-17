@@ -119,13 +119,32 @@ def test_production_requires_secret_admin_url():
         load_settings_env(**env)
 
 
-@pytest.mark.parametrize("value", ["short", "contains/slash", "has space", "x" * 129])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "ab",
+        "contains/slash",
+        "has space",
+        "Upper-Case",
+        "-management",
+        "management-",
+        "two--words",
+        "x" * 129,
+    ],
+)
 def test_production_rejects_invalid_admin_url_segment(value):
     with pytest.raises(RuntimeError, match="ADMIN_URL_PATH"):
         load_settings_env(**production_base_env(ADMIN_URL_PATH=value))
 
 
-def test_production_accepts_high_entropy_admin_url_segment():
+@pytest.mark.parametrize("value", ["management", "store-panel", "shop-2026"])
+def test_production_accepts_customer_friendly_admin_url_segment(value):
+    settings = load_settings_env(**production_base_env(ADMIN_URL_PATH=value))
+
+    assert settings["ADMIN_URL_PATH"] == value
+
+
+def test_production_accepts_existing_high_entropy_admin_url_segment():
     settings = load_settings_env(**production_base_env(ADMIN_URL_PATH="a" * 64))
 
     assert settings["ADMIN_URL_PATH"] == "a" * 64
