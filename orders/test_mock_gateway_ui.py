@@ -100,6 +100,44 @@ class MockGatewayUIContractTests(TestCase):
         self.assertEqual(self.order.status, Order.Status.PAID)
         self.assertEqual(self.product.stock, 1)
 
+
+
+    @override_settings(DEBUG=False, DEMO_MODE=True)
+    def test_explicit_demo_mode_can_complete_signed_mock_payment(self):
+        initiation = self.client.post(
+            reverse(
+                "orders:initiate_payment",
+                kwargs={"order_number": self.order.order_number},
+            )
+        )
+        self.assertEqual(initiation.status_code, 302)
+        self.assertIn(self.mock_url, initiation.url)
+
+        page = self.client.get(
+            initiation.url,
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "درگاه پرداخت شبیه‌سازی‌شده")
+
+        callback = self.client.post(
+            page.context["callback_url"],
+            {
+                "trxid": self.payment.transaction_code,
+                "amount": str(self.payment.amount),
+                "status": "success",
+                "signature": page.context["signature"],
+            },
+        )
+        self.assertEqual(callback.status_code, 302)
+
+        self.payment.refresh_from_db()
+        self.order.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.SUCCESS)
+        self.assertEqual(self.order.status, Order.Status.PAID)
+        self.assertTrue(self.order.stock_reduced)
+        self.assertEqual(self.product.stock, 1)
+
     @override_settings(DEBUG=False)
     def test_mock_page_and_callback_are_disabled_in_production(self):
         page = self.client.get(
