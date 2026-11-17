@@ -6,6 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{% endblock %} | {{ storefront_name }}</title>
+    {% if demo_mode %}<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">{% endif %}
     {% if storefront_settings and storefront_settings.logo %}
     <link rel="icon" href="{{ storefront_settings.logo.url }}">
     {% endif %}
@@ -20,6 +21,12 @@
 </head>
 
 <body class="flex flex-col h-full text-gray-800">
+
+    {% if demo_mode %}
+    <div role="status" class="border-b border-amber-300 bg-amber-50 px-4 py-2 text-center text-xs font-bold leading-6 text-amber-900">
+        محیط آزمایشی Py_ShopOnline — سفارش‌ها و پرداخت‌ها شبیه‌سازی می‌شوند؛ لطفاً اطلاعات واقعی شخصی یا بانکی وارد نکنید.
+    </div>
+    {% endif %}
 
     <!-- Global Loader (Final High-End Version) -->
     <div id="global-loader"
@@ -130,10 +137,20 @@
                         </div>
                     </div>
                 {% else %}
-                    <button type="button" data-otp-open aria-haspopup="dialog" aria-controls="otp-modal" class="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white px-2 sm:px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-lg shadow-indigo-200 transition active:scale-95">
-                        <span class="sm:hidden">ورود</span>
-                        <span class="hidden sm:inline">ورود / ثبت‌نام</span>
-                    </button>
+                    {% if demo_mode %}
+                        <form method="post" action="{% url 'accounts:demo_access' %}" class="m-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <button type="submit" class="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white px-2 sm:px-5 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-lg shadow-indigo-200 transition active:scale-95">
+                                ورود آزمایشی
+                            </button>
+                        </form>
+                    {% else %}
+                        <button type="button" data-otp-open aria-haspopup="dialog" aria-controls="otp-modal" class="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white px-2 sm:px-6 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-lg shadow-indigo-200 transition active:scale-95">
+                            <span class="sm:hidden">ورود</span>
+                            <span class="hidden sm:inline">ورود / ثبت‌نام</span>
+                        </button>
+                    {% endif %}
                 {% endif %}
 
                 <button id="mobile-nav-toggle" type="button" class="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-indigo-600 transition" aria-label="باز کردن منوی اصلی" aria-controls="mobile-navigation-panel" aria-expanded="false">
@@ -261,8 +278,10 @@
 
 <script src="{% static 'js/storefront/base.js' %}" defer></script>
 <script src="{% static 'js/storefront/search.js' %}" defer></script>
-{% include 'catalog/partials/_otp_login_modal.html' %}
-<script src="{% static 'js/storefront/otp.js' %}" defer></script>
+{% if not demo_mode %}
+    {% include 'catalog/partials/_otp_login_modal.html' %}
+    <script src="{% static 'js/storefront/otp.js' %}" defer></script>
+{% endif %}
 
 {% block extra_js %}{% endblock %}
 </body>
