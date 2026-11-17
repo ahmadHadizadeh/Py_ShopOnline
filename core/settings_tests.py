@@ -42,6 +42,17 @@ def production_base_env(**overrides):
 
 
 
+def demo_production_env(**overrides):
+    env = production_base_env(
+        DEMO_MODE="1",
+        SMSIR_API_KEY="",
+        PAYMENT_DEFAULT_GATEWAY="mock_gateway",
+        ZARINPAL_ENVIRONMENT="sandbox",
+    )
+    env.update(overrides)
+    return env
+
+
 def zarinpal_production_env(**overrides):
     env = production_base_env(
         PAYMENT_DEFAULT_GATEWAY="zarinpal",
@@ -532,3 +543,51 @@ def test_default_language_preserves_public_storefront_locale():
 
     assert settings["LANGUAGE_CODE"] == "en-us"
 
+
+
+def test_demo_mode_requires_secure_isolated_configuration():
+    settings = load_settings_env(**demo_production_env())
+
+    assert settings["DEBUG"] is False
+    assert settings["DEMO_MODE"] is True
+    assert settings["DB_ENGINE"] == "postgresql"
+    assert settings["SMSIR_CONFIG"]["API_KEY"] == ""
+    assert settings["PAYMENT_DEFAULT_GATEWAY"] == "mock_gateway"
+    assert settings["ZARINPAL_ENVIRONMENT"] == "sandbox"
+
+
+def test_demo_mode_rejects_debug_enabled():
+    with pytest.raises(RuntimeError, match="DEMO_MODE"):
+        load_settings_env(
+            **demo_production_env(DJANGO_DEBUG="1"),
+        )
+
+
+def test_demo_mode_rejects_live_sms_credentials():
+    with pytest.raises(RuntimeError, match="SMSIR_API_KEY"):
+        load_settings_env(**demo_production_env(SMSIR_API_KEY="live-key"))
+
+
+def test_demo_mode_rejects_non_mock_payment_gateway():
+    with pytest.raises(RuntimeError, match="PAYMENT_DEFAULT_GATEWAY"):
+        load_settings_env(
+            **demo_production_env(PAYMENT_DEFAULT_GATEWAY="zarinpal"),
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"ZARINPAL_ENVIRONMENT": "production"},
+        {"ZARINPAL_MERCHANT_ID": "live-merchant"},
+        {"ZARINPAL_CALLBACK_URL": "https://shop.example.com/callback/"},
+    ],
+)
+def test_demo_mode_rejects_zarinpal_configuration(overrides):
+    with pytest.raises(RuntimeError, match="ZarinPal"):
+        load_settings_env(**demo_production_env(**overrides))
+
+
+def test_demo_mode_requires_postgresql():
+    with pytest.raises(RuntimeError, match="PostgreSQL"):
+        load_settings_env(**demo_production_env(DB_ENGINE="sqlite3"))
