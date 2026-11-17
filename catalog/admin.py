@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -748,11 +749,15 @@ class StorefrontSettingsAdmin(admin.ModelAdmin):
 
     @staticmethod
     def _is_store_owner(request):
+        user = request.user
+        if not user or not user.is_authenticated or not user.is_active:
+            return False
+        if user.is_superuser:
+            return True
         return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.is_active
-            and request.user.is_superuser
+            settings.DEMO_MODE
+            and user.is_staff
+            and user.has_perm("catalog.change_storefrontsettings")
         )
 
     def get_queryset(self, request):
