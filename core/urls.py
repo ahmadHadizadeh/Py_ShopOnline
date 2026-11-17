@@ -33,7 +33,7 @@ admin.site.index_title = "نمای کلی عملیات فروشگاه"
 urlpatterns = [
     path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="sitemap"),
     path("robots.txt", robots_txt, name="robots_txt"),
-    path("admin/", admin.site.urls),
+    path(f"{settings.ADMIN_URL_PATH}/", admin.site.urls),
     path("", include("catalog.urls", namespace="catalog")),
     path("cart/", include("cart.urls", namespace="cart")),
     path("accounts/", include("accounts.urls", namespace="accounts")),
