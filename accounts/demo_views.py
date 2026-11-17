@@ -8,6 +8,7 @@ from django.shortcuts import redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from accounts.models import Address
 from cart.services import merge_guest_cart_to_user
 from core.demo_security import DEMO_CUSTOMER_USERNAME_PREFIX
 
@@ -69,6 +70,19 @@ def demo_access_view(request):
             request,
             user=user,
             guest_session_key=guest_session_key,
+        )
+
+        Address.objects.get_or_create(
+            user=user,
+            is_default=True,
+            defaults={
+                "recipient_name": "مشتری آزمایشی",
+                "phone_number": "00000000000",
+                "postal_code": "0000000000",
+                "province": "تهران",
+                "city": "تهران",
+                "address_line": "نشانی تست؛ ارسال واقعی انجام نمی‌شود.",
+            },
         )
 
         request.session[DEMO_SESSION_USERNAME_KEY] = user.get_username()
