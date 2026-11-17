@@ -21,6 +21,7 @@ def load_settings_env(**values):
 def production_base_env(**overrides):
     env = {
         "DJANGO_DEBUG": "0",
+        "ADMIN_URL_PATH": "a" * 64,
         "SECRET_KEY": "test-production-secret",
         "ALLOWED_HOSTS": "shop.example.com,admin.example.com",
         "CSRF_TRUSTED_ORIGINS": (
@@ -84,6 +85,7 @@ def test_production_requires_secret_key():
     with pytest.raises(RuntimeError, match="SECRET_KEY"):
         load_settings_env(
             DJANGO_DEBUG="0",
+            ADMIN_URL_PATH="a" * 64,
             ALLOWED_HOSTS="example.com",
         )
 
@@ -107,6 +109,32 @@ def test_production_requires_allowed_hosts():
 
     with pytest.raises(RuntimeError, match="ALLOWED_HOSTS"):
         load_settings_env(**env)
+
+
+def test_production_requires_secret_admin_url():
+    env = production_base_env()
+    del env["ADMIN_URL_PATH"]
+
+    with pytest.raises(RuntimeError, match="ADMIN_URL_PATH"):
+        load_settings_env(**env)
+
+
+@pytest.mark.parametrize("value", ["short", "contains/slash", "has space", "x" * 129])
+def test_production_rejects_invalid_admin_url_segment(value):
+    with pytest.raises(RuntimeError, match="ADMIN_URL_PATH"):
+        load_settings_env(**production_base_env(ADMIN_URL_PATH=value))
+
+
+def test_production_accepts_high_entropy_admin_url_segment():
+    settings = load_settings_env(**production_base_env(ADMIN_URL_PATH="a" * 64))
+
+    assert settings["ADMIN_URL_PATH"] == "a" * 64
+
+
+def test_development_keeps_standard_admin_url():
+    settings = load_settings_env(DJANGO_DEBUG="1", SECRET_KEY="dev-secret")
+
+    assert settings["ADMIN_URL_PATH"] == "admin"
 
 
 def test_production_does_not_add_development_tunnel_csrf_origin():

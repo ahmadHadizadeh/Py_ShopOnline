@@ -11,7 +11,6 @@ def robots_txt(request):
     content = "\n".join([
         "User-agent: *",
         "Allow: /",
-        "Disallow: /admin/",
         "Disallow: /cart/",
         "Disallow: /accounts/",
         "Disallow: /orders/",

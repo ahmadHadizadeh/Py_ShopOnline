@@ -14,11 +14,6 @@ from django.utils.encoding import iri_to_uri
 _CASE_INSENSITIVE = re.IGNORECASE
 
 
-# Django's admin routes contain only fixed route names and numeric object IDs.
-# Lowercase the complete admin path, but never touch its query string.
-_ADMIN_PATH = re.compile(r"/admin(?:/(?P<tail>.*))?/?$", _CASE_INSENSITIVE)
-
-
 def _route(pattern, builder):
     return re.compile(pattern, _CASE_INSENSITIVE), builder
 
@@ -136,12 +131,6 @@ _ROUTE_PATTERNS = (
 
 def canonicalize_route_path(path):
     """Return the canonical path for a known route, otherwise None."""
-    admin_match = _ADMIN_PATH.fullmatch(path)
-    if admin_match:
-        tail = (admin_match.group("tail") or "").strip("/")
-        canonical_path = f"/admin/{tail.lower()}/" if tail else "/admin/"
-        return canonical_path if canonical_path != path else None
-
     for pattern, builder in _ROUTE_PATTERNS:
         match = pattern.fullmatch(path)
         if match:
