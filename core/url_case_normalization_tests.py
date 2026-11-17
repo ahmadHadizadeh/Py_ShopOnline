@@ -1,4 +1,5 @@
 from django.test import RequestFactory, TestCase, SimpleTestCase
+from django.utils.encoding import iri_to_uri
 
 from catalog.models.category import Category
 from catalog.models.product import Product
@@ -102,7 +103,7 @@ class URLCaseNormalizationIntegrationTests(TestCase):
         response = self.client.get(supplied_path)
 
         self.assertEqual(response.status_code, 308)
-        self.assertEqual(response["Location"], expected_path)
+        self.assertEqual(response["Location"], iri_to_uri(expected_path))
 
         canonical_response = self.client.get(expected_path)
         self.assertEqual(canonical_response.status_code, 200)
