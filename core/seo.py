@@ -1,22 +1,35 @@
-from django.http import HttpResponse
+from django.conf import settings
+from django.http import Http404, HttpResponse
 from django.urls import reverse
+from django.contrib.sitemaps.views import sitemap
+
+from catalog.sitemaps import sitemaps
+
 
 CANONICAL_HOST = "codeamoz.com"
 CANONICAL_ORIGIN = f"https://{CANONICAL_HOST}"
 
 
-def robots_txt(request):
-    sitemap_url = f"{CANONICAL_ORIGIN}{reverse('sitemap')}"
+def sitemap_view(request):
+    if settings.DEMO_MODE:
+        raise Http404
+    return sitemap(request, sitemaps=sitemaps)
 
-    content = "\n".join([
-        "User-agent: *",
-        "Allow: /",
-        "Disallow: /cart/",
-        "Disallow: /accounts/",
-        "Disallow: /orders/",
-        f"Sitemap: {sitemap_url}",
-        "",
-    ])
+
+def robots_txt(request):
+    if settings.DEMO_MODE:
+        content = "User-agent: *\\nDisallow: /\\n"
+    else:
+        sitemap_url = f"{CANONICAL_ORIGIN}{reverse('sitemap')}"
+        content = "\\n".join([
+            "User-agent: *",
+            "Allow: /",
+            "Disallow: /cart/",
+            "Disallow: /accounts/",
+            "Disallow: /orders/",
+            f"Sitemap: {sitemap_url}",
+            "",
+        ])
 
     return HttpResponse(
         content,
