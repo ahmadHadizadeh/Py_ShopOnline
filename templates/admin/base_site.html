@@ -3,6 +3,7 @@
 
 {% block extrahead %}
     {{ block.super }}
+    {% if demo_mode %}<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">{% endif %}
     <script src="{% static 'js/admin_sidebar.js' %}" defer></script>
 {% endblock %}
 
@@ -33,6 +34,11 @@
 {% endblock %}
 
 {% block nav-global %}
+    {% if demo_mode %}
+        <span style="display:inline-block;margin:8px 12px;padding:6px 10px;border-radius:8px;background:#fff3cd;color:#664d03;font-weight:700;">
+            محیط آزمایشی — تغییرات و تراکنش‌ها واقعی نیستند.
+        </span>
+    {% endif %}
     <a class="store-admin-top-link" href="{% url 'admin:index' %}">نمای کلی فروشگاه</a>
 {% endblock %}
 
