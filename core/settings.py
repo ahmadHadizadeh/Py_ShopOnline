@@ -306,6 +306,17 @@ else:
 if DEMO_MODE and DB_ENGINE not in {"postgres", "postgresql"}:
     raise RuntimeError("DEMO_MODE requires an isolated PostgreSQL database.")
 
+if DEMO_MODE:
+    demo_database = DATABASES["default"]
+    if (
+        demo_database.get("NAME") in {"pyshop_db", "pyshop_test_db"}
+        or demo_database.get("USER") == "pyshop"
+        or demo_database.get("TEST", {}).get("NAME") == "pyshop_test_db"
+    ):
+        raise RuntimeError(
+            "DEMO_MODE cannot use the Production database, role, or test database."
+        )
+
 
 # -------------------------------------------------------------------------
 # Password validation
