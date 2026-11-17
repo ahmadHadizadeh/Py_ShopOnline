@@ -36,9 +36,7 @@ class DemoSeedCommandTests(TestCase):
         self.assertEqual(Order.objects.count(), 5)
         self.assertEqual(InventoryMovement.objects.count(), 3)
 
-        order_statuses = dict(
-            Order.objects.values_list("status").annotate_count()
-        ) if False else {
+        order_statuses = {
             status: Order.objects.filter(status=status).count()
             for status, _label in Order.Status.choices
         }
@@ -64,14 +62,9 @@ class DemoSeedCommandTests(TestCase):
         storefront = StorefrontSettings.objects.get(pk=1)
         self.assertEqual(storefront.store_name, "فروشگاه نمونه Py_ShopOnline")
 
-        paid_products = Product.objects.filter(
-            slug__in=(
-                "nova-x5-phone",
-                "soundpods-pro",
-                "fittime-smartwatch",
-            )
-        )
-        self.assertTrue(all(product.stock < 40 for product in paid_products))
+        self.assertEqual(Product.objects.get(slug="nova-x5-phone").stock, 23)
+        self.assertEqual(Product.objects.get(slug="soundpods-pro").stock, 36)
+        self.assertEqual(Product.objects.get(slug="fittime-smartwatch").stock, 18)
 
     def test_seed_is_repeatable_and_preserves_manager_account(self):
         manager = User.objects.create_superuser(
