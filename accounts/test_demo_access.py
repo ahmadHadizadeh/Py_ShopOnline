@@ -4,7 +4,7 @@ from django.contrib.auth import SESSION_KEY, get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from accounts.models import Profile
+from accounts.models import Address, Profile
 from core.demo_security import DEMO_CUSTOMER_USERNAME_PREFIX
 
 
@@ -30,6 +30,9 @@ class DemoCustomerAccessTests(TestCase):
         self.assertFalse(user.is_superuser)
         self.assertFalse(user.has_usable_password())
         self.assertTrue(Profile.objects.filter(user=user).exists())
+        demo_address = Address.objects.get(user=user, is_default=True)
+        self.assertEqual(demo_address.phone_number, "00000000000")
+        self.assertIn("آزمایشی", demo_address.address_line)
         self.assertEqual(
             client.session["demo_customer_username"],
             user.username,
