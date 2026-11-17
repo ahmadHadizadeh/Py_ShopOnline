@@ -32,7 +32,7 @@ class DemoCustomerAccessTests(TestCase):
         self.assertTrue(Profile.objects.filter(user=user).exists())
         demo_address = Address.objects.get(user=user, is_default=True)
         self.assertEqual(demo_address.phone_number, "00000000000")
-        self.assertIn("آزمایشی", demo_address.address_line)
+        self.assertIn("تست", demo_address.address_line)
         self.assertEqual(
             client.session["demo_customer_username"],
             user.username,
