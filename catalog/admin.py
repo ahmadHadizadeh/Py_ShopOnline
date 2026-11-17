@@ -9,7 +9,10 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from core.demo_security import exclude_demo_customer_records
+from core.demo_security import (
+    exclude_demo_customer_records,
+    exclude_demo_visitor_order_movements,
+)
 from core.admin_formatting import (
     AdminDisplayFormattingMixin,
     format_jalali_datetime,
@@ -475,6 +478,9 @@ class ProductAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
 @admin.register(InventoryMovement)
 class InventoryMovementAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_visitor_order_movements(super().get_queryset(request))
+
     list_display = (
         "product_name",
         "movement_type_display",
