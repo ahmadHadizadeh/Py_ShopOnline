@@ -603,6 +603,8 @@ def test_demo_mode_requires_postgresql():
         {"DB_NAME": "pyshop_db"},
         {"DB_USER": "pyshop"},
         {"DB_TEST_NAME": "pyshop_test_db"},
+        {"DB_TEST_NAME": "pyshop_db"},
+        {"DB_TEST_NAME": "pyshop_demo_db"},
     ],
 )
 def test_demo_mode_rejects_production_database_identity(overrides):
