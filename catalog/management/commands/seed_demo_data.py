@@ -265,7 +265,11 @@ class Command(BaseCommand):
         for obj in queryset.only("pk", field_name).iterator():
             file_field = getattr(obj, field_name)
             if file_field:
-                file_field.storage.delete(file_field.name)
+                storage = file_field.storage
+                name = file_field.name
+                transaction.on_commit(
+                    lambda storage=storage, name=name: storage.delete(name)
+                )
 
     def _reset_demo_records(self):
         # The Demo database is exclusive to this application. Clear dependent
