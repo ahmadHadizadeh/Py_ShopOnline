@@ -16,7 +16,7 @@ def sitemap_view(request):
 
 def robots_txt(request):
     if settings.DEMO_MODE:
-        content = "User-agent: *\nDisallow: /\n"
+        content = "User-agent: *\nAllow: /\n"
     else:
         sitemap_url = f"{CANONICAL_ORIGIN}{reverse('sitemap')}"
         content = "\n".join([
