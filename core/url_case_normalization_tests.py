@@ -32,6 +32,43 @@ class CanonicalizeRoutePathTests(SimpleTestCase):
                     expected_path,
                 )
 
+    def test_remaining_registered_routes_normalize_route_literals_only(self):
+        """Cover route patterns that previously had no direct matrix case."""
+        cases = (
+            ("/SITEMAP.XML", "/sitemap.xml"),
+            ("/ROBOTS.TXT", "/robots.txt"),
+            ("/CART", "/cart/"),
+            ("/CART/ADD/42", "/cart/add/42/"),
+            ("/CART/ITEMS/27/UPDATE", "/cart/items/27/update/"),
+            ("/CART/ITEMS/27/REMOVE", "/cart/items/27/remove/"),
+            ("/CART/ITEMS/27/SAVE", "/cart/items/27/save/"),
+            ("/CART/CHECKOUT", "/cart/checkout/"),
+            ("/ACCOUNTS/AJAX/SEND-OTP", "/accounts/ajax/send-otp/"),
+            ("/ACCOUNTS/AJAX/VERIFY-OTP", "/accounts/ajax/verify-otp/"),
+            ("/ACCOUNTS/AJAX/CITIES", "/accounts/ajax/cities/"),
+            ("/ACCOUNTS/LOGIN", "/accounts/login/"),
+            ("/ACCOUNTS/LOGOUT", "/accounts/logout/"),
+            ("/ACCOUNTS/DASHBOARD", "/accounts/dashboard/"),
+            ("/ACCOUNTS/DASHBOARD/ORDERS", "/accounts/dashboard/orders/"),
+            ("/ACCOUNTS/DASHBOARD/ADDRESSES", "/accounts/dashboard/addresses/"),
+            ("/ACCOUNTS/DASHBOARD/ADDRESSES/CREATE", "/accounts/dashboard/addresses/create/"),
+            ("/ACCOUNTS/DASHBOARD/ADDRESSES/42/UPDATE", "/accounts/dashboard/addresses/42/update/"),
+            ("/ACCOUNTS/DASHBOARD/ADDRESSES/42/DELETE", "/accounts/dashboard/addresses/42/delete/"),
+            ("/ORDERS/INITIATE-PAYMENT/Order-AbC-2026", "/orders/initiate-payment/Order-AbC-2026/"),
+            ("/ORDERS/PAYMENT/CALLBACK", "/orders/payment/callback/"),
+            ("/ORDERS/PAYMENT/FAILED/Order-AbC-2026", "/orders/payment/failed/Order-AbC-2026/"),
+            ("/ORDERS/MOCK-PAYMENT-GATEWAY", "/orders/mock-payment-gateway/"),
+            ("/ORDERS/ORDER/CONFIRM/Order-AbC-2026", "/orders/order/confirm/Order-AbC-2026/"),
+        )
+
+        for supplied_path, expected_path in cases:
+            with self.subTest(supplied_path=supplied_path):
+                self.assertEqual(
+                    canonicalize_route_path(supplied_path),
+                    expected_path,
+                )
+                self.assertIsNone(canonicalize_route_path(expected_path))
+
     def test_already_canonical_paths_are_not_redirected(self):
         canonical_paths = (
             "/",
