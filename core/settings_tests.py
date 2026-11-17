@@ -595,3 +595,16 @@ def test_demo_mode_rejects_zarinpal_configuration(overrides):
 def test_demo_mode_requires_postgresql():
     with pytest.raises(RuntimeError, match="PostgreSQL"):
         load_settings_env(**demo_production_env(DB_ENGINE="sqlite3"))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"DB_NAME": "pyshop_db"},
+        {"DB_USER": "pyshop"},
+        {"DB_TEST_NAME": "pyshop_test_db"},
+    ],
+)
+def test_demo_mode_rejects_production_database_identity(overrides):
+    with pytest.raises(RuntimeError, match="cannot use the Production database"):
+        load_settings_env(**demo_production_env(**overrides))
