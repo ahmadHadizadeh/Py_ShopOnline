@@ -210,7 +210,7 @@ class DemoSeoIsolationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertEqual(content, "User-agent: *\nDisallow: /\n")
+        self.assertEqual(content, "User-agent: *\nAllow: /\n")
         self.assertNotIn("Sitemap:", content)
 
     def test_demo_sitemap_is_not_published(self):
