@@ -1,7 +1,7 @@
 from django.urls import path
 from django.contrib.auth.views import LogoutView
 from django.contrib.auth import views as auth_views
-from . import otp_views, views
+from . import demo_views, otp_views, views
 
 app_name = "accounts"
 
@@ -9,6 +9,7 @@ urlpatterns = [
     # OTP Authentication URLs
     path("ajax/send-otp/", otp_views.send_otp_view, name="send_otp"),
     path("ajax/verify-otp/", otp_views.verify_otp_view, name="verify_otp"),
+    path("demo-access/", demo_views.demo_access_view, name="demo_access"),
     path("logout/", LogoutView.as_view(next_page="/"), name="logout"),
     path("login/", auth_views.LoginView.as_view(), name="login"),
     # Dashboard & Addresses
