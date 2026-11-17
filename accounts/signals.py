@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import ValidationError
@@ -47,13 +48,28 @@ def ensure_store_manager_group(sender, using, **kwargs):
     if sender.label != "orders":
         return
 
+    permission_codenames = {
+        app_label: tuple(codenames)
+        for app_label, codenames in STORE_MANAGER_PERMISSION_CODENAMES.items()
+    }
+    if settings.DEMO_MODE:
+        permission_codenames["catalog"] = (
+            *permission_codenames.get("catalog", ()),
+            "change_storefrontsettings",
+        )
+        permission_codenames["orders"] = (
+            *permission_codenames.get("orders", ()),
+            "add_shippingmethod",
+            "change_shippingmethod",
+        )
+
     expected = {
         (app_label, codename)
-        for app_label, codenames in STORE_MANAGER_PERMISSION_CODENAMES.items()
+        for app_label, codenames in permission_codenames.items()
         for codename in codenames
     }
     permission_filter = None
-    for app_label, codenames in STORE_MANAGER_PERMISSION_CODENAMES.items():
+    for app_label, codenames in permission_codenames.items():
         condition = Q(content_type__app_label=app_label, codename__in=codenames)
         permission_filter = condition if permission_filter is None else permission_filter | condition
 
