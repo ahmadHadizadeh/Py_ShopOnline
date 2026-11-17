@@ -22,3 +22,19 @@ def demo_product_asset(product):
         getattr(product, "slug", ""),
         "images/demo/products/default.svg",
     )
+
+
+DEMO_CATEGORY_ASSETS = {
+    "digital-gadgets": "images/demo/products/smartphone.svg",
+    "accessories": "images/demo/products/headphones.svg",
+    "smart-home": "images/demo/products/smart-lamp.svg",
+}
+
+
+@register.simple_tag
+def demo_category_asset(category):
+    """Return a bundled illustration for a seeded Demo category."""
+    return DEMO_CATEGORY_ASSETS.get(
+        getattr(category, "slug", ""),
+        "images/demo/products/default.svg",
+    )
