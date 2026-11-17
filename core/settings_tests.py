@@ -391,6 +391,93 @@ def test_production_can_select_sandbox_zarinpal_while_debug_is_false():
     )
 
 
+def test_demo_mode_is_disabled_by_default():
+    settings = load_settings_env(**production_base_env())
+
+    assert settings["DEMO_MODE"] is False
+
+
+def test_demo_mode_accepts_only_an_isolated_secure_sandbox_configuration():
+    settings = load_settings_env(
+        **production_base_env(
+            DEMO_MODE="true",
+            DEMO_HOST="demo.example.com",
+            PAYMENT_DEFAULT_GATEWAY="zarinpal",
+            ALLOWED_HOSTS="demo.example.com",
+            DB_NAME="pyshop_demo_db",
+            DB_USER="pyshop_demo",
+            ZARINPAL_ENVIRONMENT="sandbox",
+            ZARINPAL_MERCHANT_ID="00000000-0000-0000-0000-000000000000",
+            ZARINPAL_CALLBACK_URL=(
+                "https://demo.example.com/orders/payment/callback/zarinpal/"
+            ),
+        )
+    )
+
+    assert settings["DEMO_MODE"] is True
+    assert settings["DEMO_HOST"] == "demo.example.com"
+    assert settings["DEBUG"] is False
+    assert settings["PAYMENT_DEFAULT_GATEWAY"] == "zarinpal"
+    assert settings["ZARINPAL_ENVIRONMENT"] == "sandbox"
+
+
+def test_demo_mode_rejects_debug_and_non_sandbox_gateway_configurations():
+    with pytest.raises(RuntimeError, match="DEMO_MODE requires DJANGO_DEBUG=0"):
+        load_settings_env(
+            **production_base_env(
+                DJANGO_DEBUG="1",
+                DEMO_MODE="1",
+            )
+        )
+
+    demo_isolated_env = production_base_env(
+        DEMO_MODE="1",
+        DEMO_HOST="demo.example.com",
+        ALLOWED_HOSTS="demo.example.com",
+        DB_NAME="pyshop_demo_db",
+        DB_USER="pyshop_demo",
+    )
+    with pytest.raises(
+        RuntimeError,
+        match="DEMO_MODE requires PAYMENT_DEFAULT_GATEWAY='zarinpal'",
+    ):
+        load_settings_env(**demo_isolated_env)
+
+    with pytest.raises(
+        RuntimeError,
+        match="DEMO_MODE requires ZARINPAL_ENVIRONMENT='sandbox'",
+    ):
+        load_settings_env(
+            **zarinpal_production_env(
+                DEMO_MODE="1",
+                DEMO_HOST="demo.example.com",
+                ALLOWED_HOSTS="demo.example.com",
+                DB_NAME="pyshop_demo_db",
+                DB_USER="pyshop_demo",
+            )
+        )
+
+
+def test_demo_mode_rejects_shared_production_database_or_host_configuration():
+    with pytest.raises(
+        RuntimeError,
+        match="dedicated DB_NAME and DB_USER",
+    ):
+        load_settings_env(
+            **production_base_env(
+                DEMO_MODE="1",
+                DEMO_HOST="demo.example.com",
+                PAYMENT_DEFAULT_GATEWAY="zarinpal",
+                ALLOWED_HOSTS="demo.example.com",
+                ZARINPAL_ENVIRONMENT="sandbox",
+                ZARINPAL_MERCHANT_ID="00000000-0000-0000-0000-000000000000",
+                ZARINPAL_CALLBACK_URL=(
+                    "https://demo.example.com/orders/payment/callback/zarinpal/"
+                ),
+            )
+        )
+
+
 def test_production_sandbox_rejects_a_non_sandbox_endpoint():
     with pytest.raises(RuntimeError, match="(?i)sandbox"):
         load_settings_env(

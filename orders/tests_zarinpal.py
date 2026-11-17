@@ -282,6 +282,45 @@ class ZarinPalPaymentFlowTests(TestCase):
         self.assertFalse(Payment.objects.filter(order=self.order).exists())
         mocked_urlopen.assert_not_called()
 
+    @override_settings(DEMO_MODE=True)
+    @patch("orders.payment.gateways.urlopen")
+    def test_demo_mode_allows_authenticated_nonstaff_sandbox_payment(
+        self, mocked_urlopen
+    ):
+        nonstaff = User.objects.create_user(
+            username="zarinpal-demo-customer",
+            password="Test-password-789!",
+        )
+        self.order.user = nonstaff
+        self.order.save(update_fields=["user"])
+        self.client.force_login(nonstaff)
+        mocked_urlopen.return_value = _FakeResponse(
+            {
+                "data": {
+                    "code": 100,
+                    "message": "Success",
+                    "authority": "DEMO0001",
+                }
+            }
+        )
+
+        response = self.client.post(self.initiate_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            "https://sandbox.zarinpal.com/pg/StartPay/DEMO0001",
+        )
+        self.assertTrue(
+            Payment.objects.filter(
+                order=self.order,
+                gateway_name="zarinpal",
+                transaction_code="DEMO0001",
+            ).exists()
+        )
+        mocked_urlopen.assert_called_once()
+
+
     @patch("orders.payment.gateways.urlopen")
     def test_sandbox_request_callback_verification_and_idempotency(
         self, mocked_urlopen
