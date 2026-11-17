@@ -162,3 +162,26 @@ class CanonicalMetadataTests(TestCase):
             content,
         )
         self.assertNotIn("Sitemap: https://www.codeamoz.com/", content)
+
+
+@override_settings(DEMO_MODE=True)
+class DemoSeoIsolationTests(TestCase):
+    def test_demo_robots_disallow_entire_site_without_advertising_sitemap(self):
+        response = self.client.get(
+            reverse("robots_txt"),
+            secure=True,
+            HTTP_HOST="testserver",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertEqual(content, "User-agent: *\\nDisallow: /\\n")
+        self.assertNotIn("Sitemap:", content)
+
+    def test_demo_sitemap_is_not_published(self):
+        response = self.client.get(
+            reverse("sitemap"),
+            secure=True,
+            HTTP_HOST="testserver",
+        )
+        self.assertEqual(response.status_code, 404)
