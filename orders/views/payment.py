@@ -44,7 +44,7 @@ class ProcessPaymentView(LoginRequiredMixin, View):
             )
             return redirect("cart:detail")
 
-        if not settings.DEBUG and get_default_gateway_name() == "mock_gateway":
+        if not settings.DEBUG and not settings.DEMO_MODE and get_default_gateway_name() == "mock_gateway":
             messages.error(
                 request,
                 "درگاه پرداخت واقعی هنوز برای محیط تولید پیکربندی نشده است.",
