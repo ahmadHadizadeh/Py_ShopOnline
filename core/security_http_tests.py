@@ -272,3 +272,13 @@ class PaymentCallbackHttpContractTests(TestCase):
         )
 
         assert response.status_code == 403
+
+
+@override_settings(DEMO_MODE=True)
+@pytest.mark.django_db
+def test_demo_responses_receive_noindex_header():
+    client = Client()
+    response = client.get(reverse("robots_txt"))
+
+    assert response.status_code == 200
+    assert response["X-Robots-Tag"] == "noindex, nofollow, noarchive, nosnippet"
