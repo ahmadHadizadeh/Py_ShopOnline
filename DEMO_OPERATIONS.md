@@ -107,8 +107,8 @@ For a smaller cleanup without resetting the sample catalog, use:
 
 ## Public discovery and abuse controls
 
-- `robots.txt` disallows the entire Demo site and does not publish a sitemap.
-- Dynamic responses send `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`.
+- `robots.txt` allows crawlers to read the Demo response headers but does not publish a sitemap. This is deliberate: blocking crawl can prevent engines from observing `noindex`.
+- Dynamic responses send `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`, and HTML pages include a matching robots meta tag.
 - Storefront pages omit Production canonical and Open Graph URL metadata.
 - Configure Nginx rate limits for `/accounts/demo-access/` and
   `/management/login/`. Trust only Nginx-normalized client IP information.
