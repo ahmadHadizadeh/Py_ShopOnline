@@ -7,7 +7,7 @@ from catalog.models.storefront_settings import StorefrontSettings
 def storefront_categories(request):
     """Expose active categories to storefront templates without querying on admin pages."""
     if request.path.startswith(f"/{settings.ADMIN_URL_PATH}/"):
-        return {"demo_mode": settings.DEMO_MODE}
+        return {"demo_mode": True} if settings.DEMO_MODE else {}
     storefront_settings = StorefrontSettings.objects.filter(
         pk=StorefrontSettings.SINGLETON_PK
     ).first()
