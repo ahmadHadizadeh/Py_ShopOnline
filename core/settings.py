@@ -74,6 +74,10 @@ def _required_env(name: str) -> str:
 # -------------------------------------------------------------------------
 
 DEBUG = _env_bool("DJANGO_DEBUG", default=True)
+DEMO_MODE = _env_bool("DEMO_MODE", default=False)
+
+if DEMO_MODE and DEBUG:
+    raise RuntimeError("DEMO_MODE requires DJANGO_DEBUG=0.")
 
 # Production admin URL is configured per installation. Accept either a
 # readable lowercase slug for customer-facing access or an existing opaque
@@ -232,6 +236,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "core.admin_locale.AdminLocaleMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.demo_security.DemoNoIndexMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -298,6 +303,25 @@ else:
         "Use 'sqlite3' or 'postgresql'."
     )
 
+if DEMO_MODE and DB_ENGINE not in {"postgres", "postgresql"}:
+    raise RuntimeError("DEMO_MODE requires an isolated PostgreSQL database.")
+
+if DEMO_MODE:
+    demo_database = DATABASES["default"]
+    demo_database_name = demo_database.get("NAME")
+    demo_database_user = demo_database.get("USER")
+    demo_test_database_name = demo_database.get("TEST", {}).get("NAME")
+    production_database_names = {"pyshop_db", "pyshop_test_db"}
+    if (
+        demo_database_name in production_database_names
+        or demo_database_user == "pyshop"
+        or demo_test_database_name in production_database_names
+        or demo_test_database_name == demo_database_name
+    ):
+        raise RuntimeError(
+            "DEMO_MODE cannot use the Production database, role, or test database."
+        )
+
 
 # -------------------------------------------------------------------------
 # Password validation
@@ -354,7 +378,10 @@ SMSIR_CONFIG = {
     "TEMPLATE_ID": int(os.getenv("SMSIR_TEMPLATE_ID", "358253") or 358253),
 }
 
-if not DEBUG and not SMSIR_CONFIG["API_KEY"]:
+if DEMO_MODE and SMSIR_CONFIG["API_KEY"]:
+    raise RuntimeError("SMSIR_API_KEY must be empty when DEMO_MODE=1.")
+
+if not DEBUG and not DEMO_MODE and not SMSIR_CONFIG["API_KEY"]:
     raise RuntimeError("SMSIR_API_KEY must be set when DJANGO_DEBUG=0.")
 
 
@@ -381,6 +408,9 @@ if not PAYMENT_DEFAULT_GATEWAY:
             "PAYMENT_DEFAULT_GATEWAY must be set when DJANGO_DEBUG=0."
         )
 
+if DEMO_MODE and PAYMENT_DEFAULT_GATEWAY != "mock_gateway":
+    raise RuntimeError("DEMO_MODE requires PAYMENT_DEFAULT_GATEWAY=mock_gateway.")
+
 
 # -------------------------------------------------------------------------
 # ZarinPal
@@ -389,7 +419,7 @@ if not PAYMENT_DEFAULT_GATEWAY:
 # can explicitly use Sandbox until its live merchant account is activated.
 ZARINPAL_ENVIRONMENT = (
     os.getenv("ZARINPAL_ENVIRONMENT", "").strip().lower()
-    or ("sandbox" if DEBUG else "production")
+    or ("sandbox" if DEBUG or DEMO_MODE else "production")
 )
 if ZARINPAL_ENVIRONMENT not in {"sandbox", "production"}:
     raise RuntimeError(
@@ -398,6 +428,14 @@ if ZARINPAL_ENVIRONMENT not in {"sandbox", "production"}:
 
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_MERCHANT_ID", "").strip()
 ZARINPAL_CALLBACK_URL = os.getenv("ZARINPAL_CALLBACK_URL", "").strip()
+if DEMO_MODE and (
+    ZARINPAL_ENVIRONMENT != "sandbox"
+    or ZARINPAL_MERCHANT_ID
+    or ZARINPAL_CALLBACK_URL
+):
+    raise RuntimeError(
+        "DEMO_MODE must not contain live or sandbox ZarinPal merchant credentials."
+    )
 ZARINPAL_CURRENCY = (
     os.getenv("ZARINPAL_CURRENCY", "IRT").strip().upper() or "IRT"
 )

@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -8,6 +9,10 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
+from core.demo_security import (
+    exclude_demo_customer_records,
+    exclude_demo_visitor_order_movements,
+)
 from core.admin_formatting import (
     AdminDisplayFormattingMixin,
     format_jalali_datetime,
@@ -473,6 +478,9 @@ class ProductAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
 @admin.register(InventoryMovement)
 class InventoryMovementAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_visitor_order_movements(super().get_queryset(request))
+
     list_display = (
         "product_name",
         "movement_type_display",
@@ -594,6 +602,9 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Review)
 class ReviewAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_customer_records(super().get_queryset(request))
+
     date_display_fields = {"created_display": "created"}
     list_display = ("product", "user", "rating", "is_approved", "created_display")
     list_filter = ("is_approved", "created")
@@ -744,11 +755,15 @@ class StorefrontSettingsAdmin(admin.ModelAdmin):
 
     @staticmethod
     def _is_store_owner(request):
+        user = request.user
+        if not user or not user.is_authenticated or not user.is_active:
+            return False
+        if user.is_superuser:
+            return True
         return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.is_active
-            and request.user.is_superuser
+            settings.DEMO_MODE
+            and user.is_staff
+            and user.has_perm("catalog.change_storefrontsettings")
         )
 
     def get_queryset(self, request):

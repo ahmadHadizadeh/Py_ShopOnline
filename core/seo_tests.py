@@ -162,3 +162,61 @@ class CanonicalMetadataTests(TestCase):
             content,
         )
         self.assertNotIn("Sitemap: https://www.codeamoz.com/", content)
+
+
+@override_settings(DEMO_MODE=True)
+class DemoSeoIsolationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.category = Category.objects.create(
+            name="Demo SEO category",
+            slug="demo-seo-category",
+            is_active=True,
+        )
+        cls.product = Product.objects.create(
+            name="Demo SEO product",
+            slug="demo-seo-product",
+            category=cls.category,
+            is_active=True,
+            stock=5,
+        )
+
+    def test_demo_home_and_product_pages_do_not_publish_production_canonicals(self):
+        home = self.client.get(
+            reverse("catalog:product_list"),
+            secure=True,
+            HTTP_HOST="testserver",
+        )
+        product = self.client.get(
+            self.product.get_absolute_url(),
+            secure=True,
+            HTTP_HOST="testserver",
+        )
+
+        self.assertEqual(home.status_code, 200)
+        self.assertEqual(product.status_code, 200)
+        for response in (home, product):
+            content = response.content.decode()
+            self.assertNotIn('rel="canonical"', content)
+            self.assertNotIn('property="og:url"', content)
+            self.assertContains(response, 'name="robots" content="noindex, nofollow, noarchive, nosnippet"')
+
+    def test_demo_robots_disallow_entire_site_without_advertising_sitemap(self):
+        response = self.client.get(
+            reverse("robots_txt"),
+            secure=True,
+            HTTP_HOST="testserver",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertEqual(content, "User-agent: *\nAllow: /\n")
+        self.assertNotIn("Sitemap:", content)
+
+    def test_demo_sitemap_is_not_published(self):
+        response = self.client.get(
+            reverse("sitemap"),
+            secure=True,
+            HTTP_HOST="testserver",
+        )
+        self.assertEqual(response.status_code, 404)

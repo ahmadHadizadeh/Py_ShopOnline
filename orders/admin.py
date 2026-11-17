@@ -4,6 +4,7 @@ from django.db import transaction
 from django.utils.html import format_html
 
 from core.admin_formatting import AdminDisplayFormattingMixin, format_toman
+from core.demo_security import exclude_demo_customer_records
 
 from .models import Order, OrderAddressSnapshot, OrderItem, Payment, ShippingMethod
 from .services import OrderService
@@ -158,6 +159,9 @@ class StockReductionFilter(admin.SimpleListFilter):
 
 @admin.register(Order)
 class OrderAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_customer_records(super().get_queryset(request))
+
     money_display_fields = {"get_final_amount_display": "final_amount"}
     list_per_page = 25
     date_hierarchy = "created"
@@ -380,6 +384,12 @@ class OrderAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_customer_records(
+            super().get_queryset(request),
+            user_lookup="order__user__username",
+        )
+
     money_display_fields = {
         "unit_price": "unit_price",
         "subtotal_price": "subtotal_price",
@@ -425,6 +435,9 @@ class OrderItemAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_customer_records(super().get_queryset(request))
+
     money_display_fields = {"amount_display": "amount"}
     list_per_page = 25
     date_hierarchy = "created"
@@ -517,6 +530,12 @@ class PaymentAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 
 @admin.register(OrderAddressSnapshot)
 class OrderAddressSnapshotAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
+    def get_queryset(self, request):
+        return exclude_demo_customer_records(
+            super().get_queryset(request),
+            user_lookup="order__user__username",
+        )
+
     list_per_page = 25
     date_hierarchy = "created"
     list_display = (

@@ -6,7 +6,7 @@ from importlib import import_module
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
 from django.db import DatabaseError, transaction
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -48,6 +48,8 @@ def get_safe_login_redirect(request, next_url):
 
 @require_POST
 def send_otp_view(request):
+    if settings.DEMO_MODE:
+        raise Http404
     data = parse_json_request(request)
     if data is None:
         return JsonResponse(
@@ -154,6 +156,8 @@ def _restore_login_request_state(
 
 @require_POST
 def verify_otp_view(request):
+    if settings.DEMO_MODE:
+        raise Http404
     data = parse_json_request(request)
     if data is None:
         return JsonResponse(

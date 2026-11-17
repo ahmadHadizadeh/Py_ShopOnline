@@ -1,11 +1,14 @@
 {% extends "catalog/base.html" %}
-{% load static %}
+{% load static demo_assets %}
+{% demo_product_asset product as demo_asset %}
 
 {% block title %}{{ product.name }} | جزئیات محصول{% endblock %}
 
 {% block extra_head %}
+{% if not demo_mode %}
 <link rel="canonical" href="https://codeamoz.com{{ product.get_absolute_url }}">
 <meta property="og:url" content="https://codeamoz.com{{ product.get_absolute_url }}">
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -47,6 +50,14 @@
                         id="main-product-image"
                         src="{{ product.image.url }}"
                         data-original-src="{{ product.image.url }}"
+                        alt="{{ product.name }}"
+                        class="max-h-80 max-w-full object-contain rounded-lg transition-transform duration-200 ease-out select-none"
+                    >
+                {% elif demo_mode %}
+                    <img
+                        id="main-product-image"
+                        src="{% static demo_asset %}"
+                        data-original-src="{% static demo_asset %}"
                         alt="{{ product.name }}"
                         class="max-h-80 max-w-full object-contain rounded-lg transition-transform duration-200 ease-out select-none"
                     >

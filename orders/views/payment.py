@@ -44,7 +44,7 @@ class ProcessPaymentView(LoginRequiredMixin, View):
             )
             return redirect("cart:detail")
 
-        if not settings.DEBUG and get_default_gateway_name() == "mock_gateway":
+        if not settings.DEBUG and not settings.DEMO_MODE and get_default_gateway_name() == "mock_gateway":
             messages.error(
                 request,
                 "درگاه پرداخت واقعی هنوز برای محیط تولید پیکربندی نشده است.",
@@ -93,7 +93,9 @@ class PaymentCallbackView(View):
             or get_default_gateway_name()
         )
 
-        if gateway_name == "mock_gateway" and not settings.DEBUG:
+        if settings.DEMO_MODE and gateway_name != "mock_gateway":
+            raise Http404
+        if gateway_name == "mock_gateway" and not (settings.DEBUG or settings.DEMO_MODE):
             raise Http404
 
         data = {
@@ -153,7 +155,7 @@ class PaymentFailedView(LoginRequiredMixin, TemplateView):
 
 
 def mock_payment_gateway_view(request):
-    if not settings.DEBUG or not request.user.is_authenticated:
+    if not (settings.DEBUG or settings.DEMO_MODE) or not request.user.is_authenticated:
         raise Http404
 
     trxid = request.GET.get("trxid")

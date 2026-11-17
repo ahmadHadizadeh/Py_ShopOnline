@@ -19,9 +19,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib.sitemaps.views import sitemap
-from catalog.sitemaps import sitemaps
-from core.seo import robots_txt
+from core.seo import robots_txt, sitemap_view
 
 admin.site.site_header = "مدیریت فروشگاه"
 admin.site.site_title = "پنل مدیریت فروشگاه"
@@ -31,7 +29,7 @@ admin.site.index_title = "نمای کلی عملیات فروشگاه"
 
 # 🚦 Police Traffic 🚦
 urlpatterns = [
-    path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="sitemap"),
+    path("sitemap.xml", sitemap_view, name="sitemap"),
     path("robots.txt", robots_txt, name="robots_txt"),
     path(f"{settings.ADMIN_URL_PATH}/", admin.site.urls),
     path("", include("catalog.urls", namespace="catalog")),
