@@ -1,11 +1,13 @@
+from django.conf import settings
+
 from catalog.models.category import Category
 from catalog.models.storefront_settings import StorefrontSettings
 
 
 def storefront_categories(request):
     """Expose active categories to storefront templates without querying on admin pages."""
-    if request.path.startswith("/admin/"):
-        return {}
+    if request.path.startswith(f"/{settings.ADMIN_URL_PATH}/"):
+        return {"demo_mode": settings.DEMO_MODE}
     storefront_settings = StorefrontSettings.objects.filter(
         pk=StorefrontSettings.SINGLETON_PK
     ).first()
@@ -15,6 +17,7 @@ def storefront_categories(request):
         else StorefrontSettings.DEFAULT_STORE_NAME
     )
     return {
+        "demo_mode": settings.DEMO_MODE,
         "categories": Category.objects.filter(is_active=True),
         "storefront_name": storefront_name,
         "storefront_settings": storefront_settings,
