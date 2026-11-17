@@ -24,3 +24,17 @@ class DemoNoIndexMiddleware:
         if settings.DEMO_MODE:
             response["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet"
         return response
+
+
+
+def exclude_demo_visitor_order_movements(queryset):
+    """Hide stock movement rows linked to private visitor-owned Demo orders."""
+    if not settings.DEMO_MODE:
+        return queryset
+
+    from orders.models import Order
+
+    visitor_order_numbers = Order.objects.filter(
+        user__username__startswith=DEMO_CUSTOMER_USERNAME_PREFIX
+    ).values("order_number")
+    return queryset.exclude(order_number__in=visitor_order_numbers)
