@@ -65,7 +65,7 @@ class SeoEndpointTests(TestCase):
 
         content = response.content.decode()
         self.assertIn("User-agent: *", content)
-        self.assertIn("Disallow: /admin/", content)
+        self.assertNotIn("/admin/", content)
         self.assertIn("Disallow: /cart/", content)
         self.assertIn(
             "Sitemap: https://codeamoz.com/sitemap.xml",
