@@ -48,6 +48,10 @@ def demo_production_env(**overrides):
         SMSIR_API_KEY="",
         PAYMENT_DEFAULT_GATEWAY="mock_gateway",
         ZARINPAL_ENVIRONMENT="sandbox",
+        DB_NAME="pyshop_demo_db",
+        DB_USER="pyshop_demo",
+        DB_PASSWORD="test-demo-db-password",
+        DB_TEST_NAME="pyshop_demo_test_db",
     )
     env.update(overrides)
     return env
