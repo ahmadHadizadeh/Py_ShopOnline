@@ -303,6 +303,9 @@ else:
         "Use 'sqlite3' or 'postgresql'."
     )
 
+if DEMO_MODE and DB_ENGINE not in {"postgres", "postgresql"}:
+    raise RuntimeError("DEMO_MODE requires an isolated PostgreSQL database.")
+
 
 # -------------------------------------------------------------------------
 # Password validation
