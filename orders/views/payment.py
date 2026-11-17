@@ -36,6 +36,7 @@ class ProcessPaymentView(LoginRequiredMixin, View):
             not settings.DEBUG
             and get_default_gateway_name() == "zarinpal"
             and getattr(settings, "ZARINPAL_ENVIRONMENT", "production") == "sandbox"
+            and not getattr(settings, "DEMO_MODE", False)
             and not request.user.is_staff
         ):
             messages.error(

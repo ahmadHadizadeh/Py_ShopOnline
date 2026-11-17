@@ -396,6 +396,30 @@ if ZARINPAL_ENVIRONMENT not in {"sandbox", "production"}:
         "ZARINPAL_ENVIRONMENT must be 'sandbox' or 'production'."
     )
 
+# Demo access is explicit and independent from DEBUG. It is only valid for an
+# isolated PostgreSQL database and a dedicated Demo hostname.
+DEMO_MODE = _env_bool("DEMO_MODE", default=False)
+DEMO_HOST = os.getenv("DEMO_HOST", "").strip().lower()
+if DEMO_MODE:
+    if DEBUG:
+        raise RuntimeError("DEMO_MODE requires DJANGO_DEBUG=0.")
+    if DB_ENGINE not in {"postgres", "postgresql"}:
+        raise RuntimeError("DEMO_MODE requires PostgreSQL.")
+    demo_db_name = str(DATABASES["default"]["NAME"]).strip().lower()
+    demo_db_user = str(DATABASES["default"]["USER"]).strip().lower()
+    if "demo" not in demo_db_name or "demo" not in demo_db_user:
+        raise RuntimeError(
+            "DEMO_MODE requires dedicated DB_NAME and DB_USER values containing 'demo'."
+        )
+    if not DEMO_HOST or ALLOWED_HOSTS != [DEMO_HOST]:
+        raise RuntimeError(
+            "DEMO_MODE requires DEMO_HOST to be the only ALLOWED_HOSTS entry."
+        )
+    if PAYMENT_DEFAULT_GATEWAY != "zarinpal":
+        raise RuntimeError("DEMO_MODE requires PAYMENT_DEFAULT_GATEWAY='zarinpal'.")
+    if ZARINPAL_ENVIRONMENT != "sandbox":
+        raise RuntimeError("DEMO_MODE requires ZARINPAL_ENVIRONMENT='sandbox'.")
+
 ZARINPAL_MERCHANT_ID = os.getenv("ZARINPAL_MERCHANT_ID", "").strip()
 ZARINPAL_CALLBACK_URL = os.getenv("ZARINPAL_CALLBACK_URL", "").strip()
 ZARINPAL_CURRENCY = (
