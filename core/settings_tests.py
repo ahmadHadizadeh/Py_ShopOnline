@@ -85,6 +85,7 @@ def test_production_requires_secret_key():
     with pytest.raises(RuntimeError, match="SECRET_KEY"):
         load_settings_env(
             DJANGO_DEBUG="0",
+            ADMIN_URL_PATH="a" * 64,
             ALLOWED_HOSTS="example.com",
         )
 
