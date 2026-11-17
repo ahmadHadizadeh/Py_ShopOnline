@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 import os
+import re
 import secrets
 from urllib.parse import urlsplit
 
@@ -73,6 +74,21 @@ def _required_env(name: str) -> str:
 # -------------------------------------------------------------------------
 
 DEBUG = _env_bool("DJANGO_DEBUG", default=True)
+
+# Production admin URL is a high-entropy path segment supplied only through
+# the deployment environment. Development keeps Django's conventional URL.
+if DEBUG:
+    ADMIN_URL_PATH = "admin"
+else:
+    ADMIN_URL_PATH = _required_env("ADMIN_URL_PATH")
+    if (
+        len(ADMIN_URL_PATH) < 32
+        or len(ADMIN_URL_PATH) > 128
+        or not re.fullmatch(r"[A-Za-z0-9_-]+", ADMIN_URL_PATH)
+    ):
+        raise RuntimeError(
+            "ADMIN_URL_PATH must be a 32-128 character URL-safe path segment."
+        )
 
 # SECRET_KEY is always read from the environment. In development only, when
 # a key was not supplied, generate an ephemeral key so no reusable secret is
