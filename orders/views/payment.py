@@ -93,6 +93,8 @@ class PaymentCallbackView(View):
             or get_default_gateway_name()
         )
 
+        if settings.DEMO_MODE and gateway_name != "mock_gateway":
+            raise Http404
         if gateway_name == "mock_gateway" and not (settings.DEBUG or settings.DEMO_MODE):
             raise Http404
 
