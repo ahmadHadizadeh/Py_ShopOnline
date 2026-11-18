@@ -213,7 +213,7 @@ PRODUCTS = [
         "image_urls": [
             "https://shop.r10s.jp/samsungonline/cabinet/prd/tab_a9plus/a9plus.jpg",
             "https://images.tcdn.com.br/img/img_prod/777993/tablet_samsung_galaxy_tab_a9_wi_fi_11_64gb_4gb_octa_core_2_2ghz_android_bivolt_grafite_129723_1_69fe5f4ff3c44e5951e36b63a2050446.jpg",
-            "https://asset.m-gs.kr/prod/1042424358/1/550",
+            "https://cdn.cimri.io/image/1000x1000/samsung-galaxy-tab-a9-plus-sm-x210-wi-fi-128gb-11-inc-gumus-tablet-pc_824618537.jpg",
         ],
     },
     {
@@ -260,8 +260,8 @@ PRODUCTS = [
             ("حافظه RAM", "۳۲ گیگابایت", 20000000),
         ],
         "pages": [
-            "https://www.asus.com/tw/laptops/for-home/vivobook/asus-vivobook-15-x1504/shop/",
-            "https://itmarrket.com/product-category/%D9%84%D9%BE-%D8%AA%D8%A7%D9%BE/%D8%A8%D8%B1%D8%A7%D8%B3%D8%A7%D8%B3-%D8%B3%D8%B1%DB%8C/vivobook/page/4/?orderby=price",
+            "https://www.asus.com/laptops/for-students/vivobook/asus-vivobook-15-x1504/",
+            "https://www.asus.com/bt/laptops/for-home/vivobook/asus-vivobook-15-x1504/",
         ],
         "image_urls": [
             "https://dlcdnwebimgs.asus.com/gain/0dea7490-edcd-4bfb-80e4-0324085f46fc/",
@@ -318,6 +318,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://www.regard.ru/api/photo/goods/6617258.png",
+            "https://media.falabella.com/falabellaPE/141657575_03/w%3D1500%2Ch%3D1500%2Cfit%3Dcover",
         ],
     },
     {
@@ -366,6 +367,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://www.sysllc.ae/pub/media/catalog/product/a/r/archer-c6_1.jpg",
+            "https://bizweb.dktcdn.net/100/592/668/products/screenshot-2025-09-10-145900.png?v=1757491226440",
             "https://cdn.shopify.com/s/files/1/0587/4348/8710/products/11.0TL-ARCHERC6_a70a3389-bdab-4673-8e50-e1ece83a9c39.png?v=1653358036",
         ],
     },
@@ -415,6 +417,7 @@ PRODUCTS = [
             "https://static.tp-link.com/upload/image-line/TL-SG108_UN_5.0_03_normal_20231024111420i.jpg",
             "https://static.tp-link.com/upload/image-line/TL-SG108_UN_5.0_04_normal_20231024111420b.jpg",
             "https://static.tp-link.com/upload/image-line/TL-SG108_UN_5.0_05_normal_20231024111421f.jpg",
+            "https://gfx3.senetic.com/akeneo-catalog/f/6/3/a/f63aee7af250f564db4f8aa58d0955678e803897_1662055_TL_SG108_image2.jpg",
         ],
     },
     {
@@ -463,6 +466,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://powermaccenter.com/cdn/shop/files/SNYI099BLK012000x2000.jpg?v=1692058746&width=1445",
+            "https://digitalcontent.api.tesco.com/v2/media/ghs/9c71980c-0884-4699-97c1-1c6ea45be5b0/bcab04a8-91eb-490e-ac31-3d298d72b4f5_1570758841.jpeg",
         ],
     },
     {
@@ -555,6 +559,7 @@ PRODUCTS = [
             "https://www.whites.sa/en-sa/maybelline-fit-me-matte-poreless-foundation-glass-8/",
         ],
         "image_urls": [
+            "https://www.maybelline.de/-/media/project/loreal/brand-sites/mny/emea/dach/foundation-finder/may_fitme_foundation_finder_shades_02.jpg?ch=1440&cw=1440&cx=0.25&cy=0.31&hash=7B28FE809713B787328BE4C39D53304D&rev=f9a9ec2371ee402b98dbaabe668beff8",
             "https://cd3c14-whites.akinoncloudcdn.com/products/2025/12/02/28151/b04019e4-9b0f-4b34-ad69-d7b34f9d0419_size3840x3840_cropCenter.jpg",
         ],
     },
@@ -643,6 +648,7 @@ PRODUCTS = [
         "image_urls": [
             "https://media.douglas.pl/medias/gWaHGk843601-0-global.jpg?context=bWFzdGVyfGltYWdlc3w2Mzg5N3xpbWFnZS9qcGVnfGFESmlMMmhtTXk4M09UUTRNVEE0TVRNNU56STNPQzluVjJGSVIyczRORE0yTURGZk1GOW5iRzlpWVd3dWFuQm58MjU3OTcwZjAzMWI3ZWZhNDRiZGE1YjJlNzE2OWJlZjliMzFiYWIzMTJkNDM2OWEwMTIwYWNkZWU0MGRjODgwYQ&grid=true",
             "https://pinoyfragrance.com/cdn/shop/products/N_c-hoa-n_-CHANEL-Chance-Eau-Tendre-EDT-100ml-1.jpg?v=1618656873",
+            "https://veronnaperfumeria.com/cdn/shop/files/WhatsApp_Image_2026-03-19_at_10.39.34_PM_1080x.jpg?v=1773978157",
         ],
     },
     {
@@ -686,6 +692,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://www.plaza.com.mv/cdn/shop/files/SauvageEDP_1024x1024.jpg?v=1762621037",
+            "https://wearstf.com/cdn/shop/files/SAUVAGEEDP100ML_1024x1024_65805b81-453b-491b-b0d3-47fb7460828c.webp?v=1698097187",
         ],
     },
     {
@@ -733,6 +740,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://www.cosmossport.gr/3096106-product_large/adidas-grand-court-20.jpg",
+            "https://image-cdn-flare.qdm.cloud/q652eaf60aecbe/image/data/2024/07/26/29425361c89394515a26de41a0681f84.jpg",
         ],
     },
     {
@@ -999,12 +1007,6 @@ class PageImages(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        if tag == "meta":
-            key = (attrs.get("property") or attrs.get("name") or "").lower()
-            if key in {"og:image", "twitter:image", "twitter:image:src"}:
-                value = attrs.get("content")
-                if value:
-                    self.items.append((value, ""))
         if tag in {"img", "source"}:
             alt = attrs.get("alt", "") or attrs.get("title", "")
             for key in (
@@ -1021,6 +1023,35 @@ class PageImages(HTMLParser):
                         url = entry.strip().split(" ")[0]
                         if url:
                             self.items.append((url, alt))
+
+
+IMAGE_MATCH_TERMS = {
+    "demo-phone-a": ("galaxy a56", "galaxy-a56", "sm-a566", "a56-5g"),
+    "demo-phone-b": ("redmi note 14 pro", "redmi-note-14-pro", "note-14-pro-5g"),
+    "demo-tablet": ("galaxy tab a9", "galaxy-tab-a9", "tab a9+", "tab-a9-plus", "sm-x210"),
+    "demo-laptop-a": ("vivobook 15", "vivobook-15", "x1504", "x1504va"),
+    "demo-laptop-b": ("ideapad slim 3", "ideapad-slim-3", "15amn8", "82xq"),
+    "demo-router": ("archer c6", "archer-c6"),
+    "demo-switch": ("tl-sg108", "tl sg108"),
+    "demo-headphone": ("wh-ch520", "wh ch520", "whch520"),
+    "demo-women-cotton-tshirt": ("1270848006",),
+    "demo-fit-me-foundation": ("fit me", "fit-me", "maybelline fit"),
+    "demo-sky-high-mascara": ("sky high", "sky-high", "lash sensational"),
+    "demo-chanel-chance-eau-tendre": ("chance eau tendre", "chance-eau-tendre"),
+    "demo-dior-sauvage-edp": ("sauvage", "dior sauvage"),
+    "demo-grand-court-women": ("grand court", "grand-court", "gw9213"),
+    "demo-runfalcon-men": ("runfalcon", "runfalcon 5", "ie8809"),
+    "demo-anker-a1384-powerbank": ("a1384", "anker power bank", "anker 20k"),
+    "demo-casio-mtp-v006d": ("mtp-v006d", "mtp v006d"),
+    "demo-casio-ltp-v007d": ("ltp-v007d", "ltp v007d"),
+    "demo-logitech-m185": ("m185", "logitech m185"),
+}
+
+
+def candidate_matches_product(item, url, alt):
+    haystack = f"{url} {alt}".lower()
+    return any(term in haystack for term in IMAGE_MATCH_TERMS.get(item["slug"], ()))
+
 
 
 def get_bytes(url, limit=MAX_IMAGE_BYTES):
@@ -1059,16 +1090,14 @@ def page_candidates(page_url):
         source = raw.decode("utf-8", "ignore")
         parser = PageImages()
         parser.feed(source)
-        out = [(clean_url(url, page_url), alt) for url, alt in parser.items]
-
-        # Some storefronts keep full-resolution gallery URLs in JSON/script blocks.
-        pattern = re.compile(
-            r"""(?P<u>(?:https?:)?//[^"'<>\\\s]+?\.(?:jpe?g|png|webp)(?:\?[^"'<>\\\s]*)?|/(?:[^"'<>\\\s]+?)\.(?:jpe?g|png|webp)(?:\?[^"'<>\\\s]*)?)""",
-            re.IGNORECASE,
-        )
-        for match in pattern.finditer(source):
-            out.append((clean_url(match.group("u"), page_url), ""))
-        return [(url, alt) for url, alt in out if url]
+        out = []
+        for raw_url, alt in parser.items:
+            url = clean_url(raw_url, page_url)
+            # Reject generic OpenGraph art, site banners, unrelated recommendations
+            # and image URLs found inside scripts. Page assets must identify this model.
+            if url and candidate_matches_product(item, url, alt):
+                out.append((url, alt))
+        return out
     except Exception as exc:
         print("PAGE_SKIP", page_url, type(exc).__name__, flush=True)
         return []
