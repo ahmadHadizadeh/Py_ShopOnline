@@ -98,16 +98,14 @@ PRODUCTS = [
             "https://www.samsung-online.com.ua/ua/smartfon-samsung-galaxy-a56-5g-8-128gb-sm-a566bzkaeuc-awesome-graphite17418716581741871673",
         ],
         "image_urls": [
-            "https://api.samsungmobilepress.com/file/9692FAA31A78CA421224BBC2750530549E533D96184D07DF7DBBE2B835E4ED0FAB47D6C17C553DD2A656F960871AA5AEC5005295164AC9AC6E703D532F61DB834B8E31C50A8366A032E7EA5D8648589EC6B819C3ED5795F28F3259162843CD092964DE5B891AB8C25694ED539FBF01CC2A383AF57FF766DF22F4E62C7F49C2E5C80263911F541F851DD5B3B3A10249F5",
             "https://api.samsungmobilepress.com/file/87F6BDBF6E10BFC531A353B0208BB21C7A568A463BED708A03753011B287CA9255AA2DA3D6E2A3E5CE8DDB21626D69D90B7F3BCC4442334C3C2F37855A6BC0EE793674F4C67407ECA7AD8405A8153B7E24A461224D8B92825D07AEA7D82841A28AE134B4FED7595DCECECBD805BB26E11AD6DCD2FBC95176B27DC5ADF03989CCE2EBD795F59D4CF567A9DCE300C77F2E",
-            "https://api.samsungmobilepress.com/api/v1/file/40C8A8320E66A4CAC1D4C645A46F70A08A6D3C1507FC8C4E8B5824624F49D488520B61EDFFEB06BFCA15F1EBBCAE7E12A54C4F5DEA14FB8E988573124D9F9D5CE6FEA7132429C5C5BA97F28D0AD1D02ACF46167294946C7BFF3383555E03789FB445E76A0C97032FAB04199698385B4326A14D6D82F1172D6DE91F72028D4AFC6022AF43EBD8CBAC88561FE5A8DEC663",,
-            "https://www.samsung-online.com.ua/uploads/shop/products/large/8f83d93860572ccfc20de6f81911de66.jpg",
+            "https://api.samsungmobilepress.com/file/971A9FAB55B303139CA1E92D2CCB3F3D4A2CFD874E58D27C970E901D50A91EED77F70826FBE43F28CD5C4CF6ED6C4F2B82E78A99F0E008E94CCEB0FF8E3BB6E89B01679A1F61EA745C4419CC9A70FC95581B7457ADA1B230CB566AC8D5C563B78B9340B30FA49AF135CACBAB4F88F3134CEDA4FE7D0CF39BEE1686B6D83C8EC7A322F5761F89D762CD9DB86FDD58EF9D",
+            "https://api.samsungmobilepress.com/file/9692FAA31A78CA421224BBC2750530549E533D96184D07DF7DBBE2B835E4ED0FAB47D6C17C553DD2A656F960871AA5AEC5005295164AC9AC6E703D532F61DB834B8E31C50A8366A032E7EA5D8648589EC6B819C3ED5795F28F3259162843CD092964DE5B891AB8C25694ED539FBF01CC2A383AF57FF766DF22F4E62C7F49C2E5C80263911F541F851DD5B3B3A10249F5",
             "https://api.samsungmobilepress.com/file/B9C14E432C1BF897D582FE817FC9367183CF59051B1BA191E37F356972A83FA5F2E483CAEE6B522BA5182EC2A5DEC534E5BBB11DB1CFE09ABEB42DA7DFE9582C02A952AB0C191CC44037C4AA4D5AECDF279EADD2DA9D3D510ACB58B642DEB837223F9ADA59715AED09DE235FD3D9B16D6BB2C77DFB4581F10703541C70F89707D1FA27591BC5FF5B0FE44D07BEF05D1F",
             "https://api.samsungmobilepress.com/file/A7D4C3EFC636F47513973674ED93805EC5F99EDD6DEB9F019DDEC004E94C5CEBDEFE501CEA3918B4F1449288486A1B5AD714067EB1151E9A1C3C26AD2ADD94E345AC2A639CEFF04076B74D31DDDC36D03005137C306131205CC1A304CDCAA9B5DF902FBD358D276274F963A7F84F7287EE391430A3FF91A17EDA0B8563438AEC9FEA8896FDCB62AEEBA68EFD81947E0B",
             "https://api.samsungmobilepress.com/file/4E3E2DCBADFDF6826E762352C4A027BBB53DA566D22717BA28EEB734BD9B82A1322029D51573C01B2DA6C9CD58DC378BC8F8A8C6829B0135DB28079A4344C8CD3FFB9EB78AE299D78609519C579562AB5D42013EAA78C5CB7DD6CC48A595F33F53774BC25B082661B541D0547B514EC5DD332ED11F772E81AE67BE3EEF44833E8527791029E2AC91673BEC5BFBA20D80",
             "https://api.samsungmobilepress.com/file/8624FA0A2B9689E86192E9FFAC378E19D062C01F7CB6B74B6F9871C8AF854D7524F4E4095BCBBAB307B2580F739FF55A8CB75D2C16E6A220EAE222D313B97AF19384BB77C96B1F1AF374C9F9B4194CF218EA869A52C30685F8A93F36958675379E4F32F81A2E80AAE90CE441BB20AACF7B32277FD099CF4B73C832574771DCE84ED1316A773401BED8FD19A7385971BA",
             "https://api.samsungmobilepress.com/file/9692FAA31A78CA421224BBC2750530549E533D96184D07DF7DBBE2B835E4ED0FAB47D6C17C553DD2A656F960871AA5AEC5005295164AC9AC6E703D532F61DB834B8E31C50A8366A032E7EA5D8648589EC6B819C3ED5795F28F3259162843CD092964DE5B891AB8C25694ED539FBF01CC2A383AF57FF766DF22F4E62C7F49C2E5C80263911F541F851DD5B3B3A10249F5",
-            "https://api.samsungmobilepress.com/file/87F6BDBF6E10BFC531A353B0208BB21C7A568A463BED708A03753011B287CA9255AA2DA3D6E2A3E5CE8DDB21626D69D90B7F3BCC4442334C3C2F37855A6BC0EE793674F4C67407ECA7AD8405A8153B7E24A461224D8B92825D07AEA7D82841A28AE134B4FED7595DCECECBD805BB26E11AD6DCD2FBC95176B27DC5ADF03989CCE2EBD795F59D4CF567A9DCE300C77F2E",
         ],
     },
     {
@@ -566,7 +564,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://cd3c14-whites.akinoncloudcdn.com/products/2025/12/02/28151/b04019e4-9b0f-4b34-ad69-d7b34f9d0419_size3840x3840_cropCenter.jpg",
-            "https://www.maybelline.de/-/media/project/loreal/brand-sites/mny/emea/dach/foundation-finder/may_fitme_foundation_finder_shades_02.jpg?ch=1440&cw=1440&cx=0.25&cy=0.31&hash=7B28FE809713B787328BE4C39D53304D&rev=f9a9ec2371ee402b98dbaabe668beff8",
+                        "https://www.maybelline.de/-/media/project/loreal/brand-sites/mny/emea/dach/foundation-finder/may_fitme_foundation_finder_shades_02.jpg?ch=1440&cw=1440&cx=0.25&cy=0.31&hash=7B28FE809713B787328BE4C39D53304D&rev=f9a9ec2371ee402b98dbaabe668beff8",
         ],
     },
     {
@@ -998,6 +996,12 @@ CATEGORY_COVERS = {
     "watches-women": "demo-casio-ltp-v007d",
 }
 
+COVER_IMAGE_URLS = {
+    "demo-phone-a": "https://api.samsungmobilepress.com/file/87F6BDBF6E10BFC531A353B0208BB21C7A568A463BED708A03753011B287CA9255AA2DA3D6E2A3E5CE8DDB21626D69D90B7F3BCC4442334C3C2F37855A6BC0EE793674F4C67407ECA7AD8405A8153B7E24A461224D8B92825D07AEA7D82841A28AE134B4FED7595DCECECBD805BB26E11AD6DCD2FBC95176B27DC5ADF03989CCE2EBD795F59D4CF567A9DCE300C77F2E",
+    "demo-fit-me-foundation": "https://cd3c14-whites.akinoncloudcdn.com/products/2025/12/02/28151/b04019e4-9b0f-4b34-ad69-d7b34f9d0419_size3840x3840_cropCenter.jpg",
+}
+
+
 REVIEW_TEXTS = [
     (
         5,
@@ -1200,12 +1204,15 @@ def set_variants(product, definitions):
         extras = current[len(definitions):]
         for variant in extras:
             if variant.cart_items.exists():
-                raise RuntimeError(
-                    f"Variant {variant.pk} of {product.slug} is used by a cart; "
-                    "refusing to delete or alter it."
+                print(
+                    "VARIANT_PRESERVED_IN_USE",
+                    product.slug,
+                    variant.name,
+                    variant.value,
+                    flush=True,
                 )
-        for variant in extras:
-            variant.delete()
+            else:
+                variant.delete()
 
     current = list(product.variants.order_by("pk"))
     for index, (name, value, adjustment) in enumerate(definitions):
@@ -1330,30 +1337,65 @@ def run():
             images = prepared[item["slug"]]
             used_hashes = set()
 
-            def record_existing_image(file_field):
+            def image_digest(file_field):
                 if not file_field:
-                    return
+                    return None
                 try:
                     file_field.open("rb")
                     try:
-                        used_hashes.add(hashlib.sha256(file_field.read()).hexdigest())
+                        return hashlib.sha256(file_field.read()).hexdigest()
                     finally:
                         file_field.close()
                 except Exception:
-                    return
+                    return None
 
-            record_existing_image(product.image)
-            for existing_gallery_image in product.images.all():
-                record_existing_image(existing_gallery_image.image)
+            cover_digest = image_digest(product.image)
+            if cover_digest:
+                used_hashes.add(cover_digest)
 
-            # Only create the main image when the product has no user-provided cover.
-            if not product.image and images:
+            # Remove only importer-generated duplicate cover rows. User-uploaded
+            # gallery names (for example bvnv.webp) are never touched.
+            for existing_gallery_image in list(product.images.all()):
+                file_name = existing_gallery_image.image.name.rsplit("/", 1)[-1]
+                digest = image_digest(existing_gallery_image.image)
+                if (
+                    file_name.startswith(f"{item['slug']}-")
+                    and digest
+                    and digest in used_hashes
+                ):
+                    existing_gallery_image.image.delete(save=False)
+                    existing_gallery_image.delete()
+                    continue
+                if digest:
+                    used_hashes.add(digest)
+
+            # Refresh only importer-created placeholder covers for the known
+            # first-pass cover mistakes; never replace a user-uploaded cover.
+            preferred_cover_url = COVER_IMAGE_URLS.get(item["slug"])
+            preferred_cover = next(
+                (entry for entry in images if entry["url"] == preferred_cover_url),
+                None,
+            )
+            generated_cover = bool(
+                product.image
+                and product.image.name.rsplit("/", 1)[-1]
+                in {f"{item['slug']}-cover.webp", f"{item['slug']}-cover-refresh.webp"}
+            )
+            if preferred_cover and generated_cover:
                 product.image.save(
-                    f"{item['slug']}-cover.webp",
-                    ContentFile(images[0]["bytes"]),
+                    f"{item['slug']}-cover-refresh.webp",
+                    ContentFile(preferred_cover["bytes"]),
                     save=True,
                 )
-                used_hashes.add(images[0]["sha"])
+                used_hashes.add(preferred_cover["sha"])
+            elif not product.image and images:
+                cover_data = preferred_cover or images[0]
+                product.image.save(
+                    f"{item['slug']}-cover.webp",
+                    ContentFile(cover_data["bytes"]),
+                    save=True,
+                )
+                used_hashes.add(cover_data["sha"])
 
             # GALLERY_TARGET counts the cover plus gallery, not six gallery rows.
             unique_existing_count = len(used_hashes)
@@ -1376,6 +1418,14 @@ def run():
                 unique_existing_count += 1
                 next_photo_number += 1
 
+            # Remove the specific known wrong A9 (not A9+) shot from the
+            # previous importer output, only when it used this script's filename.
+            if item["slug"] == "demo-tablet":
+                for stale in list(product.images.all()):
+                    if stale.image.name.rsplit("/", 1)[-1] == "demo-tablet-02.webp":
+                        stale.image.delete(save=False)
+                        stale.delete()
+
             # Merge verified model specifications without deleting existing data.
             for title, value in item["specs"]:
                 ProductSpecification.objects.update_or_create(
@@ -1388,9 +1438,13 @@ def run():
         # Fill only missing category covers. Existing four category images stay untouched.
         for category_slug, product_slug in CATEGORY_COVERS.items():
             category = categories[category_slug]
-            if category.image:
-                continue
             product = products_by_slug[product_slug]
+            generated_category_cover = bool(
+                category.image
+                and category.image.name.rsplit("/", 1)[-1] == f"{category_slug}-cover.webp"
+            )
+            if category.image and not generated_category_cover:
+                continue
             if product.image:
                 with product.image.open("rb") as source:
                     cover_bytes = source.read()
