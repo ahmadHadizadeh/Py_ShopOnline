@@ -220,6 +220,7 @@ PRODUCTS = [
             "https://shop.r10s.jp/samsungonline/cabinet/prd/tab_a9plus/a9plus.jpg",
             "https://cdn.cimri.io/image/1000x1000/samsung-galaxy-tab-a9-plus-sm-x210-wi-fi-128gb-11-inc-gumus-tablet-pc_824618537.jpg",
             "https://static.androidplanet.nl/orca/products/30686/samsung-galaxy-tab-a9-plus.png",
+            "https://api.samsungmobilepress.com/api/v1/file/1CCD2B8E0032155571ACF3779D73E7B2846B3D0905B0ADC1C1D1EC55EBDB6F244C5E1CA929D1EC9BB83746382928CB22618057D7EB26A7013762E10C8A8CCF8CD0C7E8479663D2E95C484AA67FDB9FED8293121AE5EBB1F2A4976EC50E529971D95D2CCA200424F4210549CB310B35D273EE8ACDC4AAA58F48F31EC9ED4A37BC",
         ],
     },
     {
@@ -457,7 +458,7 @@ PRODUCTS = [
             ("کدک‌های صوتی", "SBC و AAC"),
             ("درگاه شارژ", "USB Type-C"),
             ("زمان شارژ", "حدود ۳ ساعت"),
-            ("زمان مکالمه پیوسته", "حداکثر ۴۰ ساعت طبق مشخصات پشتیبانی سونی"),
+            ("زمان پخش موسیقی", "حداکثر ۵۰ ساعت طبق مشخصات رسمی سونی؛ وابسته به شرایط استفاده"),
             ("وزن", "حدود ۱۴۷ گرم"),
         ],
         "variants": [
@@ -569,8 +570,8 @@ PRODUCTS = [
     },
     {
         "slug": "demo-sky-high-mascara",
-        "name": "ریمل Maybelline Lash Sensational Sky High مشکی",
-        "name_en": "Maybelline Lash Sensational Sky High Mascara 01 Black",
+        "name": "ریمل Maybelline Lash Sensational Sky High 01 Very Black",
+        "name_en": "Maybelline Lash Sensational Sky High Mascara 01 Very Black",
         "brand": "Maybelline New York",
         "category": "women-cosmetics",
         "price": 1590000,
@@ -599,7 +600,7 @@ PRODUCTS = [
             ("ناحیه استفاده", "مژه؛ از تماس مستقیم با داخل چشم پرهیز شود"),
         ],
         "variants": [
-            ("رنگ", "01 Black", 0),
+            ("رنگ", "01 Very Black", 0),
         ],
         "pages": [
             "https://www.maybelline.com/eye-makeup/mascara/lash-sensational-sky-high-washable-mascara",
@@ -1224,10 +1225,14 @@ def set_variants(product, definitions):
                 or variant.price_adjustment != adjustment
             )
             if changed and variant.cart_items.exists():
-                raise RuntimeError(
-                    f"Variant {variant.pk} of {product.slug} is used by a cart; "
-                    "refusing to alter it."
+                print(
+                    "VARIANT_PRESERVED_IN_USE",
+                    product.slug,
+                    variant.name,
+                    variant.value,
+                    flush=True,
                 )
+                continue
         else:
             variant = ProductVariant(product=product)
 
@@ -1353,6 +1358,14 @@ def run():
             if cover_digest:
                 used_hashes.add(cover_digest)
 
+            # Remove the one known incorrect Galaxy Tab A9 (not A9+) file
+            # from the first importer pass, only by its unique generated filename.
+            if item["slug"] == "demo-tablet":
+                for stale in list(product.images.all()):
+                    if stale.image.name.rsplit("/", 1)[-1] == "demo-tablet-02.webp":
+                        stale.image.delete(save=False)
+                        stale.delete()
+
             # Remove only importer-generated duplicate cover rows. User-uploaded
             # gallery names (for example bvnv.webp) are never touched.
             for existing_gallery_image in list(product.images.all()):
@@ -1419,14 +1432,6 @@ def run():
                 used_hashes.add(image_data["sha"])
                 unique_existing_count += 1
                 next_photo_number += 1
-
-            # Remove the specific known wrong A9 (not A9+) shot from the
-            # previous importer output, only when it used this script's filename.
-            if item["slug"] == "demo-tablet":
-                for stale in list(product.images.all()):
-                    if stale.image.name.rsplit("/", 1)[-1] == "demo-tablet-02.webp":
-                        stale.image.delete(save=False)
-                        stale.delete()
 
             # Merge verified model specifications without deleting existing data.
             for title, value in item["specs"]:
