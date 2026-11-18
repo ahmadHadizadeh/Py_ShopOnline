@@ -578,16 +578,21 @@ PRODUCTS = [
         "pages": [
             "https://www.maybelline.com/face-makeup/foundation-makeup/fit-me-matte-poreless-foundation",
             "https://www.whites.sa/en-sa/maybelline-fit-me-matte-poreless-foundation-glass-8/",
+            "https://www.maybelline.com/face-makeup/foundation-makeup/fit-me-matte-poreless-foundation?variant=128",
+            "https://www.target.com/p/-/A-16866720",
+            "https://www.dm.de/p/d/1491171/maybelline-new-york-foundation-fit-me-matte-und-poreless-128-warm-nude",
+            "https://www.kroger.com/p/maybelline-lash-sensational-sky-high-washable-mascara-makeup-very-black/0004155459050",
         ],
         "image_urls": [
             "https://cd3c14-whites.akinoncloudcdn.com/products/2025/12/02/28151/b04019e4-9b0f-4b34-ad69-d7b34f9d0419_size3840x3840_cropCenter.jpg",
                         "https://www.maybelline.de/-/media/project/loreal/brand-sites/mny/emea/dach/foundation-finder/may_fitme_foundation_finder_shades_02.jpg?ch=1440&cw=1440&cx=0.25&cy=0.31&hash=7B28FE809713B787328BE4C39D53304D&rev=f9a9ec2371ee402b98dbaabe668beff8",
+            "https://finalchoice.com.pk/cdn/shop/files/maybelline---fit-me-matte-_-poreless-liquid-foundation-spf-22---128.webp?v=1741074038",
         ],
     },
     {
         "slug": "demo-sky-high-mascara",
-        "name": "ریمل Maybelline Lash Sensational Sky High 801 Very Black",
-        "name_en": "Maybelline Lash Sensational Sky High Mascara 801 Very Black",
+        "name": "ریمل Maybelline Lash Sensational Sky High 8801 Very Black",
+        "name_en": "Maybelline Lash Sensational Sky High Mascara 8801 Very Black",
         "brand": "Maybelline New York",
         "category": "women-cosmetics",
         "price": 1590000,
@@ -616,7 +621,7 @@ PRODUCTS = [
             ("ناحیه استفاده", "مژه؛ از تماس مستقیم با داخل چشم پرهیز شود"),
         ],
         "variants": [
-            ("رنگ", "801 Very Black", 0),
+            ("رنگ", "8801 Very Black", 0),
         ],
         "pages": [
             "https://www.maybelline.com/eye-makeup/mascara/lash-sensational-sky-high-washable-mascara",
@@ -774,6 +779,7 @@ PRODUCTS = [
             "https://www.cosmossport.gr/3096106-product_large/adidas-grand-court-20.jpg",
             "https://image-cdn-flare.qdm.cloud/q652eaf60aecbe/image/data/2024/07/26/29425361c89394515a26de41a0681f84.jpg",
             "https://assets.adidas.com/images/w_1880%2Cf_auto%2Cq_auto/72cc67fc189e44a682404ae1eadb3b2b_9366/GW9213_HM1.jpg",
+            "https://image.rakuten.co.jp/try/cabinet/bk/a/adidas/4-add-w-grand-01_1.jpg",
         ],
     },
     {
@@ -822,6 +828,7 @@ PRODUCTS = [
             "https://en-sa.sssports.com/dw/image/v2/BDVB_PRD/on/demandware.static/-/Sites-akeneo-master-catalog/default/dwe77aebad/sss/SSS2/A/D/I/E/8/SSS2_ADIE8812_4067889145778_1.jpg",
             "https://media.centrepointstores.com/i/centrepoint/IE8809BLACK-IE8809-SMAW24240624_02-2100.jpg",
             "https://sc3.locondo.jp/contents/commodity_image/AD/AD381BM086247_1_l.jpg",
+            "https://cdn.hstatic.net/products/200000054692/615805838_1435273245280615_675524177388461194_n_de7974a9a0454f52bc6c9b6e62e70078_master.jpg",
         ],
     },
     {
@@ -1009,6 +1016,7 @@ PRODUCTS = [
             "https://multimedia.bbycastatic.ca/multimedia/products/1500x1500/145/14577/14577508_4.jpg",
             "https://cdn.grupoelcorteingles.es/SGFM/dctm/MEDIA03/201701/10/00128635601603____2__1200x1200.jpg",
             "https://gland.vn/media/product/7781__logitech_m185_grey_wireless_mouse_1_.jpg",
+            "https://resources.claroshop.com/medios-plazavip/s2/13636/5078223/650b732015ecd-097855074126-2-1600x1600.jpg",
         ],
     },
 ]
