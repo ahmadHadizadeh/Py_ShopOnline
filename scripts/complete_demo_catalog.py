@@ -581,7 +581,6 @@ PRODUCTS = [
             "https://www.maybelline.com/face-makeup/foundation-makeup/fit-me-matte-poreless-foundation?variant=128",
             "https://www.target.com/p/-/A-16866720",
             "https://www.dm.de/p/d/1491171/maybelline-new-york-foundation-fit-me-matte-und-poreless-128-warm-nude",
-            "https://www.kroger.com/p/maybelline-lash-sensational-sky-high-washable-mascara-makeup-very-black/0004155459050",
         ],
         "image_urls": [
             "https://cd3c14-whites.akinoncloudcdn.com/products/2025/12/02/28151/b04019e4-9b0f-4b34-ad69-d7b34f9d0419_size3840x3840_cropCenter.jpg",
@@ -627,6 +626,7 @@ PRODUCTS = [
             "https://www.maybelline.com/eye-makeup/mascara/lash-sensational-sky-high-washable-mascara",
             "https://www.lookfantastic.ru/p/maybelline-lash-sensational-sky-high-mascara-01-black-7.2ml/12765086/",
             "https://www.maybelline.com/eye-makeup/mascara/lash-sensational-sky-high-washable-mascara-makeup?variant=Very+Black",
+            "https://www.kroger.com/p/maybelline-lash-sensational-sky-high-washable-mascara-makeup-very-black/0004155459050",
             "https://www.kroger.com/p/maybelline-lash-sensational-sky-high-washable-mascara-makeup-very-black/0004155459050",
         ],
         "image_urls": [
