@@ -1382,6 +1382,8 @@ def run():
                 in {f"{item['slug']}-cover.webp", f"{item['slug']}-cover-refresh.webp"}
             )
             if preferred_cover and generated_cover:
+                if cover_digest in used_hashes:
+                    used_hashes.remove(cover_digest)
                 product.image.save(
                     f"{item['slug']}-cover-refresh.webp",
                     ContentFile(preferred_cover["bytes"]),
@@ -1494,7 +1496,11 @@ def run():
     print("SAMPLE_REVIEWS:", Review.objects.filter(
         comment__startswith="🧪 نظر نمونه نمایشی"
     ).count(), flush=True)
-    print("CATEGORY_COVERS_FILLED:", len(CATEGORY_COVERS), flush=True)
+    print(
+        "CATEGORY_COVERS_FILLED:",
+        Category.objects.exclude(image="").count(),
+        flush=True,
+    )
 
 
 run()
