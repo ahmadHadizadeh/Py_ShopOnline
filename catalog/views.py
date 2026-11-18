@@ -40,6 +40,28 @@ PRODUCTS_PER_PAGE = 12
 HOMEPAGE_SHOWCASE_LIMIT = 8
 
 
+def _active_category_tree_ids(category):
+    """
+    Return the selected active category and all active descendants.
+    Parent category pages (Perfume, Shoes, Watches, Accessories) must include
+    products assigned to their child categories.
+    """
+    seen = {category.pk}
+    frontier = {category.pk}
+    while frontier:
+        children = set(
+            Category.objects.filter(
+                is_active=True,
+                parent_id__in=frontier,
+            ).values_list("pk", flat=True)
+        ) - seen
+        if not children:
+            break
+        seen.update(children)
+        frontier = children
+    return seen
+
+
 def _with_approved_review_summary(queryset):
     return queryset.annotate(
         avg_rating=Avg("reviews__rating", filter=Q(reviews__is_approved=True)),
@@ -74,10 +96,16 @@ def search_suggestions(request):
 
     category_slug = request.GET.get("category", "").strip()
     if category_slug:
-        products = products.filter(
-            category__slug=category_slug,
-            category__is_active=True,
-        )
+        selected_category = Category.objects.filter(
+            slug=category_slug,
+            is_active=True,
+        ).first()
+        if selected_category is None:
+            products = products.none()
+        else:
+            products = products.filter(
+                category_id__in=_active_category_tree_ids(selected_category)
+            )
 
     suggestions = products.order_by("-created", "-pk").values(
         "name",
@@ -114,7 +142,9 @@ def home(request, category_slug=None):
             slug=category_slug,
             is_active=True,
         )
-        products = products.filter(category=category)
+        products = products.filter(
+            category_id__in=_active_category_tree_ids(category)
+        )
 
     search_query = request.GET.get("q", "").strip()[:120]
     products = _filter_products_by_search(products, search_query)
