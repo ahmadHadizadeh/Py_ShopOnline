@@ -34,12 +34,12 @@ from catalog.models import (
     Review,
 )
 
-GALLERY_TARGET = 6
+GALLERY_TARGET = 6  # total unique photos, including the main cover
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 )
-TIMEOUT = 25
+TIMEOUT = 12
 MAX_IMAGE_BYTES = 18 * 1024 * 1024
 
 # Exact official/model pages and public product image URLs used as image sources.
@@ -90,7 +90,7 @@ PRODUCTS = [
         ],
         "variants": [
             ("حافظه", "۱۲۸ گیگابایت", 0),
-            ("حافظه", "۲۵۶ گیگابایت", 10400000),
+            ("حافظه", "۲۵۶ گیگابایت", 2500000),
         ],
         "pages": [
             "https://www.samsungmobilepress.com/media-assets/galaxy-a56-5g?tab=images&type=product",
@@ -98,8 +98,16 @@ PRODUCTS = [
             "https://www.samsung-online.com.ua/ua/smartfon-samsung-galaxy-a56-5g-8-128gb-sm-a566bzkaeuc-awesome-graphite17418716581741871673",
         ],
         "image_urls": [
-            "https://api.samsungmobilepress.com/api/v1/file/40C8A8320E66A4CAC1D4C645A46F70A08A6D3C1507FC8C4E8B5824624F49D488520B61EDFFEB06BFCA15F1EBBCAE7E12A54C4F5DEA14FB8E988573124D9F9D5CE6FEA7132429C5C5BA97F28D0AD1D02ACF46167294946C7BFF3383555E03789FB445E76A0C97032FAB04199698385B4326A14D6D82F1172D6DE91F72028D4AFC6022AF43EBD8CBAC88561FE5A8DEC663",
+            "https://api.samsungmobilepress.com/file/9692FAA31A78CA421224BBC2750530549E533D96184D07DF7DBBE2B835E4ED0FAB47D6C17C553DD2A656F960871AA5AEC5005295164AC9AC6E703D532F61DB834B8E31C50A8366A032E7EA5D8648589EC6B819C3ED5795F28F3259162843CD092964DE5B891AB8C25694ED539FBF01CC2A383AF57FF766DF22F4E62C7F49C2E5C80263911F541F851DD5B3B3A10249F5",
+            "https://api.samsungmobilepress.com/file/87F6BDBF6E10BFC531A353B0208BB21C7A568A463BED708A03753011B287CA9255AA2DA3D6E2A3E5CE8DDB21626D69D90B7F3BCC4442334C3C2F37855A6BC0EE793674F4C67407ECA7AD8405A8153B7E24A461224D8B92825D07AEA7D82841A28AE134B4FED7595DCECECBD805BB26E11AD6DCD2FBC95176B27DC5ADF03989CCE2EBD795F59D4CF567A9DCE300C77F2E",
+            "https://api.samsungmobilepress.com/api/v1/file/40C8A8320E66A4CAC1D4C645A46F70A08A6D3C1507FC8C4E8B5824624F49D488520B61EDFFEB06BFCA15F1EBBCAE7E12A54C4F5DEA14FB8E988573124D9F9D5CE6FEA7132429C5C5BA97F28D0AD1D02ACF46167294946C7BFF3383555E03789FB445E76A0C97032FAB04199698385B4326A14D6D82F1172D6DE91F72028D4AFC6022AF43EBD8CBAC88561FE5A8DEC663",,
             "https://www.samsung-online.com.ua/uploads/shop/products/large/8f83d93860572ccfc20de6f81911de66.jpg",
+            "https://api.samsungmobilepress.com/file/B9C14E432C1BF897D582FE817FC9367183CF59051B1BA191E37F356972A83FA5F2E483CAEE6B522BA5182EC2A5DEC534E5BBB11DB1CFE09ABEB42DA7DFE9582C02A952AB0C191CC44037C4AA4D5AECDF279EADD2DA9D3D510ACB58B642DEB837223F9ADA59715AED09DE235FD3D9B16D6BB2C77DFB4581F10703541C70F89707D1FA27591BC5FF5B0FE44D07BEF05D1F",
+            "https://api.samsungmobilepress.com/file/A7D4C3EFC636F47513973674ED93805EC5F99EDD6DEB9F019DDEC004E94C5CEBDEFE501CEA3918B4F1449288486A1B5AD714067EB1151E9A1C3C26AD2ADD94E345AC2A639CEFF04076B74D31DDDC36D03005137C306131205CC1A304CDCAA9B5DF902FBD358D276274F963A7F84F7287EE391430A3FF91A17EDA0B8563438AEC9FEA8896FDCB62AEEBA68EFD81947E0B",
+            "https://api.samsungmobilepress.com/file/4E3E2DCBADFDF6826E762352C4A027BBB53DA566D22717BA28EEB734BD9B82A1322029D51573C01B2DA6C9CD58DC378BC8F8A8C6829B0135DB28079A4344C8CD3FFB9EB78AE299D78609519C579562AB5D42013EAA78C5CB7DD6CC48A595F33F53774BC25B082661B541D0547B514EC5DD332ED11F772E81AE67BE3EEF44833E8527791029E2AC91673BEC5BFBA20D80",
+            "https://api.samsungmobilepress.com/file/8624FA0A2B9689E86192E9FFAC378E19D062C01F7CB6B74B6F9871C8AF854D7524F4E4095BCBBAB307B2580F739FF55A8CB75D2C16E6A220EAE222D313B97AF19384BB77C96B1F1AF374C9F9B4194CF218EA869A52C30685F8A93F36958675379E4F32F81A2E80AAE90CE441BB20AACF7B32277FD099CF4B73C832574771DCE84ED1316A773401BED8FD19A7385971BA",
+            "https://api.samsungmobilepress.com/file/9692FAA31A78CA421224BBC2750530549E533D96184D07DF7DBBE2B835E4ED0FAB47D6C17C553DD2A656F960871AA5AEC5005295164AC9AC6E703D532F61DB834B8E31C50A8366A032E7EA5D8648589EC6B819C3ED5795F28F3259162843CD092964DE5B891AB8C25694ED539FBF01CC2A383AF57FF766DF22F4E62C7F49C2E5C80263911F541F851DD5B3B3A10249F5",
+            "https://api.samsungmobilepress.com/file/87F6BDBF6E10BFC531A353B0208BB21C7A568A463BED708A03753011B287CA9255AA2DA3D6E2A3E5CE8DDB21626D69D90B7F3BCC4442334C3C2F37855A6BC0EE793674F4C67407ECA7AD8405A8153B7E24A461224D8B92825D07AEA7D82841A28AE134B4FED7595DCECECBD805BB26E11AD6DCD2FBC95176B27DC5ADF03989CCE2EBD795F59D4CF567A9DCE300C77F2E",
         ],
     },
     {
@@ -145,7 +153,7 @@ PRODUCTS = [
         ],
         "variants": [
             ("رنگ", "مشکی نیمه‌شب", 0),
-            ("رنگ", "بنفش اسطوخودوسی", 0),
+            ("رنگ", "آبی یخی", 0),
         ],
         "pages": [
             "https://www.mi.com/global/product/redmi-note-14-pro-5g/",
@@ -212,8 +220,8 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://shop.r10s.jp/samsungonline/cabinet/prd/tab_a9plus/a9plus.jpg",
-            "https://images.tcdn.com.br/img/img_prod/777993/tablet_samsung_galaxy_tab_a9_wi_fi_11_64gb_4gb_octa_core_2_2ghz_android_bivolt_grafite_129723_1_69fe5f4ff3c44e5951e36b63a2050446.jpg",
             "https://cdn.cimri.io/image/1000x1000/samsung-galaxy-tab-a9-plus-sm-x210-wi-fi-128gb-11-inc-gumus-tablet-pc_824618537.jpg",
+            "https://static.androidplanet.nl/orca/products/30686/samsung-galaxy-tab-a9-plus.png",
         ],
     },
     {
@@ -459,6 +467,7 @@ PRODUCTS = [
             ("رنگ", "سفید", 0),
         ],
         "pages": [
+            "https://electronics.sony.com/audio/headphones/headband/p/whch520-b",
             "https://www.sony.com/electronics/support/wireless-headphones-bluetooth-headphones/wh-ch520/specifications",
             "https://powermaccenter.com/products/sony-wh-ch520-wireless-headphones-black",
         ],
@@ -556,8 +565,8 @@ PRODUCTS = [
             "https://www.whites.sa/en-sa/maybelline-fit-me-matte-poreless-foundation-glass-8/",
         ],
         "image_urls": [
-            "https://www.maybelline.de/-/media/project/loreal/brand-sites/mny/emea/dach/foundation-finder/may_fitme_foundation_finder_shades_02.jpg?ch=1440&cw=1440&cx=0.25&cy=0.31&hash=7B28FE809713B787328BE4C39D53304D&rev=f9a9ec2371ee402b98dbaabe668beff8",
             "https://cd3c14-whites.akinoncloudcdn.com/products/2025/12/02/28151/b04019e4-9b0f-4b34-ad69-d7b34f9d0419_size3840x3840_cropCenter.jpg",
+            "https://www.maybelline.de/-/media/project/loreal/brand-sites/mny/emea/dach/foundation-finder/may_fitme_foundation_finder_shades_02.jpg?ch=1440&cw=1440&cx=0.25&cy=0.31&hash=7B28FE809713B787328BE4C39D53304D&rev=f9a9ec2371ee402b98dbaabe668beff8",
         ],
     },
     {
@@ -640,11 +649,14 @@ PRODUCTS = [
             ("حجم", "۱۰۰ میلی‌لیتر EDT", 0),
         ],
         "pages": [
+            "https://www.chanel.com/us/fragrance/p/126320/chance-eau-tendre-eau-de-toilette-spray/",
             "https://www.douglas.pl/pl/p/3000034541",
             "https://elissa-perfume.com/product/%D8%B4%D9%86%D9%84-%DA%86%D9%86%D8%B3-%D8%A7%D9%88-%D8%AA%D9%86%D8%AF%D8%B1-chanel-chance-eau-tendre-2/",
         ],
         "image_urls": [
+            "https://cdn.eparfumeria.sk/images/0/bccf033f48db6a3e/2/chanel-chance-eau-tendre.jpg?hash=1477071040",
             "https://media.douglas.pl/medias/gWaHGk843601-0-global.jpg?context=bWFzdGVyfGltYWdlc3w2Mzg5N3xpbWFnZS9qcGVnfGFESmlMMmhtTXk4M09UUTRNVEE0TVRNNU56STNPQzluVjJGSVIyczRORE0yTURGZk1GOW5iRzlpWVd3dWFuQm58MjU3OTcwZjAzMWI3ZWZhNDRiZGE1YjJlNzE2OWJlZjliMzFiYWIzMTJkNDM2OWEwMTIwYWNkZWU0MGRjODgwYQ&grid=true",
+            "https://cdn.eparfumeria.sk/images/0/bccf033f48db6a3e/2/chanel-chance-eau-tendre.jpg?hash=1477071040",
             "https://pinoyfragrance.com/cdn/shop/products/N_c-hoa-n_-CHANEL-Chance-Eau-Tendre-EDT-100ml-1.jpg?v=1618656873",
         ],
     },
@@ -1125,60 +1137,59 @@ def normalize_image(data):
 
 
 def gather_images(item):
-    candidates = []
-    seen_urls = set()
-    for url in item.get("image_urls", []):
-        cleaned = clean_url(url, url)
-        if cleaned and cleaned not in seen_urls:
-            seen_urls.add(cleaned)
-            candidates.append((cleaned, item["name"]))
-
-    for page in item.get("pages", []):
-        for url, alt in page_candidates(item, page):
-            if url not in seen_urls:
-                seen_urls.add(url)
-                candidates.append((url, alt))
-
     selected = []
+    seen_urls = set()
     seen_hashes = set()
-    rejected = 0
-    for url, alt in candidates:
-        if len(selected) >= GALLERY_TARGET:
-            break
-        test = (url + " " + alt).lower()
-        if any(word in test for word in (
-            "logo", "icon", "sprite", "avatar", "flag", "payment",
-            "badge", "placeholder", "social", "favicon", "qr-code",
-        )):
-            continue
-        try:
-            data, content_type = get_bytes(url)
-            if content_type and not content_type.startswith("image/"):
-                # A few CDN endpoints report octet-stream; Pillow verifies the bytes.
-                if "octet-stream" not in content_type:
+
+    def consume(candidates):
+        for url, alt in candidates:
+            if len(selected) >= GALLERY_TARGET:
+                return
+            cleaned = clean_url(url, url)
+            if not cleaned or cleaned in seen_urls:
+                continue
+            seen_urls.add(cleaned)
+            test = (cleaned + " " + alt).lower()
+            if any(word in test for word in (
+                "logo", "icon", "sprite", "avatar", "flag", "payment",
+                "badge", "placeholder", "social", "favicon", "qr-code",
+            )):
+                continue
+            try:
+                data, content_type = get_bytes(cleaned)
+                if content_type and not content_type.startswith("image/"):
+                    if "octet-stream" not in content_type:
+                        continue
+                normalized = normalize_image(data)
+                if not normalized:
                     continue
-            normalized = normalize_image(data)
-            if not normalized:
-                continue
-            webp, dimensions = normalized
-            digest = hashlib.sha256(webp).hexdigest()
-            if digest in seen_hashes:
-                continue
-            seen_hashes.add(digest)
-            selected.append({
-                "bytes": webp,
-                "url": url,
-                "alt": alt or item["name"],
-                "sha": digest,
-                "dimensions": dimensions,
-            })
-            print(
-                "IMAGE_OK", item["slug"], len(selected), dimensions,
-                url[:150], flush=True
-            )
-        except Exception:
-            rejected += 1
-            continue
+                webp, dimensions = normalized
+                digest = hashlib.sha256(webp).hexdigest()
+                if digest in seen_hashes:
+                    continue
+                seen_hashes.add(digest)
+                selected.append({
+                    "bytes": webp,
+                    "url": cleaned,
+                    "alt": alt or item["name"],
+                    "sha": digest,
+                    "dimensions": dimensions,
+                })
+                print(
+                    "IMAGE_OK", item["slug"], len(selected), dimensions,
+                    cleaned[:150], flush=True
+                )
+            except Exception as exc:
+                print("IMAGE_SKIP", item["slug"], type(exc).__name__, cleaned[:100], flush=True)
+
+    # Verify explicitly curated image URLs first; do not scrape web pages when
+    # the direct model-specific gallery already provides six unique assets.
+    consume([(url, item["name"]) for url in item.get("image_urls", [])])
+    if len(selected) < GALLERY_TARGET:
+        for page in item.get("pages", []):
+            consume(page_candidates(item, page))
+            if len(selected) >= GALLERY_TARGET:
+                break
 
     return selected
 
@@ -1315,28 +1326,55 @@ def run():
             product.save()
             products_by_slug[item["slug"]] = product
 
-            # Keep existing uploaded main images. Fill only when no main image exists.
+            # Preserve user-uploaded media and make repeated runs idempotent.
             images = prepared[item["slug"]]
+            used_hashes = set()
+
+            def record_existing_image(file_field):
+                if not file_field:
+                    return
+                try:
+                    file_field.open("rb")
+                    try:
+                        used_hashes.add(hashlib.sha256(file_field.read()).hexdigest())
+                    finally:
+                        file_field.close()
+                except Exception:
+                    return
+
+            record_existing_image(product.image)
+            for existing_gallery_image in product.images.all():
+                record_existing_image(existing_gallery_image.image)
+
+            # Only create the main image when the product has no user-provided cover.
             if not product.image and images:
                 product.image.save(
                     f"{item['slug']}-cover.webp",
                     ContentFile(images[0]["bytes"]),
                     save=True,
                 )
+                used_hashes.add(images[0]["sha"])
 
-            # Keep all existing gallery images; top up to six unique downloaded images.
-            existing_count = product.images.count()
-            needed = max(0, GALLERY_TARGET - existing_count)
-            for image_index, image_data in enumerate(images[:needed], start=existing_count + 1):
+            # GALLERY_TARGET counts the cover plus gallery, not six gallery rows.
+            unique_existing_count = len(used_hashes)
+            next_photo_number = unique_existing_count + 1
+            for image_data in images:
+                if unique_existing_count >= GALLERY_TARGET:
+                    break
+                if image_data["sha"] in used_hashes:
+                    continue
                 product_image = ProductImage(
                     product=product,
-                    alt_text=f"{item['name']} - نمای {image_index}",
+                    alt_text=f"{item['name']} - تصویر محصول {next_photo_number}",
                 )
                 product_image.image.save(
-                    f"{item['slug']}-{image_index:02d}.webp",
+                    f"{item['slug']}-{next_photo_number:02d}.webp",
                     ContentFile(image_data["bytes"]),
                     save=True,
                 )
+                used_hashes.add(image_data["sha"])
+                unique_existing_count += 1
+                next_photo_number += 1
 
             # Merge verified model specifications without deleting existing data.
             for title, value in item["specs"]:
@@ -1370,12 +1408,27 @@ def run():
     print("PRODUCTS_PROCESSED:", len(products_by_slug), flush=True)
     print("TOTAL_PRODUCTS:", Product.objects.count(), flush=True)
     print("TOTAL_CATEGORIES:", Category.objects.count(), flush=True)
+    def total_unique_photo_count(product):
+        hashes = set()
+        files = [product.image] if product.image else []
+        files.extend(image.image for image in product.images.all())
+        for file_field in files:
+            try:
+                file_field.open("rb")
+                try:
+                    hashes.add(hashlib.sha256(file_field.read()).hexdigest())
+                finally:
+                    file_field.close()
+            except Exception:
+                continue
+        return len(hashes)
+
     gallery_summary = [
-        (p.slug, p.images.count())
+        (p.slug, total_unique_photo_count(p))
         for p in Product.objects.order_by("slug")
     ]
     print(
-        "PRODUCTS_WITH_AT_LEAST_6_GALLERY_IMAGES:",
+        "PRODUCTS_WITH_AT_LEAST_6_TOTAL_IMAGES:",
         sum(1 for slug, count in gallery_summary if count >= GALLERY_TARGET),
         flush=True,
     )
