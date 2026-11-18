@@ -532,6 +532,7 @@ PRODUCTS = [
         "pages": [
             "https://www2.hm.com/en_us/productpage.1270848006.html",
             "https://www2.hm.com/en_in/productpage.1270848006.html",
+            "https://superbalist.com/women/tops/t-shirts-vests-camis/cotton-t-shirt-light-dusty-blue-1270848006/1600810",
         ],
         "image_urls": [
             "https://image.hm.com/assets/hm/5c/11/5c11687324e74485a3ad14ca1e85687212f8a1af.jpg?imwidth=2160",
@@ -586,6 +587,7 @@ PRODUCTS = [
             "https://cd3c14-whites.akinoncloudcdn.com/products/2025/12/02/28151/b04019e4-9b0f-4b34-ad69-d7b34f9d0419_size3840x3840_cropCenter.jpg",
                         "https://www.maybelline.de/-/media/project/loreal/brand-sites/mny/emea/dach/foundation-finder/may_fitme_foundation_finder_shades_02.jpg?ch=1440&cw=1440&cx=0.25&cy=0.31&hash=7B28FE809713B787328BE4C39D53304D&rev=f9a9ec2371ee402b98dbaabe668beff8",
             "https://finalchoice.com.pk/cdn/shop/files/maybelline---fit-me-matte-_-poreless-liquid-foundation-spf-22---128.webp?v=1741074038",
+            "https://www.rios.pk/cdn/shop/products/Fit-Me-Matte-Poreless-Liquid-Foundation-SPF-22-128-Warm-Nude-30ml-RIOS-723.jpg?v=1675444352",
         ],
     },
     {
@@ -634,6 +636,7 @@ PRODUCTS = [
             "https://cdn11.bigcommerce.com/s-vflxca1joe/images/stencil/1280x1280/products/18576/429326/103418-001_01__18466.1753246521.png?c=1",
             "https://media.superdrug.com/medias/sys_master/prd-images/h21/h36/12778053533726/prd-front-801812_600x600/prd-front-801812-600x600.jpg",
             "https://dipasoec.vtexassets.com/arquivos/ids/155436/25731.jpg?v=638539809598430000",
+            "https://media.falabella.com/tottusCL/20934160_1/public",
         ],
     },
     {
@@ -870,6 +873,8 @@ PRODUCTS = [
         "pages": [
             "https://support.anker.com/s/article-description?urlName=Anker-Power-Bank-20000mAh-30W-User-Guide-A1384",
             "https://faceit.ir/p/%D9%BE%D8%A7%D9%88%D8%B1%D8%A8%D8%A7%D9%86%DA%A9-30-%D9%88%D8%A7%D8%AA-anker-%D9%85%D8%AF%D9%84-a1384-%D8%B8%D8%B1%D9%81%DB%8C%D8%AA-20000-%D9%85%DB%8C%D9%84%DB%8C-%D8%A2%D9%85%D9%BE%D8%B1-%D8%B3%D8%A7%D8%B9%D8%AA-%D8%A8%D9%87-%D9%87%D9%85%D8%B1%D8%A7%D9%87-%DA%A9%D8%A7%D8%A8%D9%84-usb-c/",
+            "https://anker.com.sg/products/powercore-power-bank-20000mah-30w-portable-charger-with-usb-c-cable-lanyard-a1384",
+            "https://texnohome.az/az/product/power-bank-anker-a1384-20000mah-30w-a1384h21",
         ],
         "image_urls": [
             "https://down-sg.img.susercontent.com/file/sg-11134207-824gn-mfnfqx6t1y4p23",
@@ -922,6 +927,7 @@ PRODUCTS = [
         "image_urls": [
             "https://i.ebayimg.com/00/s/MTYwMFgxNjAw/z/nZ0AAOSwQTVmJhMO/%24_57.JPG?set_id=880000500F",
             "https://i.ebayimg.com/images/g/R6wAAOSwlB1j21iJ/s-l400.png",
+            "https://down-my.img.susercontent.com/file/1db4e5d723d875eca1f2fb681b8121e3",
         ],
     },
     {
@@ -1062,6 +1068,10 @@ class PageImages(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag == "meta":
+            key = (attrs.get("property") or attrs.get("name") or "").lower()
+            if key == "og:image" and attrs.get("content"):
+                self.items.append((attrs["content"], "product-page-og-image"))
         if tag in {"img", "source"}:
             alt = attrs.get("alt", "") or attrs.get("title", "")
             for key in (
@@ -1150,7 +1160,10 @@ def page_candidates(item, page_url):
             url = clean_url(raw_url, page_url)
             # Reject generic OpenGraph art, site banners, unrelated recommendations
             # and image URLs found inside scripts. Page assets must identify this model.
-            if url and candidate_matches_product(item, url, alt):
+            page_identity_matches = candidate_matches_product(item, page_url, "")
+            alt_identifies_product = candidate_matches_product(item, url, alt)
+            is_og_image = alt == "product-page-og-image"
+            if url and (alt_identifies_product or (is_og_image and page_identity_matches)):
                 out.append((url, alt))
         return out
     except Exception as exc:
