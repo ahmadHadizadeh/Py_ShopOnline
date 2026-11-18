@@ -1235,11 +1235,10 @@ def run():
     if missing:
         print("IMAGE_GALLERY_SHORTFALL:", json.dumps(missing, ensure_ascii=False), flush=True)
         print(
-            "No database rows were changed. Add more verified image URLs for the "
-            "listed products and rerun this script.",
+            "Continuing with the verified assets available; missing gallery slots "
+            "will remain empty and can be topped up on a later run.",
             flush=True,
         )
-        return
 
     products_by_slug = {}
     with transaction.atomic():
@@ -1275,7 +1274,7 @@ def run():
 
             # Keep existing uploaded main images. Fill only when no main image exists.
             images = prepared[item["slug"]]
-            if not product.image:
+            if not product.image and images:
                 product.image.save(
                     f"{item['slug']}-cover.webp",
                     ContentFile(images[0]["bytes"]),
@@ -1318,6 +1317,8 @@ def run():
                     ContentFile(cover_bytes),
                     save=True,
                 )
+            else:
+                print("CATEGORY_COVER_PENDING:", category_slug, flush=True)
 
         apply_reviews(list(products_by_slug.values()))
 
@@ -1325,9 +1326,18 @@ def run():
     print("PRODUCTS_PROCESSED:", len(products_by_slug), flush=True)
     print("TOTAL_PRODUCTS:", Product.objects.count(), flush=True)
     print("TOTAL_CATEGORIES:", Category.objects.count(), flush=True)
+    gallery_summary = [
+        (p.slug, p.images.count())
+        for p in Product.objects.order_by("slug")
+    ]
     print(
-        "PRODUCTS_WITH_6_GALLERY_IMAGES:",
-        Product.objects.annotate().filter(images__isnull=False).distinct().count(),
+        "PRODUCTS_WITH_AT_LEAST_6_GALLERY_IMAGES:",
+        sum(1 for slug, count in gallery_summary if count >= GALLERY_TARGET),
+        flush=True,
+    )
+    print(
+        "GALLERY_COUNTS:",
+        json.dumps(gallery_summary, ensure_ascii=False),
         flush=True,
     )
     print("SAMPLE_REVIEWS:", Review.objects.filter(
