@@ -586,8 +586,8 @@ PRODUCTS = [
     },
     {
         "slug": "demo-sky-high-mascara",
-        "name": "ریمل Maybelline Lash Sensational Sky High 01 Very Black",
-        "name_en": "Maybelline Lash Sensational Sky High Mascara 01 Very Black",
+        "name": "ریمل Maybelline Lash Sensational Sky High 801 Very Black",
+        "name_en": "Maybelline Lash Sensational Sky High Mascara 801 Very Black",
         "brand": "Maybelline New York",
         "category": "women-cosmetics",
         "price": 1590000,
@@ -616,11 +616,13 @@ PRODUCTS = [
             ("ناحیه استفاده", "مژه؛ از تماس مستقیم با داخل چشم پرهیز شود"),
         ],
         "variants": [
-            ("رنگ", "01 Very Black", 0),
+            ("رنگ", "801 Very Black", 0),
         ],
         "pages": [
             "https://www.maybelline.com/eye-makeup/mascara/lash-sensational-sky-high-washable-mascara",
             "https://www.lookfantastic.ru/p/maybelline-lash-sensational-sky-high-mascara-01-black-7.2ml/12765086/",
+            "https://www.maybelline.com/eye-makeup/mascara/lash-sensational-sky-high-washable-mascara-makeup?variant=Very+Black",
+            "https://www.kroger.com/p/maybelline-lash-sensational-sky-high-washable-mascara-makeup-very-black/0004155459050",
         ],
         "image_urls": [
             "https://static.thcdn.com/productimg/original/12765086-3255256174959631.jpg",
@@ -675,6 +677,7 @@ PRODUCTS = [
             "https://cdn.eparfumeria.sk/images/0/bccf033f48db6a3e/2/chanel-chance-eau-tendre.jpg?hash=1477071040",
             "https://pinoyfragrance.com/cdn/shop/products/N_c-hoa-n_-CHANEL-Chance-Eau-Tendre-EDT-100ml-1.jpg?v=1618656873",
             "https://cdn.idealo.com/folder/Product/2144/3/2144370/s1_produktbild_max_3/chanel-chance-eau-tendre-eau-de-toilette-100ml.jpg",
+            "https://d3pllp7nz3wmw5.cloudfront.net/product_images/10766880206-1_FULL.jpg",
         ],
     },
     {
@@ -720,6 +723,7 @@ PRODUCTS = [
             "https://www.plaza.com.mv/cdn/shop/files/SauvageEDP_1024x1024.jpg?v=1762621037",
             "https://wearstf.com/cdn/shop/files/SAUVAGEEDP100ML_1024x1024_65805b81-453b-491b-b0d3-47fb7460828c.webp?v=1698097187",
             "https://pabangoph.com/cdn/shop/products/ChristianDiorSauvageEDP100ml-1_940x.jpg?v=1631083889",
+            "https://i.ebayimg.com/images/g/~9EAAOSwNHlmvIh4/s-l1200.jpg",
         ],
     },
     {
