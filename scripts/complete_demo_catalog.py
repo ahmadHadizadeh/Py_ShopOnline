@@ -215,12 +215,18 @@ PRODUCTS = [
         "pages": [
             "https://item.rakuten.co.jp/samsungonline/tab_a9plus/",
             "https://www.samsung.com/us/tablets/galaxy-tab-a9-plus/",
+            "https://www.samsung.com/az/tablets/galaxy-tab-a/galaxy-tab-a9-plus-wifi-graphite-128gb-sm-x210nzaecau/buy/",
         ],
         "image_urls": [
             "https://shop.r10s.jp/samsungonline/cabinet/prd/tab_a9plus/a9plus.jpg",
             "https://cdn.cimri.io/image/1000x1000/samsung-galaxy-tab-a9-plus-sm-x210-wi-fi-128gb-11-inc-gumus-tablet-pc_824618537.jpg",
             "https://static.androidplanet.nl/orca/products/30686/samsung-galaxy-tab-a9-plus.png",
             "https://api.samsungmobilepress.com/api/v1/file/1CCD2B8E0032155571ACF3779D73E7B2846B3D0905B0ADC1C1D1EC55EBDB6F244C5E1CA929D1EC9BB83746382928CB22618057D7EB26A7013762E10C8A8CCF8CD0C7E8479663D2E95C484AA67FDB9FED8293121AE5EBB1F2A4976EC50E529971D95D2CCA200424F4210549CB310B35D273EE8ACDC4AAA58F48F31EC9ED4A37BC",
+            "https://images.samsung.com/is/image/samsung/p6pim/az/sm-x210nzaecau/gallery/az-galaxy-tab-a9-plus-sm-x210-sm-x210nzaecau-538763571?$1164_776_PNG$=",
+            "https://images.samsung.com/is/image/samsung/p6pim/az/sm-x210nzaecau/gallery/az-galaxy-tab-a9-plus-sm-x210-sm-x210nzaecau-538763572?$1164_776_PNG$=",
+            "https://images.samsung.com/is/image/samsung/p6pim/az/sm-x210nzaecau/gallery/az-galaxy-tab-a9-plus-sm-x210-sm-x210nzaecau-538763567?$1164_776_PNG$=",
+            "https://images.samsung.com/is/image/samsung/p6pim/az/sm-x210nzaecau/gallery/az-galaxy-tab-a9-plus-sm-x210-sm-x210nzaecau-538763568?$1164_776_PNG$=",
+            "https://images.samsung.com/is/image/samsung/p6pim/az/sm-x210nzaecau/gallery/az-galaxy-tab-a9-plus-sm-x210-sm-x210nzaecau-538763569?$1164_776_PNG$=",
         ],
     },
     {
@@ -469,9 +475,16 @@ PRODUCTS = [
             "https://electronics.sony.com/audio/headphones/headband/p/whch520-b",
             "https://www.sony.com/electronics/support/wireless-headphones-bluetooth-headphones/wh-ch520/specifications",
             "https://powermaccenter.com/products/sony-wh-ch520-wireless-headphones-black",
+            "https://www.sony.com.au/headphones/products/wh-ch520",
         ],
         "image_urls": [
             "https://powermaccenter.com/cdn/shop/files/SNYI099BLK012000x2000.jpg?v=1692058746&width=1445",
+            "https://sony.scene7.com/is/image/sonyglobalsolutions/00-7?$large360ViewerImage$=",
+            "https://sony.scene7.com/is/image/sonyglobalsolutions/01-14?$large360ViewerImage$=",
+            "https://sony.scene7.com/is/image/sonyglobalsolutions/02-16?$large360ViewerImage$=",
+            "https://sony.scene7.com/is/image/sonyglobalsolutions/03-15?$large360ViewerImage$=",
+            "https://sony.scene7.com/is/image/sonyglobalsolutions/04-16?$large360ViewerImage$=",
+            "https://sony.scene7.com/is/image/sonyglobalsolutions/05-15?$large360ViewerImage$=",
         ],
     },
     {
@@ -745,10 +758,12 @@ PRODUCTS = [
         "pages": [
             "https://www.cosmossport.gr/en/458962-adidas-grand-court-20.html",
             "https://www.adidas.com/us/grand_court",
+            "https://www.adidas.com/om/en/grand-court-2.0-shoes/GW9213.html",
         ],
         "image_urls": [
             "https://www.cosmossport.gr/3096106-product_large/adidas-grand-court-20.jpg",
             "https://image-cdn-flare.qdm.cloud/q652eaf60aecbe/image/data/2024/07/26/29425361c89394515a26de41a0681f84.jpg",
+            "https://assets.adidas.com/images/w_1880%2Cf_auto%2Cq_auto/72cc67fc189e44a682404ae1eadb3b2b_9366/GW9213_HM1.jpg",
         ],
     },
     {
@@ -791,10 +806,12 @@ PRODUCTS = [
         ],
         "pages": [
             "https://en-sa.sssports.com/adidas-mens-runfalcon-5-running-shoes/4067889145723.html",
+            "https://www.adidas.com/us/runfalcon-5-shoes/IE8809.html",
         ],
         "image_urls": [
             "https://en-sa.sssports.com/dw/image/v2/BDVB_PRD/on/demandware.static/-/Sites-akeneo-master-catalog/default/dwe77aebad/sss/SSS2/A/D/I/E/8/SSS2_ADIE8812_4067889145778_1.jpg",
             "https://media.centrepointstores.com/i/centrepoint/IE8809BLACK-IE8809-SMAW24240624_02-2100.jpg",
+            "https://sc3.locondo.jp/contents/commodity_image/AD/AD381BM086247_1_l.jpg",
         ],
     },
     {
@@ -979,6 +996,7 @@ PRODUCTS = [
         "image_urls": [
             "https://multimedia.bbycastatic.ca/multimedia/products/1500x1500/145/14577/14577508_4.jpg",
             "https://cdn.grupoelcorteingles.es/SGFM/dctm/MEDIA03/201701/10/00128635601603____2__1200x1200.jpg",
+            "https://gland.vn/media/product/7781__logitech_m185_grey_wireless_mouse_1_.jpg",
         ],
     },
 ]
