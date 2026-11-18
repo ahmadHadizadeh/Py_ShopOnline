@@ -274,6 +274,7 @@ PRODUCTS = [
         "pages": [
             "https://www.asus.com/laptops/for-students/vivobook/asus-vivobook-15-x1504/",
             "https://www.asus.com/bt/laptops/for-home/vivobook/asus-vivobook-15-x1504/",
+            "https://www.bakuelectronics.az/mehsul/notebook-asus-vivobook-15-x1504va-bq721-156-fhd-ipsi7-1355uram-16gbssd-512gbintel-iris-xe-219597",
         ],
         "image_urls": [
             "https://dlcdnwebimgs.asus.com/gain/0dea7490-edcd-4bfb-80e4-0324085f46fc/",
@@ -327,6 +328,7 @@ PRODUCTS = [
         "pages": [
             "https://psref.lenovo.com/Detail/2183?M=82XQ00VCAU",
             "https://www.regard.ru/product/790189/noutbuk-lenovo-ideapad-slim-3-15amn8-arctic-grey-82xq01c9ps",
+            "https://psref.lenovo.com/Detail/IdeaPad/IdeaPad_Slim_3_15AMN8?M=82XQ00VCAU",
         ],
         "image_urls": [
             "https://www.regard.ru/api/photo/goods/6617258.png",
@@ -380,6 +382,7 @@ PRODUCTS = [
             "https://www.sysllc.ae/pub/media/catalog/product/a/r/archer-c6_1.jpg",
             "https://bizweb.dktcdn.net/100/592/668/products/screenshot-2025-09-10-145900.png?v=1757491226440",
             "https://cdn.shopify.com/s/files/1/0587/4348/8710/products/11.0TL-ARCHERC6_a70a3389-bdab-4673-8e50-e1ece83a9c39.png?v=1653358036",
+            "https://product.hstatic.net/1000187560/product/router-wifi-ac1200-bang-tan-kep-tp-link-archer-c6-ava-600x600_e705a60138424bec89c32459ae60fb51_grande.jpg",
         ],
     },
     {
@@ -623,6 +626,7 @@ PRODUCTS = [
             "https://static.thcdn.com/productimg/original/12765086-3255256174959631.jpg",
             "https://cdn11.bigcommerce.com/s-vflxca1joe/images/stencil/1280x1280/products/18576/429326/103418-001_01__18466.1753246521.png?c=1",
             "https://media.superdrug.com/medias/sys_master/prd-images/h21/h36/12778053533726/prd-front-801812_600x600/prd-front-801812-600x600.jpg",
+            "https://dipasoec.vtexassets.com/arquivos/ids/155436/25731.jpg?v=638539809598430000",
         ],
     },
     {
@@ -670,6 +674,7 @@ PRODUCTS = [
             "https://media.douglas.pl/medias/gWaHGk843601-0-global.jpg?context=bWFzdGVyfGltYWdlc3w2Mzg5N3xpbWFnZS9qcGVnfGFESmlMMmhtTXk4M09UUTRNVEE0TVRNNU56STNPQzluVjJGSVIyczRORE0yTURGZk1GOW5iRzlpWVd3dWFuQm58MjU3OTcwZjAzMWI3ZWZhNDRiZGE1YjJlNzE2OWJlZjliMzFiYWIzMTJkNDM2OWEwMTIwYWNkZWU0MGRjODgwYQ&grid=true",
             "https://cdn.eparfumeria.sk/images/0/bccf033f48db6a3e/2/chanel-chance-eau-tendre.jpg?hash=1477071040",
             "https://pinoyfragrance.com/cdn/shop/products/N_c-hoa-n_-CHANEL-Chance-Eau-Tendre-EDT-100ml-1.jpg?v=1618656873",
+            "https://cdn.idealo.com/folder/Product/2144/3/2144370/s1_produktbild_max_3/chanel-chance-eau-tendre-eau-de-toilette-100ml.jpg",
         ],
     },
     {
@@ -714,6 +719,7 @@ PRODUCTS = [
         "image_urls": [
             "https://www.plaza.com.mv/cdn/shop/files/SauvageEDP_1024x1024.jpg?v=1762621037",
             "https://wearstf.com/cdn/shop/files/SAUVAGEEDP100ML_1024x1024_65805b81-453b-491b-b0d3-47fb7460828c.webp?v=1698097187",
+            "https://pabangoph.com/cdn/shop/products/ChristianDiorSauvageEDP100ml-1_940x.jpg?v=1631083889",
         ],
     },
     {
@@ -856,6 +862,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://down-sg.img.susercontent.com/file/sg-11134207-824gn-mfnfqx6t1y4p23",
+            "https://static.wixstatic.com/media/2df8f3_18a3fbc890d34f8688709f1ac334d0a1~mv2.jpg/v1/fit/w_500%2Ch_500%2Cq_90/file.jpg",
         ],
     },
     {
@@ -950,6 +957,7 @@ PRODUCTS = [
         "image_urls": [
             "https://www.casio.com/content/dam/casio/product-info/locales/in/en/timepiece/product/watch/L/LT/LTP/LTP-V007D-7B/assets/LTP-V007D-7B_model-free_wrist02.jpg.transform/main-visual-sp/image.jpg",
             "https://tshop.r10s.jp/gryps-/cabinet/analog/ltp-v007d-7b_1.jpg?fitin=720%3A720",
+            "https://image.makewebcdn.com/makeweb/m_1920x0/jOI8GAa01/Product/S__43081748_0.jpg",
         ],
     },
     {
