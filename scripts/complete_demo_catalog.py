@@ -94,6 +94,7 @@ PRODUCTS = [
         ],
         "pages": [
             "https://www.samsungmobilepress.com/media-assets/galaxy-a56-5g?tab=images&type=product",
+            "https://www.samsung.com/ae/smartphones/galaxy-a/galaxy-a56-5g-awesome-graphite-128gb-sm-a566bzkvmda/",
             "https://www.samsung-online.com.ua/ua/smartfon-samsung-galaxy-a56-5g-8-128gb-sm-a566bzkaeuc-awesome-graphite17418716581741871673",
         ],
         "image_urls": [
@@ -158,6 +159,7 @@ PRODUCTS = [
             "https://i02.appmifile.com/mi-com-product/fly-birds/redmi-note-14-pro-5g/PC/fd0bcf27ac82bdf2d9d2aba8fdd96f53.jpg",
             "https://i02.appmifile.com/mi-com-product/fly-birds/redmi-note-14-pro-5g/PC/iamge_3.jpg",
             "https://i02.appmifile.com/mi-com-product/fly-birds/redmi-note-14-pro-5g/PC/iamge_4.jpg",
+            "https://i05.appmifile.com/481_item_uk/06/01/2025/4567bfdb92c367a0a1af3845579ff954.png?q=85&thumb=1",
             "https://www.mistore-greece.gr/getmetafile/5c2b264e-0503-4cff-a922-9b60808d532d/note14propurple-5g.aspx",
         ],
     },
@@ -211,6 +213,7 @@ PRODUCTS = [
         "image_urls": [
             "https://shop.r10s.jp/samsungonline/cabinet/prd/tab_a9plus/a9plus.jpg",
             "https://images.tcdn.com.br/img/img_prod/777993/tablet_samsung_galaxy_tab_a9_wi_fi_11_64gb_4gb_octa_core_2_2ghz_android_bivolt_grafite_129723_1_69fe5f4ff3c44e5951e36b63a2050446.jpg",
+            "https://asset.m-gs.kr/prod/1042424358/1/550",
         ],
     },
     {
@@ -363,6 +366,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://www.sysllc.ae/pub/media/catalog/product/a/r/archer-c6_1.jpg",
+            "https://cdn.shopify.com/s/files/1/0587/4348/8710/products/11.0TL-ARCHERC6_a70a3389-bdab-4673-8e50-e1ece83a9c39.png?v=1653358036",
         ],
     },
     {
@@ -594,6 +598,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://static.thcdn.com/productimg/original/12765086-3255256174959631.jpg",
+            "https://cdn11.bigcommerce.com/s-vflxca1joe/images/stencil/1280x1280/products/18576/429326/103418-001_01__18466.1753246521.png?c=1",
         ],
     },
     {
@@ -637,6 +642,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://media.douglas.pl/medias/gWaHGk843601-0-global.jpg?context=bWFzdGVyfGltYWdlc3w2Mzg5N3xpbWFnZS9qcGVnfGFESmlMMmhtTXk4M09UUTRNVEE0TVRNNU56STNPQzluVjJGSVIyczRORE0yTURGZk1GOW5iRzlpWVd3dWFuQm58MjU3OTcwZjAzMWI3ZWZhNDRiZGE1YjJlNzE2OWJlZjliMzFiYWIzMTJkNDM2OWEwMTIwYWNkZWU0MGRjODgwYQ&grid=true",
+            "https://pinoyfragrance.com/cdn/shop/products/N_c-hoa-n_-CHANEL-Chance-Eau-Tendre-EDT-100ml-1.jpg?v=1618656873",
         ],
     },
     {
@@ -772,6 +778,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://en-sa.sssports.com/dw/image/v2/BDVB_PRD/on/demandware.static/-/Sites-akeneo-master-catalog/default/dwe77aebad/sss/SSS2/A/D/I/E/8/SSS2_ADIE8812_4067889145778_1.jpg",
+            "https://media.centrepointstores.com/i/centrepoint/IE8809BLACK-IE8809-SMAW24240624_02-2100.jpg",
         ],
     },
     {
