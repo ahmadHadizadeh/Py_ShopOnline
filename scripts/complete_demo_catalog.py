@@ -317,7 +317,6 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://www.regard.ru/api/photo/goods/6617258.png",
-            "https://media.falabella.com/falabellaPE/141657575_03/w%3D1500%2Ch%3D1500%2Cfit%3Dcover",
         ],
     },
     {
@@ -465,7 +464,6 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://powermaccenter.com/cdn/shop/files/SNYI099BLK012000x2000.jpg?v=1692058746&width=1445",
-            "https://digitalcontent.api.tesco.com/v2/media/ghs/9c71980c-0884-4699-97c1-1c6ea45be5b0/bcab04a8-91eb-490e-ac31-3d298d72b4f5_1570758841.jpeg",
         ],
     },
     {
@@ -648,7 +646,6 @@ PRODUCTS = [
         "image_urls": [
             "https://media.douglas.pl/medias/gWaHGk843601-0-global.jpg?context=bWFzdGVyfGltYWdlc3w2Mzg5N3xpbWFnZS9qcGVnfGFESmlMMmhtTXk4M09UUTRNVEE0TVRNNU56STNPQzluVjJGSVIyczRORE0yTURGZk1GOW5iRzlpWVd3dWFuQm58MjU3OTcwZjAzMWI3ZWZhNDRiZGE1YjJlNzE2OWJlZjliMzFiYWIzMTJkNDM2OWEwMTIwYWNkZWU0MGRjODgwYQ&grid=true",
             "https://pinoyfragrance.com/cdn/shop/products/N_c-hoa-n_-CHANEL-Chance-Eau-Tendre-EDT-100ml-1.jpg?v=1618656873",
-            "https://veronnaperfumeria.com/cdn/shop/files/WhatsApp_Image_2026-03-19_at_10.39.34_PM_1080x.jpg?v=1773978157",
         ],
     },
     {
@@ -831,7 +828,6 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://down-sg.img.susercontent.com/file/sg-11134207-824gn-mfnfqx6t1y4p23",
-            "https://down-vn.img.susercontent.com/file/sg-11134201-7rdyt-lzik5rnzpqk7f3",
         ],
     },
     {
@@ -1298,7 +1294,7 @@ def run():
             product.brand = item["brand"]
             product.category = category
             product.description = item["description"] + (
-                "\\n\\nقیمت و موجودی نسخهٔ Demo نمونهٔ نمایشی هستند و قیمت روز بازار یا "
+                "\n\nقیمت و موجودی نسخهٔ Demo نمونهٔ نمایشی هستند و قیمت روز بازار یا "
                 "تعهد فروش واقعی محسوب نمی‌شوند."
             )
             product.review = item["review"]
