@@ -243,21 +243,20 @@ PRODUCTS = [
             "از نوع M.2 NVMe PCIe 4.0 و مجموعه‌ای از درگاه‌های USB، USB-C، HDMI "
             "و جک صوتی از ویژگی‌های این سری هستند.\n\n"
             "در برخی پیکربندی‌های X1504 حافظهٔ DDR5 قابل ارتقا است و سقف پشتیبانی "
-            "می‌تواند تا ۳۲ گیگابایت باشد؛ اما بعضی SKUها محدودیت متفاوت دارند. "
+            "می‌تواند تا ۱۶ گیگابایت باشد؛ اما بعضی SKUها محدودیت متفاوت دارند. "
             "برای همین، مقدار رم انتخاب‌شده باید با شماره‌مدل دقیق دستگاه بررسی شود."
         ),
         "specs": [
             ("خانواده مدل", "ASUS Vivobook 15 X1504VA؛ مشخصات دقیق وابسته به SKU"),
             ("نمایشگر", "۱۵٫۶ اینچ Full HD، ۱۹۲۰×۱۰۸۰، ۶۰ هرتز، روکش مات"),
             ("پردازنده", "بسته به SKU؛ در مدل‌های عرضه‌شده Core 3 / Core 5 / Core 7"),
-            ("حافظه RAM", "DDR5؛ برخی پیکربندی‌ها تا ۳۲ گیگابایت"),
+            ("حافظه RAM", "DDR5؛ برخی پیکربندی‌ها تا ۱۶ گیگابایت"),
             ("ذخیره‌سازی", "SSD از نوع M.2 NVMe PCIe 4.0؛ ظرفیت وابسته به SKU"),
             ("درگاه‌ها", "USB-A، USB-C، HDMI 1.4، جک ترکیبی ۳٫۵ میلی‌متری"),
             ("کاربری", "اداری، آموزشی و استفادهٔ روزمره"),
         ],
         "variants": [
             ("حافظه RAM", "۱۶ گیگابایت", 0),
-            ("حافظه RAM", "۳۲ گیگابایت", 20000000),
         ],
         "pages": [
             "https://www.asus.com/laptops/for-students/vivobook/asus-vivobook-15-x1504/",
@@ -604,6 +603,7 @@ PRODUCTS = [
         "image_urls": [
             "https://static.thcdn.com/productimg/original/12765086-3255256174959631.jpg",
             "https://cdn11.bigcommerce.com/s-vflxca1joe/images/stencil/1280x1280/products/18576/429326/103418-001_01__18466.1753246521.png?c=1",
+            "https://media.superdrug.com/medias/sys_master/prd-images/h21/h36/12778053533726/prd-front-801812_600x600/prd-front-801812-600x600.jpg",
         ],
     },
     {
@@ -831,6 +831,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://down-sg.img.susercontent.com/file/sg-11134207-824gn-mfnfqx6t1y4p23",
+            "https://down-vn.img.susercontent.com/file/sg-11134201-7rdyt-lzik5rnzpqk7f3",
         ],
     },
     {
@@ -878,6 +879,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://i.ebayimg.com/00/s/MTYwMFgxNjAw/z/nZ0AAOSwQTVmJhMO/%24_57.JPG?set_id=880000500F",
+            "https://i.ebayimg.com/images/g/R6wAAOSwlB1j21iJ/s-l400.png",
         ],
     },
     {
@@ -923,6 +925,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://www.casio.com/content/dam/casio/product-info/locales/in/en/timepiece/product/watch/L/LT/LTP/LTP-V007D-7B/assets/LTP-V007D-7B_model-free_wrist02.jpg.transform/main-visual-sp/image.jpg",
+            "https://tshop.r10s.jp/gryps-/cabinet/analog/ltp-v007d-7b_1.jpg?fitin=720%3A720",
         ],
     },
     {
@@ -968,6 +971,7 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://multimedia.bbycastatic.ca/multimedia/products/1500x1500/145/14577/14577508_4.jpg",
+            "https://cdn.grupoelcorteingles.es/SGFM/dctm/MEDIA03/201701/10/00128635601603____2__1200x1200.jpg",
         ],
     },
 ]
@@ -1034,7 +1038,7 @@ IMAGE_MATCH_TERMS = {
     "demo-router": ("archer c6", "archer-c6"),
     "demo-switch": ("tl-sg108", "tl sg108"),
     "demo-headphone": ("wh-ch520", "wh ch520", "whch520"),
-    "demo-women-cotton-tshirt": ("1270848006",),
+    "demo-women-cotton-tshirt": ("1270848006", "cotton t-shirt", "cotton-t-shirt", "light dusty blue"),
     "demo-fit-me-foundation": ("fit me", "fit-me", "maybelline fit"),
     "demo-sky-high-mascara": ("sky high", "sky-high", "lash sensational"),
     "demo-chanel-chance-eau-tendre": ("chance eau tendre", "chance-eau-tendre"),
@@ -1078,7 +1082,7 @@ def clean_url(value, base_url):
     return urlunparse(parsed._replace(fragment=""))
 
 
-def page_candidates(page_url):
+def page_candidates(item, page_url):
     try:
         req = Request(page_url, headers={
             "User-Agent": USER_AGENT,
@@ -1134,7 +1138,7 @@ def gather_images(item):
             candidates.append((cleaned, item["name"]))
 
     for page in item.get("pages", []):
-        for url, alt in page_candidates(page):
+        for url, alt in page_candidates(item, page):
             if url not in seen_urls:
                 seen_urls.add(url)
                 candidates.append((url, alt))
@@ -1293,7 +1297,10 @@ def run():
             product.name_en = item["name_en"]
             product.brand = item["brand"]
             product.category = category
-            product.description = item["description"]
+            product.description = item["description"] + (
+                "\\n\\nقیمت و موجودی نسخهٔ Demo نمونهٔ نمایشی هستند و قیمت روز بازار یا "
+                "تعهد فروش واقعی محسوب نمی‌شوند."
+            )
             product.review = item["review"]
             product.highlights = item["highlights"]
             # Never overwrite prices, discounts, inventory, guarantee or delivery
