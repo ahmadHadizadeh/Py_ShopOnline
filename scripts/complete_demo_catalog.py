@@ -482,12 +482,8 @@ PRODUCTS = [
         ],
         "image_urls": [
             "https://powermaccenter.com/cdn/shop/files/SNYI099BLK012000x2000.jpg?v=1692058746&width=1445",
-            "https://sony.scene7.com/is/image/sonyglobalsolutions/00-7?$large360ViewerImage$=",
-            "https://sony.scene7.com/is/image/sonyglobalsolutions/01-14?$large360ViewerImage$=",
-            "https://sony.scene7.com/is/image/sonyglobalsolutions/02-16?$large360ViewerImage$=",
-            "https://sony.scene7.com/is/image/sonyglobalsolutions/03-15?$large360ViewerImage$=",
-            "https://sony.scene7.com/is/image/sonyglobalsolutions/04-16?$large360ViewerImage$=",
-            "https://sony.scene7.com/is/image/sonyglobalsolutions/05-15?$large360ViewerImage$=",
+            "https://d1ncau8tqf99kp.cloudfront.net/PDP/Audio/Headphones/WH-CH520N/v1/mobile/p2_1_m.jpg",
+            "https://d1ncau8tqf99kp.cloudfront.net/PDP/Audio/Headphones/WH-CH520N/v1/mobile/p2_4_m.jpg",
         ],
     },
     {
