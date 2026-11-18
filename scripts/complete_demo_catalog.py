@@ -1267,15 +1267,19 @@ def run():
             product.description = item["description"]
             product.review = item["review"]
             product.highlights = item["highlights"]
-            product.price = item["price"]
-            product.old_price = item["old_price"]
+            # Never overwrite prices, discounts, inventory, guarantee or delivery
+            # information on products that already existed in the Demo database.
+            # New items use an explicitly labeled Demo placeholder price only.
             if created:
+                product.price = item["price"]
+                product.old_price = None
                 product.stock = item["stock"]
+                product.guarantee = "اطلاعات گارانتی نمونه؛ پیش از فروش واقعی تکمیل شود"
+                product.delivery_info = (
+                    "قیمت و موجودی این کالا صرفاً نمونهٔ نمایشی Demo است؛ "
+                    "قیمت بازار و موجودی واقعی تأیید نشده است."
+                )
             product.is_active = True
-            product.guarantee = "ضمانت اصالت و سلامت کالا مطابق شرایط فروشنده"
-            product.delivery_info = (
-                "قیمت و موجودی نسخهٔ Demo نمایشی است؛ پیش از عرضهٔ واقعی به‌روزرسانی شود."
-            )
             product.save()
             products_by_slug[item["slug"]] = product
 
@@ -1302,12 +1306,13 @@ def run():
                     save=True,
                 )
 
-            # Replace the generic/placeholder specs with sourced model specifications.
-            ProductSpecification.objects.filter(product=product).delete()
-            ProductSpecification.objects.bulk_create([
-                ProductSpecification(product=product, title=title, value=value)
-                for title, value in item["specs"]
-            ])
+            # Merge verified model specifications without deleting existing data.
+            for title, value in item["specs"]:
+                ProductSpecification.objects.update_or_create(
+                    product=product,
+                    title=title,
+                    defaults={"value": value},
+                )
             set_variants(product, item["variants"])
 
         # Fill only missing category covers. Existing four category images stay untouched.
