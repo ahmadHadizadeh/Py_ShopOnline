@@ -505,10 +505,10 @@ class PostgreSQLPaymentConcurrencyTests(TransactionTestCase):
             stock=5,
         )
         red = ProductVariant.objects.create(
-            product=product, name="color", value="red"
+            product=product, name="color", value="red", price=product.price
         )
         blue = ProductVariant.objects.create(
-            product=product, name="color", value="blue"
+            product=product, name="color", value="blue", price=product.price
         )
         user = get_user_model().objects.create_user(
             username=f"pg-cart-{uuid4().hex[:12]}"
@@ -648,7 +648,7 @@ class PostgreSQLVariantPriceLockingTests(TransactionTestCase):
             product=self.product,
             name="color",
             value="red",
-            price_adjustment=Decimal("-70.00"),
+            price=self.product.price + (Decimal("-70.00")),
         )
         self.admin_user = get_user_model().objects.create_superuser(
             username=f"pg-variant-admin-{uuid4().hex[:10]}",
@@ -711,8 +711,8 @@ class PostgreSQLVariantPriceLockingTests(TransactionTestCase):
         alive = [worker.name for worker in workers if worker.is_alive()]
         self.assertFalse(alive, f"PostgreSQL price-edit workers did not finish: {alive}")
 
-    def test_product_price_commit_blocks_conflicting_variant_adjustment(self):
-        """The waiting Variant form must validate against the committed base price."""
+    def test_product_price_commit_serializes_variant_final_price_update(self):
+        """The waiting Variant form applies an independent final price after the Product save."""
         product_saved = threading.Event()
         release_product = threading.Event()
         variant_pid_ready = threading.Event()
@@ -768,7 +768,7 @@ class PostgreSQLVariantPriceLockingTests(TransactionTestCase):
                             "product": str(self.product.pk),
                             "name": variant.name,
                             "value": variant.value,
-                            "price_adjustment": "-90.00",
+                            "price": "10.00",
                         },
                         instance=variant,
                     )
@@ -818,20 +818,19 @@ class PostgreSQLVariantPriceLockingTests(TransactionTestCase):
             lock_wait_observed,
             "PostgreSQL did not report the Variant form waiting on the Product row lock.",
         )
-        self.assertFalse(
+        self.assertTrue(
             state["variant_valid"],
-            "A conflicting Variant price adjustment was accepted after the base-price commit.",
+            f"Independent Variant price update was rejected: {state['variant_errors']}",
         )
-        self.assertIn("price_adjustment", state["variant_errors"])
 
         product = Product.objects.get(pk=self.product.pk)
         variant = ProductVariant.objects.get(pk=self.variant.pk)
         self.assertEqual(product.price, Decimal("80.00"))
+        self.assertEqual(variant.price, Decimal("10.00"))
         self.assertEqual(variant.price_adjustment, Decimal("-70.00"))
-        self.assertGreaterEqual(product.price + variant.price_adjustment, Decimal("0"))
 
-    def test_variant_adjustment_commit_blocks_conflicting_product_price_change(self):
-        """The waiting Product form must recheck variants after the Variant commit."""
+    def test_variant_final_price_commit_serializes_product_price_change(self):
+        """The waiting Product form preserves the independent Variant final price."""
         variant_saved = threading.Event()
         release_variant = threading.Event()
         product_pid_ready = threading.Event()
@@ -854,7 +853,7 @@ class PostgreSQLVariantPriceLockingTests(TransactionTestCase):
                             "product": str(self.product.pk),
                             "name": variant.name,
                             "value": variant.value,
-                            "price_adjustment": "-90.00",
+                            "price": "10.00",
                         },
                         instance=variant,
                     )
@@ -937,14 +936,13 @@ class PostgreSQLVariantPriceLockingTests(TransactionTestCase):
             lock_wait_observed,
             "PostgreSQL did not report the Product form/save waiting on the Product row lock.",
         )
-        self.assertFalse(
+        self.assertTrue(
             state["product_valid"],
-            "A conflicting Product base-price change was accepted after the Variant commit.",
+            f"Independent Product price update was rejected: {state['product_errors']}",
         )
-        self.assertIn("price", state["product_errors"])
 
         product = Product.objects.get(pk=self.product.pk)
         variant = ProductVariant.objects.get(pk=self.variant.pk)
-        self.assertEqual(product.price, Decimal("100.00"))
-        self.assertEqual(variant.price_adjustment, Decimal("-90.00"))
-        self.assertGreaterEqual(product.price + variant.price_adjustment, Decimal("0"))
+        self.assertEqual(product.price, Decimal("80.00"))
+        self.assertEqual(variant.price, Decimal("10.00"))
+        self.assertEqual(variant.price_adjustment, Decimal("-70.00"))

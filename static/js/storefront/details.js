@@ -23,28 +23,19 @@
         const discountBadge = document.getElementById("product-discount-badge");
 
         if (variantSelect && priceDisplay) {
-            const basePrice = Number(priceDisplay.dataset.basePrice || 0);
-            const oldPrice = oldPriceDisplay
-                ? Number(oldPriceDisplay.dataset.oldPrice)
-                : Number.NaN;
             const formatPrice = value => new Intl.NumberFormat("fa-IR", {
                 maximumFractionDigits: 0,
             }).format(value);
+
             variantSelect.addEventListener("change", () => {
                 const selected = variantSelect.options[variantSelect.selectedIndex];
-                const adjustment = Number(selected?.dataset.priceAdjustment || 0);
-                const finalPrice = basePrice + adjustment;
-                const hasDiscount = Number.isFinite(finalPrice)
-                    && Number.isFinite(oldPrice)
-                    && oldPrice > finalPrice;
+                const finalPrice = Number(selected?.dataset.variantPrice);
+
+                if (!Number.isFinite(finalPrice) || finalPrice < 0) return;
 
                 priceDisplay.textContent = formatPrice(finalPrice);
-                if (oldPriceDisplay) {
-                    oldPriceDisplay.classList.toggle("hidden", !hasDiscount);
-                }
-                if (discountBadge) {
-                    discountBadge.classList.toggle("hidden", !hasDiscount);
-                }
+                if (oldPriceDisplay) oldPriceDisplay.classList.add("hidden");
+                if (discountBadge) discountBadge.classList.add("hidden");
             });
         }
 
