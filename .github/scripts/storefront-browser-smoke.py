@@ -398,41 +398,42 @@ with sync_playwright() as playwright:
     expect_hidden(mobile, old_price_display)
     expect_hidden(mobile, discount_badge)
 
-    discounted_variant = mobile.locator(
-        '#product-variant option[data-price-adjustment="-350.00"]'
+    lower_price_variant = mobile.locator(
+        '#product-variant option[data-variant-price="1750.00"]'
     )
-    assert discounted_variant.count() == 1
+    assert lower_price_variant.count() == 1
     mobile.locator("#product-variant").select_option(
-        discounted_variant.get_attribute("value")
+        lower_price_variant.get_attribute("value")
     )
-    expected_discounted_price = mobile.evaluate(
+    expected_lower_price = mobile.evaluate(
         "() => new Intl.NumberFormat('fa-IR', {maximumFractionDigits: 0}).format(1750)"
     )
-    assert mobile.locator("#product-price-display").inner_text() == expected_discounted_price
-    expect_visible(mobile, old_price_display)
-    expect_visible(mobile, discount_badge)
-
-    non_discounted_variant = mobile.locator(
-        '#product-variant option[data-price-adjustment="250.00"]'
-    )
-    assert non_discounted_variant.count() == 1
-    mobile.locator("#product-variant").select_option(
-        non_discounted_variant.get_attribute("value")
-    )
-    expected_non_discounted_price = mobile.evaluate(
-        "() => new Intl.NumberFormat('fa-IR', {maximumFractionDigits: 0}).format(2350)"
-    )
-    assert mobile.locator("#product-price-display").inner_text() == expected_non_discounted_price
+    assert mobile.locator("#product-price-display").inner_text() == expected_lower_price
+    # Product-level discounts do not apply to independently priced variants.
     expect_hidden(mobile, old_price_display)
     expect_hidden(mobile, discount_badge)
 
-    # Switching back must restore the discount using the newly selected final price.
-    mobile.locator("#product-variant").select_option(
-        discounted_variant.get_attribute("value")
+    higher_price_variant = mobile.locator(
+        '#product-variant option[data-variant-price="2350.00"]'
     )
-    assert mobile.locator("#product-price-display").inner_text() == expected_discounted_price
-    expect_visible(mobile, old_price_display)
-    expect_visible(mobile, discount_badge)
+    assert higher_price_variant.count() == 1
+    mobile.locator("#product-variant").select_option(
+        higher_price_variant.get_attribute("value")
+    )
+    expected_higher_price = mobile.evaluate(
+        "() => new Intl.NumberFormat('fa-IR', {maximumFractionDigits: 0}).format(2350)"
+    )
+    assert mobile.locator("#product-price-display").inner_text() == expected_higher_price
+    expect_hidden(mobile, old_price_display)
+    expect_hidden(mobile, discount_badge)
+
+    # Switching back must restore the selected variant's own final price.
+    mobile.locator("#product-variant").select_option(
+        lower_price_variant.get_attribute("value")
+    )
+    assert mobile.locator("#product-price-display").inner_text() == expected_lower_price
+    expect_hidden(mobile, old_price_display)
+    expect_hidden(mobile, discount_badge)
 
     mobile.locator("#open-image-modal").click()
     expect_visible(mobile, "#image-modal")

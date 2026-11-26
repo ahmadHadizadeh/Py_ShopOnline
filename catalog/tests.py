@@ -682,7 +682,7 @@ class ProductDetailViewTests(BaseTestCase):
             product=product,
             name="رنگ",
             value="قرمز",
-            price_adjustment=150,
+            price=product.price + (150),
         )
 
         url = reverse(
@@ -822,53 +822,39 @@ class ProductVariantPriceValidationTests(TestCase):
             category=self.category,
         )
 
-    def test_variant_full_clean_rejects_negative_final_price(self):
+    def test_variant_full_clean_rejects_negative_price(self):
         variant = ProductVariant(
             product=self.product,
             name="رنگ",
             value="قرمز",
-            price_adjustment=Decimal("-100.01"),
+            price=Decimal("-0.01"),
         )
-
         with self.assertRaises(ValidationError) as raised:
             variant.full_clean()
+        self.assertIn("price", raised.exception.message_dict)
 
-        self.assertIn("price_adjustment", raised.exception.message_dict)
-
-    def test_variant_full_clean_allows_zero_final_price_and_negative_adjustment(self):
+    def test_variant_full_clean_allows_zero_price(self):
         variant = ProductVariant(
             product=self.product,
             name="رنگ",
             value="آبی",
-            price_adjustment=Decimal("-100.00"),
+            price=Decimal("0.00"),
         )
-
         self.assertIsNone(variant.full_clean())
 
-    def test_product_full_clean_rejects_price_change_that_makes_variant_negative(self):
-        ProductVariant.objects.create(
-            product=self.product,
-            name="حافظه",
-            value="نسخه گران‌تر",
-            price_adjustment=Decimal("-150.00"),
-        )
-        self.product.price = Decimal("149.99")
-
-        with self.assertRaises(ValidationError) as raised:
-            self.product.full_clean()
-
-        self.assertIn("price", raised.exception.message_dict)
-
-    def test_product_full_clean_allows_price_change_that_keeps_variant_at_zero(self):
-        ProductVariant.objects.create(
+    def test_product_price_change_does_not_change_variant_final_price(self):
+        variant = ProductVariant.objects.create(
             product=self.product,
             name="حافظه",
             value="نسخه",
-            price_adjustment=Decimal("-150.00"),
+            price=Decimal("150.00"),
         )
-        self.product.price = Decimal("150.00")
+        self.product.price = Decimal("50.00")
+        self.product.save()
+        variant.refresh_from_db()
 
-        self.assertIsNone(self.product.full_clean())
+        self.assertEqual(variant.price, Decimal("150.00"))
+        self.assertEqual(variant.price_adjustment, Decimal("100.00"))
 
     def test_variant_used_in_cart_cannot_be_reassigned_to_another_product(self):
         from cart.models import Cart, CartItem
@@ -877,7 +863,7 @@ class ProductVariantPriceValidationTests(TestCase):
             product=self.product,
             name="رنگ",
             value="مشکی",
-            price_adjustment=Decimal("0.00"),
+            price=Decimal("100.00"),
         )
         other_product = Product.objects.create(
             name="Other Variant Product",
@@ -899,7 +885,6 @@ class ProductVariantPriceValidationTests(TestCase):
 
         with self.assertRaises(ValidationError) as raised:
             variant.full_clean()
-
         self.assertIn("product", raised.exception.message_dict)
 
 
@@ -944,12 +929,12 @@ class ProductVariantPriceAdminValidationTests(TestCase):
             "related_products": [],
         }
 
-    def test_product_admin_form_rejects_base_price_that_makes_existing_variant_negative(self):
-        ProductVariant.objects.create(
+    def test_product_admin_allows_base_price_change_independent_of_variant(self):
+        variant = ProductVariant.objects.create(
             product=self.product,
             name="حافظه",
             value="نسخه",
-            price_adjustment=Decimal("-150.00"),
+            price=Decimal("150.00"),
         )
         product_admin = admin.site._registry[Product]
         form_class = product_admin.get_form(self.request, self.product)
@@ -958,15 +943,18 @@ class ProductVariantPriceAdminValidationTests(TestCase):
             instance=self.product,
         )
 
-        self.assertFalse(form.is_valid())
-        self.assertIn("price", form.errors)
+        self.assertTrue(form.is_valid(), form.errors)
+        obj = form.save()
+        variant.refresh_from_db()
+        self.assertEqual(obj.price, Decimal("50.00"))
+        self.assertEqual(variant.price, Decimal("150.00"))
 
-    def test_variant_admin_form_rejects_negative_final_price(self):
+    def test_variant_admin_form_rejects_negative_price(self):
         variant = ProductVariant.objects.create(
             product=self.product,
             name="رنگ",
             value="قرمز",
-            price_adjustment=Decimal("-50.00"),
+            price=Decimal("50.00"),
         )
         variant_admin = admin.site._registry[ProductVariant]
         form_class = variant_admin.get_form(self.request, variant)
@@ -975,20 +963,20 @@ class ProductVariantPriceAdminValidationTests(TestCase):
                 "product": str(self.product.pk),
                 "name": variant.name,
                 "value": variant.value,
-                "price_adjustment": "-100.01",
+                "price": "-0.01",
             },
             instance=variant,
         )
 
         self.assertFalse(form.is_valid())
-        self.assertIn("price_adjustment", form.errors)
+        self.assertIn("price", form.errors)
 
-    def test_variant_admin_form_allows_zero_final_price(self):
+    def test_variant_admin_form_allows_zero_price(self):
         variant = ProductVariant.objects.create(
             product=self.product,
             name="رنگ",
             value="آبی",
-            price_adjustment=Decimal("-50.00"),
+            price=Decimal("50.00"),
         )
         variant_admin = admin.site._registry[ProductVariant]
         form_class = variant_admin.get_form(self.request, variant)
@@ -997,7 +985,7 @@ class ProductVariantPriceAdminValidationTests(TestCase):
                 "product": str(self.product.pk),
                 "name": variant.name,
                 "value": variant.value,
-                "price_adjustment": "-100.00",
+                "price": "0.00",
             },
             instance=variant,
         )
@@ -1011,7 +999,7 @@ class ProductVariantPriceAdminValidationTests(TestCase):
             product=self.product,
             name="رنگ",
             value="سبز",
-            price_adjustment=Decimal("0.00"),
+            price=Decimal("100.00"),
         )
         other_product = Product.objects.create(
             name="Another Variant Admin Product",
@@ -1037,7 +1025,7 @@ class ProductVariantPriceAdminValidationTests(TestCase):
                 "product": str(other_product.pk),
                 "name": variant.name,
                 "value": variant.value,
-                "price_adjustment": "0.00",
+                "price": str(variant.price),
             },
             instance=variant,
         )

@@ -37,12 +37,9 @@ def _unit_price(product, variant=None):
     if variant is not None and variant.product_id != product.pk:
         raise ValidationError("واریانت انتخاب‌شده متعلق به این محصول نیست.")
 
-    adjustment = variant.price_adjustment if variant is not None else Decimal("0")
-    final_price = product.price + adjustment
+    final_price = variant.price if variant is not None else product.price
     if final_price < 0:
-        raise ValidationError(
-            "قیمت نهایی محصول پس از اعمال تغییر قیمت واریانت نمی‌تواند منفی باشد."
-        )
+        raise ValidationError("قیمت نهایی محصول یا تنوع نمی‌تواند منفی باشد.")
     return final_price
 
 

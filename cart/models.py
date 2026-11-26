@@ -186,6 +186,9 @@ class CartItem(models.Model):
 
     @property
     def unit_old_price(self):
+        # Product-level discounts do not apply to independently priced variants.
+        if self.variant_id:
+            return self.unit_price_snapshot
         if self.product.old_price and self.product.old_price > self.unit_price_snapshot:
             return self.product.old_price
         return self.unit_price_snapshot
@@ -226,7 +229,7 @@ class CartItem(models.Model):
 
     def save(self, *args, **kwargs):
         if self.unit_price_snapshot is None:
-            self.unit_price_snapshot = self.product.price + (
-                self.variant.price_adjustment if self.variant_id else Decimal("0")
+            self.unit_price_snapshot = (
+                self.variant.price if self.variant_id else self.product.price
             )
         super().save(*args, **kwargs)

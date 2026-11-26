@@ -73,6 +73,10 @@ class OrderItem(models.Model):
 
     @property
     def discount_amount(self):
+        # A variant has an independent final price, not a product discount.
+        if self.variant_id:
+            return Decimal("0")
+
         product = self.product
         if not product:
             return Decimal("0")

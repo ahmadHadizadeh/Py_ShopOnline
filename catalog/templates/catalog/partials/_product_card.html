@@ -1,6 +1,6 @@
 {% load storefront_formatting %}
-<article data-product-price="{{ product.price }}" class="product-card relative flex min-w-0 flex-row overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] duration-200 ease-out focus-within:border-indigo-200 focus-within:shadow-lg sm:flex-col motion-reduce:!transform-none motion-reduce:transition-none">
-    {% if product.old_price and product.discount_percent > 0 and product.is_available %}
+<article data-product-price="{{ product.display_price }}" class="product-card relative flex min-w-0 flex-row overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.04)] transition-[transform,box-shadow,border-color] duration-200 ease-out focus-within:border-indigo-200 focus-within:shadow-lg sm:flex-col motion-reduce:!transform-none motion-reduce:transition-none">
+    {% if product.old_price and product.discount_percent > 0 and product.is_available and not product.display_has_variants %}
         <span class="absolute right-4 top-4 z-10 rounded-full bg-rose-500 px-3 py-1 text-[10px] font-bold text-white shadow-sm">
             {{ product.discount_percent }}٪ تخفیف
         </span>
@@ -40,11 +40,11 @@
 
         <div class="mt-auto flex items-end justify-between border-t border-slate-100 pt-4">
             <div class="flex flex-col">
-                {% if product.old_price and product.old_price > product.price %}
+                {% if not product.display_has_variants and product.old_price and product.old_price > product.price %}
                     <span data-price-role="reference" class="mb-0.5 text-xs font-medium text-slate-400 line-through">{{ product.old_price|format_price }}</span>
                 {% endif %}
                 <div class="flex items-baseline gap-1">
-                    <span data-price-role="current" class="product-price text-xl font-black tabular-nums text-indigo-700">{{ product.price|format_price }}</span>
+                    <span data-price-role="current" class="product-price text-xl font-black tabular-nums text-indigo-700">{% if product.display_has_variants %}<span class="text-[10px] font-bold text-gray-500">شروع از</span>{% endif %}{{ product.display_price|format_price }}</span>
                     <span class="text-[10px] font-bold text-gray-500">تومان</span>
                 </div>
             </div>

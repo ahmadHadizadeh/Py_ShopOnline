@@ -523,14 +523,14 @@ class InventoryMovementAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
 @admin.register(ProductVariant)
 class ProductVariantAdmin(AdminDisplayFormattingMixin, admin.ModelAdmin):
     form = ProductVariantAdminForm
-    money_display_fields = {"price_adjustment"}
+    money_display_fields = {"price"}
 
     def has_delete_permission(self, request, obj=None):
         if obj is not None and obj.cart_items.exists():
             return False
         return super().has_delete_permission(request, obj)
 
-    list_display = ("product", "name", "value", "price_adjustment")
+    list_display = ("product", "name", "value", "price")
     list_filter = ("name",)
     search_fields = ("product__name", "name", "value")
     list_select_related = ("product",)

@@ -28,13 +28,14 @@ from catalog.services import (
     get_user_wishlist_status,
     save_product_review,
     toggle_wishlist,
+    with_display_price,
 )
 
 
 PRODUCT_LIST_SORT_OPTIONS = {
     "newest": ("-created", "-pk"),
-    "price_asc": ("price", "-created", "-pk"),
-    "price_desc": ("-price", "-created", "-pk"),
+    "price_asc": ("display_price", "-created", "-pk"),
+    "price_desc": ("-display_price", "-created", "-pk"),
 }
 PRODUCTS_PER_PAGE = 12
 HOMEPAGE_SHOWCASE_LIMIT = 8
@@ -69,7 +70,7 @@ def search_suggestions(request):
     if len(search_query) < 2:
         return JsonResponse({"results": []})
 
-    products = Product.objects.filter(is_active=True).select_related("category")
+    products = with_display_price(Product.objects.filter(is_active=True).select_related("category"))
     products = _filter_products_by_search(products, search_query)
 
     category_slug = request.GET.get("category", "").strip()
@@ -82,7 +83,7 @@ def search_suggestions(request):
     suggestions = products.order_by("-created", "-pk").values(
         "name",
         "slug",
-        "price",
+        "display_price",
         "category__name",
     )[:6]
 
@@ -95,7 +96,7 @@ def search_suggestions(request):
                         "catalog:product_detail",
                         kwargs={"slug": item["slug"]},
                     ),
-                    "price": str(item["price"]),
+                    "price": str(item["display_price"]),
                     "category": item["category__name"],
                 }
                 for item in suggestions
@@ -106,7 +107,7 @@ def search_suggestions(request):
 
 def home(request, category_slug=None):
     category = None
-    products = Product.objects.filter(is_active=True).select_related("category")
+    products = with_display_price(Product.objects.filter(is_active=True).select_related("category"))
 
     if category_slug:
         category = get_object_or_404(
@@ -178,6 +179,7 @@ def home(request, category_slug=None):
             .filter(sold_quantity__gt=0)
             .order_by("-sold_quantity", "-pk")
         )
+        best_selling_queryset = with_display_price(best_selling_queryset)
         best_selling_products = list(
             _with_approved_review_summary(best_selling_queryset)[
                 :HOMEPAGE_SHOWCASE_LIMIT
@@ -187,12 +189,16 @@ def home(request, category_slug=None):
             product.pk for product in best_selling_products
         ]
 
-        special_offer_queryset = Product.objects.filter(
-            is_active=True,
-            is_available_status=True,
-            stock__gt=0,
+        special_offer_queryset = with_display_price(
+            Product.objects.filter(
+                is_active=True,
+                is_available_status=True,
+                stock__gt=0,
+            ).select_related("category")
+        ).filter(
+            display_has_variants=False,
             old_price__gt=F("price"),
-        ).select_related("category")
+        )
         # When a product qualifies for both shelves, keep it in best sellers.
         special_offer_products = list(
             _with_approved_review_summary(

@@ -2839,7 +2839,7 @@ class AdminOrderedCartProtectionTests(TestCase):
             product=self.product,
             name="رنگ",
             value="قرمز",
-            price_adjustment=Decimal("50000"),
+            price=self.product.price + (Decimal("50000")),
         )
         self.cart_item.variant = variant
         self.cart_item.unit_price_snapshot = Decimal("950000")
@@ -2907,7 +2907,7 @@ class AdminOrderedCartProtectionTests(TestCase):
             product=self.product,
             name="رنگ",
             value="آبی",
-            price_adjustment=Decimal("25000"),
+            price=self.product.price + (Decimal("25000")),
         )
         self.cart_item.variant = variant
         self.cart_item.save(update_fields=["variant", "updated"])
@@ -3091,7 +3091,7 @@ class AdminOrderedCartProtectionTests(TestCase):
             product=other_product,
             name="رنگ",
             value="مشکی",
-            price_adjustment=Decimal("50000"),
+            price=other_product.price + (Decimal("50000")),
         )
 
         response = self.client.post(
@@ -3522,3 +3522,38 @@ class ShippingMethodAdminDeletionSafetyTests(TestCase):
         self.assertEqual(unused_method.cost, Decimal("45000"))
         self.assertEqual(unused_method.free_shipping_threshold, Decimal("300000"))
         self.assertEqual(unused_method.estimated_delivery_days, 5)
+
+class OrderItemVariantDiscountGuardTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(
+            name="Variant Discount Test",
+            slug="variant-discount-test",
+        )
+        self.product = Product.objects.create(
+            category=self.category,
+            name="Variant Discount Guard Product",
+            slug="variant-discount-guard-product",
+            price=Decimal("100"),
+            old_price=Decimal("150"),
+            stock=5,
+            is_active=True,
+            is_available_status=True,
+        )
+
+    def test_variant_order_item_does_not_inherit_product_discount(self):
+        item = OrderItem(
+            product=self.product,
+            variant_id=123,
+            quantity=2,
+            unit_price=Decimal("80"),
+        )
+        self.assertEqual(item.discount_amount, Decimal("0"))
+
+    def test_non_variant_order_item_keeps_product_discount(self):
+        item = OrderItem(
+            product=self.product,
+            variant_id=None,
+            quantity=2,
+            unit_price=Decimal("80"),
+        )
+        self.assertEqual(item.discount_amount, Decimal("140"))

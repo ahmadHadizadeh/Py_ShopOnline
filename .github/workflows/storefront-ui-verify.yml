@@ -107,6 +107,9 @@ jobs:
             "Django==6.0.6" \
             pytest pytest-django Pillow python-dotenv requests jdatetime playwright
 
+      - name: Refresh Ubuntu package indexes
+        run: sudo apt-get update
+
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
 
@@ -192,13 +195,13 @@ jobs:
               product=detail_product,
               name="رنگ",
               value="قرمز",
-              defaults={"price_adjustment": Decimal("-350.00")},
+              defaults={"price": detail_product.price - Decimal("350.00")},
           )
           ProductVariant.objects.update_or_create(
               product=detail_product,
               name="رنگ",
               value="آبی",
-              defaults={"price_adjustment": Decimal("250.00")},
+              defaults={"price": detail_product.price + Decimal("250.00")},
           )
           user, _ = get_user_model().objects.get_or_create(
               username="storefront-browser-user",

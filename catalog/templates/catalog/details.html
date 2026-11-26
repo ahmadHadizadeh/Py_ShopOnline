@@ -138,20 +138,20 @@
 
                 <div class="mb-6">
                     <div class="flex items-center gap-3 mb-2">
-                        {% if product.old_price %}
+                        {% if product.old_price and not product.display_has_variants %}
                             <span
                                 id="product-old-price-display"
-                                class="text-base text-gray-400 line-through{% if product.old_price <= product.price %} hidden{% endif %}"
+                                class="text-base text-gray-400 line-through{% if product.old_price <= product.display_price %} hidden{% endif %}"
                                 data-old-price="{{ product.old_price }}"
                             >{{ product.old_price|floatformat:0 }}</span>
                             <span
                                 id="product-discount-badge"
-                                class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full{% if product.old_price <= product.price %} hidden{% endif %}"
+                                class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full{% if product.old_price <= product.display_price %} hidden{% endif %}"
                             >تخفیف</span>
                         {% endif %}
                     </div>
                     <div>
-                        <span id="product-price-display" class="text-3xl font-extrabold text-indigo-700" data-base-price="{{ product.price }}">{{ product.price|floatformat:0 }}</span>
+                        <span id="product-price-display" class="text-3xl font-extrabold text-indigo-700" data-base-price="{{ product.display_price }}">{{ product.display_price|floatformat:0 }}</span>
                         <span class="text-sm text-indigo-600 font-bold mr-1">تومان</span>
                     </div>
                 </div>
@@ -183,12 +183,9 @@
                                     {% for variant in product.variants.all %}
                                         <option
                                             value="{{ variant.id }}"
-                                            data-price-adjustment="{{ variant.price_adjustment }}"
+                                            data-variant-price="{{ variant.price }}"
                                         >
-                                            {{ variant.name }}: {{ variant.value }}
-                                            {% if variant.price_adjustment > 0 %}(+{{ variant.price_adjustment|floatformat:0 }} تومان)
-                                            {% elif variant.price_adjustment < 0 %}({{ variant.price_adjustment|floatformat:0 }} تومان)
-                                            {% endif %}
+                                            {{ variant.name }}: {{ variant.value }} ({{ variant.price|floatformat:0 }} تومان)
                                         </option>
                                     {% endfor %}
                                 </select>
@@ -421,7 +418,7 @@
 
                                 <div class="flex items-center justify-between gap-2">
                                     <div>
-                                        <span class="font-extrabold text-indigo-700">{{ related_product.price|floatformat:0 }}</span>
+                                        <span class="font-extrabold text-indigo-700">{% if related_product.display_has_variants %}<span class="text-xs">شروع از </span>{% endif %}{{ related_product.display_price|floatformat:0 }}</span>
                                         <span class="text-xs text-gray-500">تومان</span>
                                     </div>
                                     <span class="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">

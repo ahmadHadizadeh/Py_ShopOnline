@@ -1,6 +1,8 @@
 # catalog/models/Product
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.apps import apps
+from django.db import models, router, transaction
+from django.db.models import F
 from django.urls import reverse
 from catalog.utils import generate_unique_slug
 from catalog.models import Category
@@ -76,39 +78,46 @@ class Product(models.Model):
         return self.name
 
     def clean(self):
+        # Variant prices are independent of the product's base price.
         super().clean()
-
-        if not self.pk or self.price is None:
-            return
-
-        persisted_price = type(self).objects.filter(pk=self.pk).values_list(
-            "price", flat=True
-        ).first()
-        if persisted_price is None or persisted_price == self.price:
-            return
-
-        invalid_variant = (
-            self.variants.filter(price_adjustment__lt=-self.price)
-            .order_by("pk")
-            .values_list("name", "value")
-            .first()
-        )
-        if invalid_variant:
-            variant_name, variant_value = invalid_variant
-            raise ValidationError(
-                {
-                    "price": (
-                        "تغییر قیمت پایه باعث منفی شدن قیمت نهایی تنوع "
-                        f"«{variant_name}: {variant_value}» می‌شود."
-                    )
-                }
-            )
 
     def save(self, *args, **kwargs):
         if not self.slug and self.name:
             self.slug = generate_unique_slug(self, self.name)
         self.update_availability_status_on_save()
-        super().save(*args, **kwargs)
+
+        using = kwargs.get("using") or router.db_for_write(
+            type(self), instance=self
+        )
+        update_fields = kwargs.get("update_fields")
+        price_is_being_saved = (
+            update_fields is None or "price" in update_fields
+        )
+
+        if not self.pk or not price_is_being_saved:
+            return super().save(*args, **kwargs)
+
+        with transaction.atomic(using=using):
+            # Lock Product first, then synchronize legacy Variant values.
+            persisted_price = (
+                type(self).objects.using(using)
+                .select_for_update()
+                .filter(pk=self.pk)
+                .values_list("price", flat=True)
+                .first()
+            )
+
+            result = super().save(*args, **kwargs)
+
+            if persisted_price is not None and persisted_price != self.price:
+                variant_model = apps.get_model("catalog", "ProductVariant")
+                variant_model.objects.using(using).filter(
+                    product_id=self.pk
+                ).update(
+                    price_adjustment=F("price") - self.price
+                )
+
+            return result
 
     def update_availability_status_on_save(self):
         self.is_available_status = self.is_active and self.stock > 0

@@ -1,11 +1,15 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Avg, Count, Prefetch,Q
+from django.db.models.functions import Coalesce
+from django.db.models import (
+    Avg, Count, DecimalField, Exists, F, OuterRef, Prefetch, Q, Subquery,
+)
 from django.shortcuts import get_object_or_404
 from .models.product import Product
 from .models.inventory import InventoryMovement
 from .models.wishlist import Wishlist
 from .models.review import Review
+from .models.variant import ProductVariant
 
 
 MAX_PRODUCT_STOCK = 2_147_483_647
@@ -160,15 +164,33 @@ def save_product_review(user, product, rating, comment):
     return review, created
 
 
+def with_display_price(queryset):
+    """Annotate each product with its lowest independent variant price."""
+    variants = ProductVariant.objects.filter(product_id=OuterRef("pk"))
+    lowest_variant_price = (
+        variants.order_by("price", "pk").values("price")[:1]
+    )
+    money_field = DecimalField(max_digits=12, decimal_places=2)
+
+    return queryset.annotate(
+        display_price=Coalesce(
+            Subquery(lowest_variant_price, output_field=money_field),
+            F("price"),
+            output_field=money_field,
+        ),
+        display_has_variants=Exists(variants),
+    )
+
+
 def get_product_detail_data(product_slug):
-    related_products_qs = Product.objects.filter(is_active=True).select_related("category")
+    related_products_qs = with_display_price(Product.objects.filter(is_active=True).select_related("category"))
     # اینجا QuerySet برای نظرات تایید شده را تعریف می‌کنیم
     approved_reviews_qs = Review.objects.filter(is_approved=True).select_related("user")
 
     return get_object_or_404(
-        Product.objects.filter(is_active=True)
-        .select_related("category")
-        .prefetch_related(
+        with_display_price(
+            Product.objects.filter(is_active=True).select_related("category")
+        ).prefetch_related(
             "variants",
             # حالا Prefetch را با to_attr="approved_reviews" استفاده می‌کنیم
             Prefetch("reviews", queryset=approved_reviews_qs, to_attr="approved_reviews"),
@@ -194,10 +216,11 @@ def get_related_products(product, limit=4):
         return []
 
     return list(
-        Product.objects.filter(is_active=True, category_id=product.category_id)
-        .exclude(pk=product.pk)
-        .select_related("category")
-        .order_by("-id")[:limit]
+        with_display_price(
+            Product.objects.filter(is_active=True, category_id=product.category_id)
+            .exclude(pk=product.pk)
+            .select_related("category")
+        ).order_by("-id")[:limit]
     )
 
 def get_user_wishlist_status(user, product):
